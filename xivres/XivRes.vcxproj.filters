@@ -7,14 +7,35 @@
     <Filter Include="Headers">
       <UniqueIdentifier>{bbec9cf7-3df8-471b-98d8-c11a09a41f08}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers\Internal">
+    <Filter Include="Headers\sqpack">
+      <UniqueIdentifier>{39ead3bc-6656-4dad-bbab-ce3268a7fafc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Impl">
+      <UniqueIdentifier>{ba54be73-c054-4585-8c89-1d0e77b57d00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Impl\excel">
+      <UniqueIdentifier>{13bc3874-766d-487d-b968-a048666e84aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\util">
       <UniqueIdentifier>{e85d0ad4-6102-4282-a237-b9e6aa5c925c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers\FontGenerator">
-      <UniqueIdentifier>{75bdb42a-7dac-4d23-8d6a-5ed75cc1bd2a}</UniqueIdentifier>
+    <Filter Include="Impl\util">
+      <UniqueIdentifier>{b7e06e23-2ccd-4a5d-8678-761c8552a4c1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers\Internal\TeamHypersomnia-rectpack2D">
-      <UniqueIdentifier>{aa5f07d6-60e1-4122-a2e1-a0525ace5e35}</UniqueIdentifier>
+    <Filter Include="Headers\file_type">
+      <UniqueIdentifier>{8bf3810a-d583-4d6a-8352-3a8b17e011c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\file_type\model">
+      <UniqueIdentifier>{9a959273-42cd-43c0-95b8-1f8f89f8193f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\file_type\texture">
+      <UniqueIdentifier>{94dc9cb9-f283-4c1a-a482-abcf8cc5cb32}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\file_type\excel">
+      <UniqueIdentifier>{fdd80b22-3353-4573-80dc-61db18bd7979}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\file_type\sound container">
+      <UniqueIdentifier>{cd306381-91c4-4276-b052-ccb1b979e66a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -26,203 +47,265 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="xivres\Common.h">
+    <ClInclude Include="include\xivres\common.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Eqdp.h">
+    <ClInclude Include="include\xivres\xivstring.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\EqpGmp.h">
+    <ClInclude Include="include\xivres\util.byte_order.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.on_dtor.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.dxt.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.listener_manager.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.sha1.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.span_cast.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\installation.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Est.h">
+    <ClInclude Include="include\xivres\TexturePreview.Windows.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.thread_pool.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Sqpack.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\SqpackGenerator.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\SqpackReader.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\SqpackStreamDecoder.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\StreamAsPackedFileViewStream.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\packed_stream.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\PackedFileUnpackingStream.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\HotSwappablePackedFileStream.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\EmptyOrObfuscatedPackedFileStreamDecoder.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\EmptyOrObfuscatedPackedFileStream.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\BinaryPackedFileStreamDecoder.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\packed_stream.standard.h">
+      <Filter>Headers\sqpack</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Eqdp.h">
+      <Filter>Headers\file_type</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\EqpGmp.h">
+      <Filter>Headers\file_type</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Est.h">
+      <Filter>Headers\file_type</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Imc.h">
+      <Filter>Headers\file_type</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Fontdata.h">
+      <Filter>Headers\file_type</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\MipmapStream.h">
+      <Filter>Headers\file_type\texture</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\PixelFormats.h">
+      <Filter>Headers\file_type\texture</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\TextureStream.h">
+      <Filter>Headers\file_type\texture</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\Texture.h">
+      <Filter>Headers\file_type\texture</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\stream.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Excel.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\util.zlib_wrapper.h">
+      <Filter>Headers\util</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\ExcelGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\util.bitmap_copy.h">
+      <Filter>Headers\util</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\ExcelReader.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\util.unicode.h">
+      <Filter>Headers\util</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Fontdata.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\ScdWriter.h">
+      <Filter>Headers\file_type\sound container</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\FontdataStream.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\Scd.h">
+      <Filter>Headers\file_type\sound container</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Imc.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\ScdReader.h">
+      <Filter>Headers\file_type\sound container</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\MipmapStream.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\excel.type2gen.h">
+      <Filter>Headers\file_type\excel</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Model.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\excel.h">
+      <Filter>Headers\file_type\excel</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\IStream.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\ModelPackedFileStreamDecoder.h">
+      <Filter>Headers\file_type\model</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\ScdReader.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\TexturePackedFileStreamDecoder.h">
+      <Filter>Headers\file_type\texture</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\ScdWriter.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\packed_stream.texture.h">
+      <Filter>Headers\sqpack</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\SeString.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\model.h">
+      <Filter>Headers\file_type\model</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Scd.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="include\xivres\packed_stream.model.h">
+      <Filter>Headers\sqpack</Filter>
     </ClInclude>
-    <ClInclude Include="xivres\Sqpack.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\BinaryPackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\BinaryPackedFileStreamDecoder.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\SqpackGenerator.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\EmptyOrObfuscatedPackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\EmptyOrObfuscatedPackedFileStreamDecoder.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\PackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\PackedFileUnpackingStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\HotSwappablePackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\LazyPackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\ModelPackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\ModelPackedFileStreamDecoder.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\StreamAsPackedFileViewStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\SqpackReader.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\SqpackStreamDecoder.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\TexturePackedFileStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\TexturePackedFileStreamDecoder.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Texture.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\TextureStream.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\ByteOrder.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\CallOnDestruction.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\Dxt.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\ListenerManager.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\Misc.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\TinySha1.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\SpanCast.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\String.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\ZlibWrapper.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\PixelFormats.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\GameReader.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\internal\TexturePreview.Windows.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\IFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\BitmapCopy.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\TextMeasurer.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\GameFontdataFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\empty_space_allocators.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\empty_spaces.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\finders_interface.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\insert_and_split.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\rect_structs.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TeamHypersomnia-rectpack2D\src\best_bin_finder.h">
-      <Filter>Headers\Internal\TeamHypersomnia-rectpack2D</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\FontdataPacker.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\WrappingFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\MergedFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\ThreadPool.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\FreeTypeFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Internal\TrueTypeUtils.h">
-      <Filter>Headers\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\FontGenerator\DirectWriteFixedSizeFont.h">
-      <Filter>Headers\FontGenerator</Filter>
-    </ClInclude>
-    <ClInclude Include="xivres\Unicode.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="impl\packed_stream.standard.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\BinaryPackedFileStreamDecoder.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\common.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\EmptyOrObfuscatedPackedFileStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\EmptyOrObfuscatedPackedFileStreamDecoder.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Eqdp.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\EqpGmp.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Est.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Fontdata.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\installation.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\HotSwappablePackedFileStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Imc.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\stream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\MipmapStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\packed_stream.model.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ModelPackedFileStreamDecoder.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\packed_stream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\PackedFileUnpackingStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\PixelFormats.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Scd.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ScdReader.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ScdWriter.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\xivstring.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Sqpack.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\SqpackGenerator.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\SqpackReader.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\SqpackStreamDecoder.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\StreamAsPackedFileViewStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Texture.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\packed_stream.texture.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\TexturePackedFileStreamDecoder.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\TextureStream.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\util.bitmap_copy.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\util.dxt.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\TexturePreview.Windows.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\excel.type2gen.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\excel.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\util.unicode.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\util.zlib_wrapper.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

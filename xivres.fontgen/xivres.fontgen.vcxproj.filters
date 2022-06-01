@@ -1,0 +1,102 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Headers">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Project Items">
+      <UniqueIdentifier>{495a9e79-1b3b-4044-a1b8-6f4c7055f184}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\TeamHypersomnia-rectpack2D">
+      <UniqueIdentifier>{a9f7b0d9-1c5a-4e26-8c3f-74fdab39433b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Impls">
+      <UniqueIdentifier>{e6b341a1-0d3c-47f8-83b4-89d1f430e6fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\util">
+      <UniqueIdentifier>{6e0542ed-b588-481e-95dd-26c9f5e03baf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\fixed_size_font">
+      <UniqueIdentifier>{ac494522-4b97-43e9-8d9d-d31029720b4e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vcpkg.json">
+      <Filter>Project Items</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\xivres.fontgen\FontdataPacker.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TextMeasurer.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\rect_structs.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\insert_and_split.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\empty_spaces.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\finders_interface.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\empty_space_allocators.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\best_bin_finder.h">
+      <Filter>Headers\TeamHypersomnia-rectpack2D</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\util.truetype.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\WrappingFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\MergedFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\IFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\GameFontdataFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\FreeTypeFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\DirectWriteFixedSizeFont.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="impl\DirectWriteFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\FontdataPacker.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\FreeTypeFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\GameFontdataFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\IFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\MergedFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\TextMeasurer.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\WrappingFixedSizeFont.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

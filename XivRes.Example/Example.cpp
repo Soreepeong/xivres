@@ -5,108 +5,106 @@
 #include <Windows.h>
 #include <windowsx.h>
 
-#include "XivRes/GameReader.h"
-#include "XivRes/PackedFileUnpackingStream.h"
-#include "XivRes/TextureStream.h"
-#include "XivRes/TexturePackedFileStream.h"
-#include "XivRes/Internal/TexturePreview.Windows.h"
+#include "xivres/installation.h"
+#include "xivres/PackedFileUnpackingStream.h"
+#include "xivres/TextureStream.h"
+#include "xivres/packed_stream.standard.h"
+#include "xivres/packed_stream.texture.h"
+#include "xivres/packed_stream.model.h"
+#include "xivres/TexturePreview.Windows.h"
+#include "xivres/util.thread_pool.h"
 
 template<typename TPassthroughPacker, typename TCompressingPacker>
-std::string Test(std::shared_ptr<XivRes::PackedFileStream> packed, XivRes::SqpackPathSpec pathSpec) {
-	using namespace XivRes;
+std::string Test(std::shared_ptr<xivres::packed_stream> packed, xivres::xiv_path_spec pathSpec) {
+	using namespace xivres;
 
-	std::shared_ptr<IStream> decoded;
+	std::shared_ptr<stream> decoded;
 
 	try {
+		const auto packedOriginal = packed->read_vector<char>();
+		
 		decoded = std::make_shared<PackedFileUnpackingStream>(packed);
-		const auto p1 = ReadStreamIntoVector<char>(*packed);
-
-		if (decoded->StreamSize() == 0)
+		if (decoded->size() == 0)
 			return {};
+		const auto decodedOriginal = decoded->read_vector<char>();
 
-		const auto orig = ReadStreamIntoVector<char>(*decoded);
-		packed = std::make_shared<CompressingPackedFileStream<TCompressingPacker>>(pathSpec, decoded, Z_NO_COMPRESSION);
-		auto pac1 = ReadStreamIntoVector<char>(*packed);
+		packed = std::make_shared<compressing_packed_stream<TCompressingPacker>>(pathSpec, decoded, Z_BEST_COMPRESSION);
+		const auto packedCompressed = packed->read_vector<char>();
+
 		decoded = std::make_shared<PackedFileUnpackingStream>(packed);
-		ReadStreamIntoVector<char>(*decoded);
+		const auto decodedCompressed = decoded->read_vector<char>();
 
-		packed = std::make_shared<PassthroughPackedFileStream<TPassthroughPacker>>(pathSpec, decoded);
-		auto pac2 = ReadStreamIntoVector<char>(*packed);
+		if (decodedOriginal.size() != decodedCompressed.size() || memcmp(&decodedOriginal[0], &decodedCompressed[0], decodedCompressed.size()) != 0)
+			return "DIFF(Comp)";
+
+		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, decoded);
+		const auto packedPassthrough = packed->read_vector<char>();
+
 		decoded = std::make_shared<PackedFileUnpackingStream>(packed);
-		ReadStreamIntoVector<char>(*decoded);
+		const auto decodedPassthrough = decoded->read_vector<char>();
 
-		for (auto i = Z_NO_COMPRESSION; i <= Z_BEST_COMPRESSION; i++) {
-			packed = std::make_shared<CompressingPackedFileStream<TCompressingPacker>>(pathSpec, decoded, i);
-			ReadStreamIntoVector<char>(*packed);
-			decoded = std::make_shared<PackedFileUnpackingStream>(packed);
-			ReadStreamIntoVector<char>(*decoded);
-		}
+		if (decodedOriginal.size() != decodedPassthrough.size() || memcmp(&decodedOriginal[0], &decodedPassthrough[0], decodedPassthrough.size()) != 0)
+			return "DIFF(Pass)";
 
-		packed = std::make_shared<PassthroughPackedFileStream<TPassthroughPacker>>(pathSpec, decoded);
-		decoded = std::make_shared<PackedFileUnpackingStream>(packed);
-
-		const auto test = ReadStreamIntoVector<char>(*decoded);
-
-		if (test.size() == orig.size() && memcmp(&test[0], &orig[0], orig.size()) == 0)
-			return {};
-		return "DIFF";
+		return {};
 	} catch (const std::exception& e) {
 		return e.what();
 	}
 }
 
 int main() {
-	using namespace XivRes;
+	constexpr auto UseThreading = false;
+
 	system("chcp 65001 > NUL");
 
-	GameReader gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 
-	const auto& packfile = gameReader.GetSqpackReader(0x040000);
+	const auto& packfile = gameReader.get_sqpack(0x040000);
 
-	Internal::ThreadPool<SqpackPathSpec, std::string> pool;
-	for (const auto& entry : packfile.EntryInfo) {
-		const auto cb = [&packfile, pathSpec = entry.PathSpec]()->std::string {
+	xivres::util::thread_pool<const xivres::SqpackReader::EntryInfoType*, std::string> pool;
+	for (size_t i = 0; i < packfile.EntryInfo.size(); i++) {
+		const auto& entry = packfile.EntryInfo[i];
+		const auto cb = [&packfile, pathSpec = entry.path_spec]()->std::string {
 			try {
 				auto packed = packfile.GetPackedFileStream(pathSpec);
-				switch (packed->GetPackedFileType()) {
-					case XivRes::PackedFileType::None:
-						break;
-					case XivRes::PackedFileType::EmptyOrObfuscated:
-						break;
-					case XivRes::PackedFileType::Binary:
-						return Test<BinaryPassthroughPacker, BinaryCompressingPacker>(std::move(packed), pathSpec);
-					case XivRes::PackedFileType::Model:
-						break;
-					case XivRes::PackedFileType::Texture:
-						return Test<TexturePassthroughPacker, TextureCompressingPacker>(std::move(packed), pathSpec);
-					default:
-						break;
+				switch (packed->get_packed_type()) {
+					case xivres::packed_type::None: return {};
+					case xivres::packed_type::EmptyOrObfuscated: return {};
+					// case xivres::packed_type::Binary: return Test<xivres::standard_passthrough_packer, xivres::standard_compressing_packer>(std::move(packed), pathSpec);
+					case xivres::packed_type::Model: return Test<xivres::model_passthrough_packer, xivres::model_compressing_packer>(std::move(packed), pathSpec);
+					// case xivres::packed_type::Texture: return Test<xivres::texture_passthrough_packer, xivres::texture_compressing_packer>(std::move(packed), pathSpec);
+					default: return {};
 				}
-
-				return {};
-
 			} catch (const std::out_of_range&) {
 				return {};
 			}
 		};
 
-		pool.Submit(entry.PathSpec, cb);
+		if constexpr (UseThreading)
+			pool.Submit(&entry, cb);
+		else {
+			std::cout << std::format("\r[{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", i, packfile.EntryInfo.size(), entry.path_spec.PathHash(), entry.path_spec.NameHash(), entry.path_spec.FullPathHash());
+			if (auto res = cb(); !res.empty())
+				std::cout << std::format("\n\t=>{}\n", res);
+		}
 	}
 
 	pool.SubmitDone();
 
-	for (size_t i = 0;; i++) {
-		const auto res = pool.GetResult();
-		if (!res)
-			break;
+	if constexpr (UseThreading) {
+		for (size_t i = 0;; i++) {
+			const auto resultPair = pool.GetResult();
+			if (!resultPair)
+				break;
 
-		const auto& pathSpec = res->first;
+			const auto& entry = *resultPair->first;
+			const auto& res = resultPair->second;
 
-		if (!res->second.empty())
-			std::cout << std::format("\r[{:0>5}/{:0>5}] {} path={:08x}, name={:08x}, full={:08x}\n", i, packfile.EntryInfo.size(), res->second, pathSpec.PathHash(), pathSpec.NameHash(), pathSpec.FullPathHash());
-		else if (i % 1 == 0) {
-			std::cout << std::format("\r[{:0>5}/{:0>5}] path={:08x}, name={:08x}, full={:08x}", i, packfile.EntryInfo.size(), pathSpec.PathHash(), pathSpec.NameHash(), pathSpec.FullPathHash());
-			std::cout.flush();
+			if (!res.empty() || i % 500 == 0) {
+				std::cout << std::format("\r[{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", i, packfile.EntryInfo.size(), entry.path_spec.PathHash(), entry.path_spec.NameHash(), entry.path_spec.FullPathHash());
+				if (!res.empty())
+					std::cout << std::format("\n\t=>{}\n", res);
+			}
 		}
 	}
 
@@ -116,7 +114,7 @@ int main() {
 	// const auto pathSpec = SqpackPathSpec("common/graphics/texture/-caustics.tex");
 	// const auto pathSpec = SqpackPathSpec("common/graphics/texture/-omni_shadow_index_table.tex");
 
-	// Internal::ShowTextureStream(TextureStream(decoded));
+	// internal::ShowTextureStream(TextureStream(decoded));
 
 	return 0;
 }
