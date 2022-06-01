@@ -327,11 +327,11 @@ namespace xivres {
 	static_assert(offsetof(SqpackDataHeader, Sha1) == 0x3c0, "Bad SqDataHeader definition");
 
 	enum class packed_type {
-		None = 0,
-		EmptyOrObfuscated = 1,
-		Binary = 2,
-		Model = 3,
-		Texture = 4,
+		none = 0,
+		empty_or_hidden = 1,
+		standard = 2,
+		model = 3,
+		texture = 4,
 	};
 
 	struct PackedBlockHeader {
@@ -365,7 +365,7 @@ namespace xivres {
 		static PackedFileHeader NewEmpty(uint64_t decompressedSize = 0, uint64_t compressedSize = 0) {
 			PackedFileHeader res{
 				.HeaderSize = static_cast<uint32_t>(Align(sizeof PackedFileHeader)),
-				.Type = packed_type::EmptyOrObfuscated,
+				.Type = packed_type::empty_or_hidden,
 				.DecompressedSize = static_cast<uint32_t>(decompressedSize),
 				.BlockCountOrVersion = static_cast<uint32_t>(compressedSize),
 			};

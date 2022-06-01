@@ -191,7 +191,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Example.cpp" />
+    <ClCompile Include="resource_unpack_and_pack.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />

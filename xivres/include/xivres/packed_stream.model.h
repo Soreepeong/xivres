@@ -7,7 +7,7 @@
 #include "Model.h"
 
 namespace xivres {
-	class model_passthrough_packer : public passthrough_packer<packed_type::Model> {
+	class model_passthrough_packer : public passthrough_packer<packed_type::model> {
 		struct ModelEntryHeader {
 			PackedFileHeader Entry;
 			SqpackModelPackedFileBlockLocator Model;
@@ -28,7 +28,7 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class model_compressing_packer : public compressing_packer<packed_type::Model> {
+	class model_compressing_packer : public compressing_packer<packed_type::model> {
 	public:
 		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};

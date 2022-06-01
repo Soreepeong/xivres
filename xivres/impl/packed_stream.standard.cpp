@@ -29,7 +29,7 @@ void xivres::standard_passthrough_packer::ensure_initialized() {
 
 	header = {
 		.HeaderSize = static_cast<uint32_t>(headerAlignment),
-		.Type = packed_type::Binary,
+		.Type = packed_type::standard,
 		.DecompressedSize = static_cast<uint32_t>(size),
 		.BlockCountOrVersion = blockAlignment.Count,
 	};
@@ -140,8 +140,6 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 					readBuffer.clear();
 					readBuffer.resize(length);
 					strm.read_fully(offset, std::span(readBuffer));
-					if (deflater)
-						deflater->deflate(readBuffer);
 
 					if ((blockData.first = deflater && deflater->deflate(std::span(readBuffer)).size() < readBuffer.size()))
 						blockData.second = std::move(deflater->result());
@@ -171,7 +169,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
 	auto& entryHeader = *reinterpret_cast<PackedFileHeader*>(&result[0]);
-	entryHeader.Type = packed_type::Binary;
+	entryHeader.Type = packed_type::standard;
 	entryHeader.DecompressedSize = rawStreamSize;
 	entryHeader.BlockCountOrVersion = static_cast<uint32_t>(blockAlignment.Count);
 	entryHeader.HeaderSize = entryHeaderLength;

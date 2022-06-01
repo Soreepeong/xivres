@@ -81,7 +81,7 @@ namespace xivres {
 		}
 
 		[[nodiscard]] packed_type get_packed_type() const override {
-			return packed_type::EmptyOrObfuscated;
+			return packed_type::empty_or_hidden;
 		}
 
 		static const EmptyOrObfuscatedPackedFileStream& Instance() {

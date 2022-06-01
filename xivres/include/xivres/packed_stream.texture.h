@@ -8,7 +8,7 @@
 #include "Texture.h"
 
 namespace xivres {
-	class texture_passthrough_packer : public passthrough_packer<packed_type::Texture> {
+	class texture_passthrough_packer : public passthrough_packer<packed_type::texture> {
 		static constexpr auto MaxMipmapCountPerTexture = 16;
 
 		std::mutex m_mtx;
@@ -19,7 +19,7 @@ namespace xivres {
 		std::vector<uint32_t> m_mipmapSizes;
 
 	public:
-		using passthrough_packer<packed_type::Texture>::passthrough_packer;
+		using passthrough_packer<packed_type::texture>::passthrough_packer;
 
 		[[nodiscard]] std::streamsize size() override;
 
@@ -29,7 +29,7 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class texture_compressing_packer : public compressing_packer<packed_type::Texture> {
+	class texture_compressing_packer : public compressing_packer<packed_type::texture> {
 	public:
 		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};

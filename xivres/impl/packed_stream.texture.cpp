@@ -46,7 +46,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 
 	auto entryHeader = PackedFileHeader{
 		.HeaderSize = sizeof PackedFileHeader,
-		.Type = packed_type::Texture,
+		.Type = packed_type::texture,
 		.DecompressedSize = static_cast<uint32_t>(m_stream->size()),
 	};
 
@@ -439,7 +439,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
 	auto& entryHeader = *reinterpret_cast<PackedFileHeader*>(&result[0]);
-	entryHeader.Type = packed_type::Texture;
+	entryHeader.Type = packed_type::texture;
 	entryHeader.DecompressedSize = rawStreamSize;
 	entryHeader.BlockCountOrVersion = static_cast<uint32_t>(blockLocatorCount);
 	entryHeader.HeaderSize = entryHeaderLength;

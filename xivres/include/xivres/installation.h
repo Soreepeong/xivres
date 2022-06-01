@@ -35,6 +35,8 @@ namespace xivres {
 
 		[[nodiscard]] std::shared_ptr<PackedFileUnpackingStream> get_file(const xiv_path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
 
+		[[nodiscard]] const std::vector<uint32_t> get_sqpack_ids() const;
+
 		[[nodiscard]] const SqpackReader& get_sqpack(const xiv_path_spec& rawpath_spec) const;
 
 		[[nodiscard]] const SqpackReader& get_sqpack(uint32_t packId) const;

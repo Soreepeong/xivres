@@ -120,16 +120,16 @@ inline std::unique_ptr<xivres::BasePackedFileStreamDecoder> xivres::BasePackedFi
 		return nullptr;
 
 	switch (header.Type) {
-		case packed_type::EmptyOrObfuscated:
+		case packed_type::empty_or_hidden:
 			return std::make_unique<EmptyOrObfuscatedPackedFileStreamDecoder>(header, std::move(strm), obfuscatedHeaderRewrite);
 
-		case packed_type::Binary:
+		case packed_type::standard:
 			return std::make_unique<BinaryPackedFileStreamDecoder>(header, std::move(strm));
 
-		case packed_type::Texture:
+		case packed_type::texture:
 			return std::make_unique<TexturePackedFileStreamDecoder>(header, std::move(strm));
 
-		case packed_type::Model:
+		case packed_type::model:
 			return std::make_unique<ModelPackedFileStreamDecoder>(header, std::move(strm));
 
 		default:

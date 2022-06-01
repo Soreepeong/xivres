@@ -1,8 +1,8 @@
-#include "../xivres/xivres/include/xivres/packed_stream.model.h"
+#include "include/xivres/packed_stream.model.h"
+#include "include/xivres/util.thread_pool.h"
 
 xivres::model_passthrough_packer::model_passthrough_packer(std::shared_ptr<const stream> strm)
-	: passthrough_packer<packed_type::Model>(std::move(strm)) {
-}
+	: passthrough_packer<packed_type::model>(std::move(strm)) {}
 
 std::streamsize xivres::model_passthrough_packer::size() {
 	const auto blockCount = 11 + Align<uint64_t>(m_stream->size(), EntryBlockDataSize).Count;
@@ -21,7 +21,7 @@ void xivres::model_passthrough_packer::ensure_initialized() {
 	model::header hdr;
 	m_stream->read_fully(0, &hdr, sizeof hdr);
 
-	m_header.Entry.Type = packed_type::Model;
+	m_header.Entry.Type = packed_type::model;
 	m_header.Entry.DecompressedSize = static_cast<uint32_t>(m_stream->size());
 	m_header.Entry.BlockCountOrVersion = hdr.Version;
 
@@ -219,130 +219,185 @@ std::streamsize xivres::model_passthrough_packer::translate_read(std::streamoff 
 }
 
 std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const stream& strm, int compressionLevel) const {
-	model::header hdr;
-	strm.read_fully(0, &hdr, sizeof hdr);
+	const auto hdr = strm.read_fully<model::header>(0);
 
-	PackedFileHeader entryHeader{
-		.Type = packed_type::Model,
-		.DecompressedSize = static_cast<uint32_t>(strm.size()),
-		.BlockCountOrVersion = hdr.Version,
-	};
-	SqpackModelPackedFileBlockLocator modelHeader{
-		.VertexDeclarationCount = hdr.VertexDeclarationCount,
-		.MaterialCount = hdr.MaterialCount,
-		.LodCount = hdr.LodCount,
-		.EnableIndexBufferStreaming = hdr.EnableIndexBufferStreaming,
-		.EnableEdgeGeometry = hdr.EnableEdgeGeometry,
-	};
+	std::vector<std::vector<std::pair<bool, std::vector<uint8_t>>>> blockDataList(11);
+	{
+		util::thread_pool<> threadPool;
+		std::vector<std::optional<util::zlib_deflater>> deflaters(threadPool.GetThreadCount());
+		std::vector<std::vector<uint8_t>> readBuffers(threadPool.GetThreadCount());
 
-	std::optional<util::zlib_deflater> deflater;
-	if (compressionLevel)
-		deflater.emplace(compressionLevel, Z_DEFLATED, -15);
-	std::vector<uint8_t> entryBody;
-	entryBody.reserve(static_cast<size_t>(strm.size()));
+		auto baseFileOffset = static_cast<uint32_t>(sizeof hdr);
+		const auto generateSet = [&](const size_t setIndex, const uint32_t setSize) {
+			const auto alignedBlock = Align<uint32_t, uint16_t>(setSize, EntryBlockDataSize);
 
-	std::vector<uint32_t> blockOffsets;
-	std::vector<uint16_t> paddedBlockSizes;
-	const auto getNextBlockOffset = [&]() {
-		return paddedBlockSizes.empty() ? 0U : blockOffsets.back() + paddedBlockSizes.back();
-	};
+			auto& setBlockDataList = blockDataList[setIndex];
+			setBlockDataList.resize(alignedBlock.Count);
 
-	std::vector<uint8_t> tempBuf(EntryBlockDataSize);
-	auto baseFileOffset = static_cast<uint32_t>(sizeof hdr);
-	const auto generateSet = [&](const uint32_t size) {
-		const auto alignedDecompressedSize = Align(size).Alloc;
-		const auto alignedBlock = Align<uint32_t, uint16_t>(size, EntryBlockDataSize);
-		const auto firstBlockOffset = size ? getNextBlockOffset() : 0;
-		const auto firstBlockIndex = static_cast<uint16_t>(blockOffsets.size());
-		alignedBlock.IterateChunked([&](auto, uint32_t offset, uint32_t size) {
-			const auto sourceBuf = std::span(tempBuf).subspan(0, size);
-			strm.read_fully(offset, sourceBuf);
-			if (deflater)
-				deflater->deflate(sourceBuf);
-			const auto useCompressed = deflater && deflater->result().size() < sourceBuf.size();
-			const auto targetBuf = useCompressed ? deflater->result() : sourceBuf;
+			alignedBlock.IterateChunkedBreakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
+				if (is_cancelled())
+					return false;
 
-			PackedBlockHeader header{
-				.HeaderSize = sizeof PackedBlockHeader,
-				.Version = 0,
-				.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : PackedBlockHeader::CompressedSizeNotCompressed,
-				.DecompressedSize = static_cast<uint32_t>(sourceBuf.size()),
-			};
-			const auto alignmentInfo = Align(sizeof header + targetBuf.size());
+				threadPool.Submit([this, compressionLevel, offset, length, &strm, &readBuffers, &deflaters, &blockData = setBlockDataList[blockIndex]](size_t threadIndex) {
+					if (is_cancelled())
+						return;
 
-			entryBody.resize(entryBody.size() + alignmentInfo.Alloc);
+					auto& readBuffer = readBuffers[threadIndex];
+					auto& deflater = deflaters[threadIndex];
+					if (compressionLevel && !deflater)
+						deflater.emplace(compressionLevel, Z_DEFLATED, -15);
 
-			auto ptr = entryBody.end() - static_cast<size_t>(alignmentInfo.Alloc);
-			ptr = std::copy_n(reinterpret_cast<uint8_t*>(&header), sizeof header, ptr);
-			ptr = std::copy(targetBuf.begin(), targetBuf.end(), ptr);
-			std::fill_n(ptr, alignmentInfo.Pad, 0);
+					readBuffer.clear();
+					readBuffer.resize(length);
+					strm.read_fully(offset, std::span(readBuffer));
 
-			blockOffsets.push_back(getNextBlockOffset());
-			paddedBlockSizes.push_back(static_cast<uint32_t>(alignmentInfo.Alloc));
-		}, baseFileOffset);
-		const auto chunkSize = size ? getNextBlockOffset() - firstBlockOffset : 0;
-		baseFileOffset += size;
+					if ((blockData.first = deflater && deflater->deflate(std::span(readBuffer)).size() < readBuffer.size()))
+						blockData.second = std::move(deflater->result());
+					else
+						blockData.second = std::move(readBuffer);
+				});
 
-		return std::make_tuple(
-			alignedDecompressedSize,
-			alignedBlock.Count,
-			firstBlockOffset,
-			firstBlockIndex,
-			chunkSize
-		);
-	};
+				return true;
+			}, baseFileOffset);
 
-	std::tie(modelHeader.AlignedDecompressedSizes.Stack,
-		modelHeader.BlockCount.Stack,
-		modelHeader.FirstBlockOffsets.Stack,
-		modelHeader.FirstBlockIndices.Stack,
-		modelHeader.ChunkSizes.Stack) = generateSet(hdr.StackSize);
+			baseFileOffset += setSize;
+		};
 
-	std::tie(modelHeader.AlignedDecompressedSizes.Runtime,
-		modelHeader.BlockCount.Runtime,
-		modelHeader.FirstBlockOffsets.Runtime,
-		modelHeader.FirstBlockIndices.Runtime,
-		modelHeader.ChunkSizes.Runtime) = generateSet(hdr.RuntimeSize);
+		try {
+			size_t setIndexCounter = 0;
+			generateSet(setIndexCounter++, hdr.StackSize);
+			generateSet(setIndexCounter++, hdr.RuntimeSize);
 
-	for (size_t i = 0; i < 3; i++) {
-		if (!hdr.VertexOffset[i])
-			break;
-
-		baseFileOffset = hdr.VertexOffset[i];
-		std::tie(modelHeader.AlignedDecompressedSizes.Vertex[i],
-			modelHeader.BlockCount.Vertex[i],
-			modelHeader.FirstBlockOffsets.Vertex[i],
-			modelHeader.FirstBlockIndices.Vertex[i],
-			modelHeader.ChunkSizes.Vertex[i]) = generateSet(hdr.VertexSize[i]);
-
-		std::tie(modelHeader.AlignedDecompressedSizes.EdgeGeometryVertex[i],
-			modelHeader.BlockCount.EdgeGeometryVertex[i],
-			modelHeader.FirstBlockOffsets.EdgeGeometryVertex[i],
-			modelHeader.FirstBlockIndices.EdgeGeometryVertex[i],
-			modelHeader.ChunkSizes.EdgeGeometryVertex[i]) = generateSet(hdr.IndexOffset[i] ? hdr.IndexOffset[i] - baseFileOffset : 0);
-
-		std::tie(modelHeader.AlignedDecompressedSizes.Index[i],
-			modelHeader.BlockCount.Index[i],
-			modelHeader.FirstBlockOffsets.Index[i],
-			modelHeader.FirstBlockIndices.Index[i],
-			modelHeader.ChunkSizes.Index[i]) = generateSet(hdr.IndexSize[i]);
+			for (size_t i = 0; i < 3; i++) {
+				generateSet(setIndexCounter++, hdr.VertexSize[i]);
+				generateSet(setIndexCounter++, hdr.IndexOffset[i] - hdr.VertexOffset[i] - hdr.VertexSize[i]);
+				generateSet(setIndexCounter++, hdr.IndexSize[i]);
+			}
+		} catch (...) {
+			// pass
+		}
+		threadPool.SubmitDoneAndWait();
 	}
 
-	entryHeader.HeaderSize = Align(static_cast<uint32_t>(sizeof entryHeader + sizeof modelHeader + std::span(paddedBlockSizes).size_bytes()));
-	entryHeader.SetSpaceUnits(entryBody.size());
-	
-	std::vector<uint8_t> m_data;
-	m_data.reserve(Align(entryHeader.HeaderSize + entryBody.size()));
-	m_data.insert(m_data.end(), reinterpret_cast<char*>(&entryHeader), reinterpret_cast<char*>(&entryHeader + 1));
-	m_data.insert(m_data.end(), reinterpret_cast<char*>(&modelHeader), reinterpret_cast<char*>(&modelHeader + 1));
-	if (!paddedBlockSizes.empty()) {
-		m_data.insert(m_data.end(), reinterpret_cast<char*>(&paddedBlockSizes.front()), reinterpret_cast<char*>(&paddedBlockSizes.back() + 1));
-		m_data.resize(entryHeader.HeaderSize, 0);
-		m_data.insert(m_data.end(), entryBody.begin(), entryBody.end());
-	} else
-		m_data.resize(entryHeader.HeaderSize, 0);
+	if (is_cancelled())
+		return nullptr;
 
-	m_data.resize(Align(m_data.size()));
+	size_t totalBlockCount = 0, entryBodyLength = 0;
+	for (const auto& set : blockDataList) {
+		for (const auto& block : set) {
+			totalBlockCount++;
+			entryBodyLength += Align(sizeof PackedBlockHeader + block.second.size());
+		}
+	}
+	const auto entryHeaderLength = static_cast<uint16_t>(Align(0
+		+ sizeof PackedFileHeader
+		+ sizeof SqpackModelPackedFileBlockLocator
+		+ sizeof uint16_t * totalBlockCount
+	));
 
-	return std::make_unique<memory_stream>(std::move(m_data));
+	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
+
+	auto& entryHeader = *reinterpret_cast<PackedFileHeader*>(&result[0]);
+	entryHeader.Type = packed_type::model;
+	entryHeader.DecompressedSize = static_cast<uint32_t>(strm.size());
+	entryHeader.BlockCountOrVersion = static_cast<uint32_t>(hdr.Version);
+	entryHeader.HeaderSize = entryHeaderLength;
+	entryHeader.SetSpaceUnits(entryBodyLength);
+
+	auto& modelHeader = *reinterpret_cast<SqpackModelPackedFileBlockLocator*>(&entryHeader + 1);
+	modelHeader.VertexDeclarationCount = hdr.VertexDeclarationCount;
+	modelHeader.MaterialCount = hdr.MaterialCount;
+	modelHeader.LodCount = hdr.LodCount;
+	modelHeader.EnableIndexBufferStreaming = hdr.EnableIndexBufferStreaming;
+	modelHeader.EnableEdgeGeometry = hdr.EnableEdgeGeometry;
+
+	const auto paddedBlockSizes = util::span_cast<uint16_t>(result, sizeof entryHeader + sizeof modelHeader, totalBlockCount);
+
+	{
+		uint16_t totalBlockIndex = 0;
+		uint32_t nextBlockOffset = 0;
+
+
+		auto resultDataPtr = result.begin() + entryHeaderLength;
+		auto baseFileOffset = static_cast<uint32_t>(sizeof hdr);
+		const auto generateSet = [&](size_t setIndex, const uint32_t size) {
+			const auto alignedDecompressedSize = Align(size).Alloc;
+			const auto alignedBlock = Align<uint32_t, uint16_t>(size, EntryBlockDataSize);
+			const auto firstBlockOffset = size ? nextBlockOffset : 0;
+			const auto firstBlockIndex = static_cast<uint16_t>(totalBlockIndex);
+
+			alignedBlock.IterateChunked([&](size_t blockIndex, uint32_t offset, uint32_t length) {
+				if (is_cancelled())
+					return false;
+				auto& [useCompressed, targetBuf] = blockDataList[setIndex][blockIndex];
+
+				auto& header = *reinterpret_cast<PackedBlockHeader*>(&*resultDataPtr);
+				header.HeaderSize = sizeof PackedBlockHeader;
+				header.Version = 0;
+				header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : PackedBlockHeader::CompressedSizeNotCompressed;
+				header.DecompressedSize = static_cast<uint32_t>(length);
+
+				std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
+
+				const auto alloc = static_cast<uint16_t>(Align(sizeof header + targetBuf.size()));
+
+				paddedBlockSizes[totalBlockIndex++] = alloc;
+				nextBlockOffset += alloc;
+
+				resultDataPtr += alloc;
+
+				std::vector<uint8_t>().swap(targetBuf);
+				return true;
+			}, baseFileOffset);
+
+			const auto chunkSize = size ? nextBlockOffset - firstBlockOffset : 0;
+			baseFileOffset += size;
+
+			return std::make_tuple(
+				alignedDecompressedSize,
+				alignedBlock.Count,
+				firstBlockOffset,
+				firstBlockIndex,
+				chunkSize
+			);
+		};
+
+		size_t setIndexCounter = 0;
+		std::tie(modelHeader.AlignedDecompressedSizes.Stack,
+			modelHeader.BlockCount.Stack,
+			modelHeader.FirstBlockOffsets.Stack,
+			modelHeader.FirstBlockIndices.Stack,
+			modelHeader.ChunkSizes.Stack) = generateSet(setIndexCounter++, hdr.StackSize);
+
+		std::tie(modelHeader.AlignedDecompressedSizes.Runtime,
+			modelHeader.BlockCount.Runtime,
+			modelHeader.FirstBlockOffsets.Runtime,
+			modelHeader.FirstBlockIndices.Runtime,
+			modelHeader.ChunkSizes.Runtime) = generateSet(setIndexCounter++, hdr.RuntimeSize);
+
+		for (size_t i = 0; i < 3; i++) {
+			if (is_cancelled())
+				return {};
+
+			std::tie(modelHeader.AlignedDecompressedSizes.Vertex[i],
+				modelHeader.BlockCount.Vertex[i],
+				modelHeader.FirstBlockOffsets.Vertex[i],
+				modelHeader.FirstBlockIndices.Vertex[i],
+				modelHeader.ChunkSizes.Vertex[i]) = generateSet(setIndexCounter++, hdr.VertexSize[i]);
+
+			std::tie(modelHeader.AlignedDecompressedSizes.EdgeGeometryVertex[i],
+				modelHeader.BlockCount.EdgeGeometryVertex[i],
+				modelHeader.FirstBlockOffsets.EdgeGeometryVertex[i],
+				modelHeader.FirstBlockIndices.EdgeGeometryVertex[i],
+				modelHeader.ChunkSizes.EdgeGeometryVertex[i]) = generateSet(setIndexCounter++, hdr.IndexOffset[i] - hdr.VertexOffset[i] - hdr.VertexSize[i]);
+
+			std::tie(modelHeader.AlignedDecompressedSizes.Index[i],
+				modelHeader.BlockCount.Index[i],
+				modelHeader.FirstBlockOffsets.Index[i],
+				modelHeader.FirstBlockIndices.Index[i],
+				modelHeader.ChunkSizes.Index[i]) = generateSet(setIndexCounter++, hdr.IndexSize[i]);
+		}
+	}
+
+	return std::make_unique<memory_stream>(std::move(result));
 }
