@@ -39,14 +39,14 @@
     <ClInclude Include="include\xivres\util.listener_manager.h" />
     <ClInclude Include="include\xivres\util.h" />
     <ClInclude Include="include\xivres\util.bitmap_copy.h" />
-    <ClInclude Include="include\xivres\TexturePreview.Windows.h" />
+    <ClInclude Include="include\xivres\texture.preview.h" />
     <ClInclude Include="include\xivres\util.thread_pool.h" />
     <ClInclude Include="include\xivres\util.sha1.h" />
     <ClInclude Include="include\xivres\util.span_cast.h" />
     <ClInclude Include="include\xivres\util.zlib_wrapper.h" />
-    <ClInclude Include="include\xivres\MipmapStream.h" />
+    <ClInclude Include="include\xivres\texture.mipmap_stream.h" />
     <ClInclude Include="include\xivres\model.h" />
-    <ClInclude Include="include\xivres\PixelFormats.h" />
+    <ClInclude Include="include\xivres\util.pixel_formats.h" />
     <ClInclude Include="include\xivres\stream.h" />
     <ClInclude Include="include\xivres\xivstring.h" />
     <ClInclude Include="include\xivres\sound.h" />
@@ -64,8 +64,8 @@
     <ClInclude Include="include\xivres\sqpack.reader.h" />
     <ClInclude Include="include\xivres\packed_stream.texture.h" />
     <ClInclude Include="include\xivres\unpacked_stream.texture.h" />
-    <ClInclude Include="include\xivres\Texture.h" />
-    <ClInclude Include="include\xivres\TextureStream.h" />
+    <ClInclude Include="include\xivres\texture.h" />
+    <ClInclude Include="include\xivres\texture.stream.h" />
     <ClInclude Include="include\xivres\util.unicode.h" />
   </ItemGroup>
   <ItemGroup>
@@ -81,26 +81,23 @@
     <ClCompile Include="impl\packed_stream.hotswap.cpp" />
     <ClCompile Include="impl\util.bitmap_copy.cpp" />
     <ClCompile Include="impl\util.dxt.cpp" />
-    <ClCompile Include="impl\TexturePreview.Windows.cpp" />
+    <ClCompile Include="impl\texture.preview.cpp" />
     <ClCompile Include="impl\util.zlib_wrapper.cpp" />
     <ClCompile Include="impl\stream.cpp" />
-    <ClCompile Include="impl\MipmapStream.cpp" />
+    <ClCompile Include="impl\texture.mipmap_stream.cpp" />
     <ClCompile Include="impl\packed_stream.model.cpp" />
     <ClCompile Include="impl\unpacked_stream.model.cpp" />
     <ClCompile Include="impl\packed_stream.cpp" />
     <ClCompile Include="impl\unpacked_stream.cpp" />
-    <ClCompile Include="impl\PixelFormats.cpp" />
     <ClCompile Include="impl\sound.cpp" />
-    <ClCompile Include="impl\ScdReader.cpp" />
-    <ClCompile Include="impl\ScdWriter.cpp" />
     <ClCompile Include="impl\xivstring.cpp" />
     <ClCompile Include="impl\sqpack.cpp" />
     <ClCompile Include="impl\sqpack.generator.cpp" />
     <ClCompile Include="impl\sqpack.reader.cpp" />
-    <ClCompile Include="impl\Texture.cpp" />
+    <ClCompile Include="impl\texture.cpp" />
     <ClCompile Include="impl\packed_stream.texture.cpp" />
     <ClCompile Include="impl\unpacked_stream.texture.cpp" />
-    <ClCompile Include="impl\TextureStream.cpp" />
+    <ClCompile Include="impl\texture.stream.cpp" />
     <ClCompile Include="impl\util.unicode.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

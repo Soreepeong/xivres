@@ -43,6 +43,9 @@
     <Filter Include="Headers\resource types\sound resource">
       <UniqueIdentifier>{cd306381-91c4-4276-b052-ccb1b979e66a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Impl\resource types\texture">
+      <UniqueIdentifier>{c883337d-7528-4d57-81e7-33cef9e4506f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json">
@@ -82,9 +85,6 @@
     </ClInclude>
     <ClInclude Include="include\xivres\installation.h">
       <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="include\xivres\TexturePreview.Windows.h">
-      <Filter>Headers\util</Filter>
     </ClInclude>
     <ClInclude Include="include\xivres\util.thread_pool.h">
       <Filter>Headers\util</Filter>
@@ -134,16 +134,13 @@
     <ClInclude Include="include\xivres\fontdata.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\MipmapStream.h">
+    <ClInclude Include="include\xivres\texture.mipmap_stream.h">
       <Filter>Headers\resource types\texture</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\PixelFormats.h">
+    <ClInclude Include="include\xivres\texture.stream.h">
       <Filter>Headers\resource types\texture</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\TextureStream.h">
-      <Filter>Headers\resource types\texture</Filter>
-    </ClInclude>
-    <ClInclude Include="include\xivres\Texture.h">
+    <ClInclude Include="include\xivres\texture.h">
       <Filter>Headers\resource types\texture</Filter>
     </ClInclude>
     <ClInclude Include="include\xivres\stream.h">
@@ -185,6 +182,12 @@
     <ClInclude Include="include\xivres\path_spec.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="include\xivres\util.pixel_formats.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\texture.preview.h">
+      <Filter>Headers\resource types\texture</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="impl\common.cpp">
@@ -196,37 +199,13 @@
     <ClCompile Include="impl\stream.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
-    <ClCompile Include="impl\MipmapStream.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\PixelFormats.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\sound.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\ScdReader.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\ScdWriter.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
     <ClCompile Include="impl\xivstring.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\Texture.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\TextureStream.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
     <ClCompile Include="impl\util.bitmap_copy.cpp">
       <Filter>Impl\util</Filter>
     </ClCompile>
     <ClCompile Include="impl\util.dxt.cpp">
-      <Filter>Impl\util</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\TexturePreview.Windows.cpp">
       <Filter>Impl\util</Filter>
     </ClCompile>
     <ClCompile Include="impl\util.unicode.cpp">
@@ -285,6 +264,21 @@
     </ClCompile>
     <ClCompile Include="impl\fontdata.cpp">
       <Filter>Impl\resource types</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\sound.cpp">
+      <Filter>Impl\resource types</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\texture.mipmap_stream.cpp">
+      <Filter>Impl\resource types\texture</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\texture.cpp">
+      <Filter>Impl\resource types\texture</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\texture.stream.cpp">
+      <Filter>Impl\resource types\texture</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\texture.preview.cpp">
+      <Filter>Impl\resource types\texture</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
