@@ -1,4 +1,3 @@
-# FFXIV Font Generator
+# xivres
 
-Name says it all.
-
+xiv resource related library.
