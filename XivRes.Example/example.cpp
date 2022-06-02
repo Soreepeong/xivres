@@ -6,16 +6,16 @@
 #include <windowsx.h>
 
 #include "xivres/installation.h"
-#include "xivres/unpacked_stream.h"
-#include "xivres/TextureStream.h"
 #include "xivres/packed_stream.standard.h"
 #include "xivres/packed_stream.texture.h"
 #include "xivres/packed_stream.model.h"
-#include "xivres/TexturePreview.Windows.h"
+#include "xivres/sound.h"
+#include "xivres/sqpack.generator.h"
+#include "xivres/texture.preview.h"
+#include "xivres/texture.stream.h"
+#include "xivres/unpacked_stream.h"
 #include "xivres/util.thread_pool.h"
 #include "xivres/util.unicode.h"
-#include "xivres/sqpack.generator.h"
-#include "xivres/sound.h"
 
 constexpr auto UseThreading = false;
 

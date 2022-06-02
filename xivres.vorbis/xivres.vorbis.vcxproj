@@ -27,9 +27,6 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\xivres.vorbis\sound.h" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="impl\sound.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

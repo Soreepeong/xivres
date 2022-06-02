@@ -159,3 +159,8 @@ xivres::fontgen::empty_fixed_size_font::empty_fixed_size_font(const empty_fixed_
 xivres::fontgen::empty_fixed_size_font& xivres::fontgen::empty_fixed_size_font::operator=(empty_fixed_size_font&&) noexcept = default;
 
 xivres::fontgen::empty_fixed_size_font& xivres::fontgen::empty_fixed_size_font::operator=(const empty_fixed_size_font&) = default;
+
+void xivres::fontgen::font_render_transformation_matrix::SetIdentity() {
+	M11 = M22 = 1.f;
+	M12 = M21 = 0.f;
+}

@@ -1,7 +1,7 @@
 {
   "name": "xivres-fontgen",
   "version-string": "1.0.0.0",
-  "builtin-baseline": "2247b397faefc8266e545bd86330d2192d6b6247",
+  "builtin-baseline": "a2d8a7cbb15cac91d6c59cd967ef9d85105832c3",
   "dependencies": [
     "freetype",
     "zlib"

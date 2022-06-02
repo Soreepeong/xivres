@@ -93,6 +93,8 @@ namespace xivres::fontgen {
 		float M12;
 		float M21;
 		float M22;
+
+		void SetIdentity();
 	};
 
 	class fixed_size_font {
