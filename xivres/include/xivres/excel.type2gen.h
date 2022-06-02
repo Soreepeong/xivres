@@ -29,7 +29,7 @@ namespace xivres::excel {
 		void set_row(uint32_t id, game_language language, std::vector<cell> row, bool replace = true);
 
 	private:
-		std::pair<path_spec, std::vector<char>> flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language);
+		std::pair<path_spec, std::vector<char>> flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) const;
 
 	public:
 		std::map<path_spec, std::vector<char>, path_spec::FullPathComparator> compile();

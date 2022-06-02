@@ -72,7 +72,7 @@ void xivres::excel::type2gen::set_row(uint32_t id, game_language language, std::
 		target = std::move(row);
 }
 
-std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) {
+std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) const {
 	exd::header exdHeader;
 	const auto exdHeaderSpan = span_cast<char>(1, &exdHeader);
 	memcpy(exdHeader.Signature, exd::header::Signature_Value, 4);

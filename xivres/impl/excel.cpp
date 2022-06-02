@@ -266,7 +266,7 @@ xivres::excel::reader& xivres::excel::reader::operator=(const reader& r) {
 
 xivres::excel::reader::reader(const sqpack::reader* sqpackReader, const std::string& name)
 	: m_sqpackReader(sqpackReader)
-	, m_exhReader(std::in_place, name, sqpackReader->packed_at(std::format("exd/;.exh", name))->GetUnpackedStream())
+	, m_exhReader(std::in_place, name, sqpackReader->packed_at(std::format("exd/{}.exh", name))->GetUnpackedStream())
 	, m_language(m_exhReader->get_languages().front())
 	, m_exdReaders(m_exhReader->get_pages().size()) {}
 
