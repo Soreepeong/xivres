@@ -12,6 +12,7 @@
 #include FT_TRUETYPE_TABLES_H\
 
 #include <filesystem>
+#include <mutex>
 
 #include "fixed_size_font.h"
 
@@ -27,9 +28,9 @@ namespace xivres::fontgen {
 			int LoadFlags = FT_LOAD_DEFAULT;
 			FT_Render_Mode RenderMode = FT_RENDER_MODE_LIGHT;
 
-			std::wstring GetLoadFlagsString() const;
+			std::wstring get_load_flags_string() const;
 
-			std::wstring GetRenderModeString() const;
+			std::wstring get_render_mode_string() const;
 		};
 
 	private:
@@ -79,7 +80,7 @@ namespace xivres::fontgen {
 			const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const;
 
 		private:
-			static FT_Face CreateFace(FT_Library library, const info_t& info);
+			static FT_Face create_face(FT_Library library, const info_t& info);
 		};
 
 		freetype_face_wrapper m_face;
@@ -121,7 +122,7 @@ namespace xivres::fontgen {
 		const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
 	private:
-		glyph_metrics FreeTypeGlyphToMetrics(FT_Glyph glyph, int x = 0, int y = 0) const;
+		glyph_metrics freetype_glyph_to_metrics(FT_Glyph glyph, int x = 0, int y = 0) const;
 	};
 }
 

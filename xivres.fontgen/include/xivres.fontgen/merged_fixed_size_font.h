@@ -21,7 +21,7 @@ namespace xivres::fontgen {
 	class merged_fixed_size_font : public default_abstract_fixed_size_font {
 		struct info_t {
 			std::set<char32_t> Codepoints;
-			std::map<char32_t, fixed_size_font*> UsedFonts;
+			std::map<char32_t, size_t> UsedFontIndices;
 			float Size{};
 			int Ascent{};
 			int LineHeight{};

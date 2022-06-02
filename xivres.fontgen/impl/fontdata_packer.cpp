@@ -333,8 +333,11 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 				pInfo->BaseFont = font->get_base_font(codepoint);
 				pInfo->Codepoint = pInfo->BaseFont->uniqid_to_glyph(uniqid);
 				if (m_threadSafeBaseFonts[pInfo->BaseFont].empty()) {
-					m_threadSafeBaseFonts[pInfo->BaseFont].resize(m_nThreads);
-					m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->get_threadsafe_view();
+					// m_threadSafeBaseFonts[pInfo->BaseFont].resize(m_nThreads);
+					// m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->get_threadsafe_view();
+					m_threadSafeBaseFonts[pInfo->BaseFont].reserve(m_nThreads);
+					for (size_t i = 0; i < m_nThreads; i++)
+						m_threadSafeBaseFonts[pInfo->BaseFont].emplace_back(pInfo->BaseFont->get_threadsafe_view());
 				}
 				pInfo->UnicodeBlock = &block;
 				pInfo->BaseEntry.codepoint(pInfo->Codepoint);
@@ -361,11 +364,12 @@ void xivres::fontgen::fontdata_packer::prepare_target_font_basic_info() {
 		targetFont.line_height(sourceFont.line_height());
 		targetFont.ascent(sourceFont.ascent());
 		targetFont.reserve_glyphs(sourceFont.all_codepoints().size());
+		/*
 		targetFont.reserve_kernings(sourceFont.all_kerning_pairs().size());
 		for (const auto& kerning : sourceFont.all_kerning_pairs()) {
 			if (kerning.second)
 				targetFont.add_kerning(kerning.first.first, kerning.first.second, kerning.second);
-		}
+		}*/
 	}
 }
 
@@ -375,8 +379,11 @@ void xivres::fontgen::fontdata_packer::prepare_threadsafe_source_fonts() {
 	for (const auto& font : m_sourceFonts) {
 		nMaxCharacterCount += font->all_codepoints().size();
 		m_threadSafeSourceFonts.emplace_back();
-		m_threadSafeSourceFonts.back().resize(m_nThreads);
-		m_threadSafeSourceFonts.back()[0] = font;
+		// m_threadSafeSourceFonts.back().resize(m_nThreads);
+		// m_threadSafeSourceFonts.back()[0] = font->get_threadsafe_view();
+		m_threadSafeSourceFonts.back().reserve(m_nThreads);
+		for (size_t i = 0; i < m_nThreads; i++)
+			m_threadSafeSourceFonts.back().emplace_back(font->get_threadsafe_view());
 	}
 
 	m_targetPlans.reserve(nMaxCharacterCount);
@@ -384,15 +391,19 @@ void xivres::fontgen::fontdata_packer::prepare_threadsafe_source_fonts() {
 
 const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_source_font(size_t fontIndex, size_t threadIndex) {
 	auto& copy = m_threadSafeSourceFonts[fontIndex][threadIndex];
-	if (!copy)
+	if (!copy) {
+		__debugbreak();
 		copy = m_threadSafeSourceFonts[fontIndex][0]->get_threadsafe_view();
+	}
 	return *copy;
 }
 
 const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_base_font(const fixed_size_font* font, size_t threadIndex) {
 	auto& copy = m_threadSafeBaseFonts[font][threadIndex];
-	if (!copy)
+	if (!copy) {
+		__debugbreak();
 		copy = m_threadSafeBaseFonts[font][0]->get_threadsafe_view();
+	}
 	return *copy;
 }
 

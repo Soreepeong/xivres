@@ -16,8 +16,8 @@ int xivres::fontgen::merged_fixed_size_font::get_vertical_adjustment(const info_
 }
 
 const xivres::fontgen::fixed_size_font* xivres::fontgen::merged_fixed_size_font::get_base_font(char32_t codepoint) const {
-	if (const auto it = m_info->UsedFonts.find(codepoint); it != m_info->UsedFonts.end())
-		return it->second->get_base_font(codepoint);
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end())
+		return m_fonts[it->second]->get_base_font(codepoint);
 
 	return nullptr;
 }
@@ -31,15 +31,15 @@ std::shared_ptr<xivres::fontgen::fixed_size_font> xivres::fontgen::merged_fixed_
 }
 
 bool xivres::fontgen::merged_fixed_size_font::draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
-	if (const auto it = m_info->UsedFonts.find(codepoint); it != m_info->UsedFonts.end())
-		return it->second->draw(codepoint, pBuf, stride, drawX, drawY + get_vertical_adjustment(*m_info, *it->second), destWidth, destHeight, fgColor, bgColor, fgOpacity, bgOpacity);
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end())
+		return m_fonts[it->second]->draw(codepoint, pBuf, stride, drawX, drawY + get_vertical_adjustment(*m_info, *m_fonts[it->second]), destWidth, destHeight, fgColor, bgColor, fgOpacity, bgOpacity);
 
 	return false;
 }
 
 bool xivres::fontgen::merged_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
-	if (const auto it = m_info->UsedFonts.find(codepoint); it != m_info->UsedFonts.end())
-		return it->second->draw(codepoint, pBuf, drawX, drawY + get_vertical_adjustment(*m_info, *it->second), destWidth, destHeight, fgColor, bgColor);
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end())
+		return m_fonts[it->second]->draw(codepoint, pBuf, drawX, drawY + get_vertical_adjustment(*m_info, *m_fonts[it->second]), destWidth, destHeight, fgColor, bgColor);
 
 	return false;
 }
@@ -49,8 +49,8 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::merged_fixe
 		return *m_kerningPairs;
 
 	std::map<fixed_size_font*, std::set<char32_t>> charsPerFonts;
-	for (const auto& [c, f] : m_info->UsedFonts)
-		charsPerFonts[f].insert(c);
+	for (const auto& [codepoint, fontIndex] : m_info->UsedFontIndices)
+		charsPerFonts[m_fonts[fontIndex].get()].insert(codepoint);
 
 	m_kerningPairs.emplace();
 	for (const auto& [font, chars] : charsPerFonts) {
@@ -67,11 +67,12 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::merged_fixe
 }
 
 bool xivres::fontgen::merged_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const {
-	if (const auto it = m_info->UsedFonts.find(codepoint); it != m_info->UsedFonts.end()) {
-		if (!it->second->try_get_glyph_metrics(codepoint, gm))
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end()) {
+		const auto& font = *m_fonts[it->second];
+		if (!font.try_get_glyph_metrics(codepoint, gm))
 			return false;
 
-		gm.translate(0, get_vertical_adjustment(*m_info, *it->second));
+		gm.translate(0, get_vertical_adjustment(*m_info, font));
 		return true;
 	}
 
@@ -79,16 +80,16 @@ bool xivres::fontgen::merged_fixed_size_font::try_get_glyph_metrics(char32_t cod
 }
 
 char32_t xivres::fontgen::merged_fixed_size_font::uniqid_to_glyph(const void* pc) const {
-	for (const auto& font : m_info->UsedFonts) {
-		if (const auto r = font.second->uniqid_to_glyph(pc))
+	for (const auto& font : m_fonts) {
+		if (const auto r = font->uniqid_to_glyph(pc))
 			return r;
 	}
 	return 0;
 }
 
-const void* xivres::fontgen::merged_fixed_size_font::get_base_font_glyph_uniqid(char32_t c) const {
-	if (const auto it = m_info->UsedFonts.find(c); it != m_info->UsedFonts.end())
-		return it->second->get_base_font_glyph_uniqid(c);
+const void* xivres::fontgen::merged_fixed_size_font::get_base_font_glyph_uniqid(char32_t codepoint) const {
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end())
+		return m_fonts[it->second]->get_base_font_glyph_uniqid(codepoint);
 
 	return nullptr;
 }
@@ -127,19 +128,21 @@ xivres::fontgen::merged_fixed_size_font::merged_fixed_size_font(std::vector<std:
 	info->Ascent = fonts.front().first->ascent();
 	info->LineHeight = fonts.front().first->line_height();
 
-	for (auto& [font, mergeMode] : fonts) {
+	for (size_t i = 0; i < fonts.size(); i++) {
+		auto& [font, mergeMode] = fonts[i];
+
 		for (const auto c : font->all_codepoints()) {
 			switch (mergeMode) {
 				case codepoint_merge_mode::AddNew:
-					if (info->UsedFonts.emplace(c, font.get()).second)
+					if (info->UsedFontIndices.emplace(c, i).second)
 						info->Codepoints.insert(c);
 					break;
 				case codepoint_merge_mode::Replace:
-					if (const auto it = info->UsedFonts.find(c); it != info->UsedFonts.end())
-						it->second = font.get();
+					if (const auto it = info->UsedFontIndices.find(c); it != info->UsedFontIndices.end())
+						it->second = i;
 					break;
 				case codepoint_merge_mode::AddAll:
-					info->UsedFonts.insert_or_assign(c, font.get());
+					info->UsedFontIndices.insert_or_assign(c, i);
 					info->Codepoints.insert(c);
 					break;
 				default:
