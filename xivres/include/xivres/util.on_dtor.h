@@ -36,7 +36,7 @@ namespace xivres::util {
 		}
 
 		on_dtor& operator=(std::nullptr_t) noexcept {
-			Clear();
+			clear();
 			return *this;
 		}
 
@@ -54,7 +54,7 @@ namespace xivres::util {
 			return *this;
 		}
 
-		on_dtor& Wrap(std::function<void(std::function<void()>)> wrapper) {
+		on_dtor& wrap(std::function<void(std::function<void()>)> wrapper) {
 			m_fn = [fn = std::move(m_fn), wrapper = std::move(wrapper)]() {
 				wrapper(fn);
 			};
@@ -66,7 +66,7 @@ namespace xivres::util {
 				m_fn();
 		}
 
-		on_dtor& Clear() {
+		on_dtor& clear() {
 			if (m_fn) {
 				m_fn();
 				m_fn = nullptr;
@@ -82,40 +82,40 @@ namespace xivres::util {
 			return !!m_fn;
 		}
 
-		class Multiple {
+		class multi {
 			std::vector<on_dtor> m_list;
 
 		public:
-			Multiple() = default;
-			Multiple(const Multiple&) = delete;
-			Multiple(Multiple&&) = delete;
-			Multiple& operator=(const Multiple&) = delete;
-			Multiple& operator=(Multiple&&) = delete;
+			multi() = default;
+			multi(const multi&) = delete;
+			multi(multi&&) = delete;
+			multi& operator=(const multi&) = delete;
+			multi& operator=(multi&&) = delete;
 
-			~Multiple() {
-				Clear();
+			~multi() {
+				clear();
 			}
 
-			Multiple& operator+=(on_dtor o) {
+			multi& operator+=(on_dtor o) {
 				if (o)
 					m_list.emplace_back(std::move(o));
 				return *this;
 			}
 
-			Multiple& operator+=(std::function<void()> f) {
+			multi& operator+=(std::function<void()> f) {
 				m_list.emplace_back(f);
 				return *this;
 			}
 
-			Multiple& operator+=(Multiple r) {
+			multi& operator+=(multi r) {
 				m_list.insert(m_list.end(), std::make_move_iterator(r.m_list.begin()), std::make_move_iterator(r.m_list.end()));
 				r.m_list.clear();
 				return *this;
 			}
 
-			void Clear() {
+			void clear() {
 				while (!m_list.empty()) {
-					m_list.back().Clear();
+					m_list.back().clear();
 					m_list.pop_back();
 				}
 			}

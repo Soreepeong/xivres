@@ -191,12 +191,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="resource_unpack_and_pack.cpp" />
+    <ClCompile Include="example.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\xivres.fontgen\xivres.fontgen.vcxproj">
+      <Project>{90e4b098-e528-44ee-b643-56a0ee1a4ffb}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\xivres.vorbis\xivres.vorbis.vcxproj">
+      <Project>{58fad283-8045-4c8e-9531-5b2b37856f74}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\xivres\XivRes.vcxproj">
       <Project>{58daddf6-5733-40e0-855c-cc3b4bf235eb}</Project>
     </ProjectReference>

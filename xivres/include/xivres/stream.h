@@ -15,6 +15,9 @@
 
 namespace xivres {
 	class partial_view_stream;
+	
+	template<typename T>
+	using linear_reader = std::function<std::span<T>(size_t len, bool throwOnIncompleteRead)>;
 
 	class stream {
 	public:
@@ -52,6 +55,20 @@ namespace xivres {
 		template<typename T>
 		std::vector<T> read_vector(size_t maxCount = SIZE_MAX) const {
 			return read_vector<T>(0, (std::min)(maxCount, static_cast<size_t>(size() / sizeof T)));
+		}
+
+		template<typename T>
+		linear_reader<T> as_linear_reader() const {
+			return[this, buf = std::vector<T>(), ptr = uint64_t(), to = size()](size_t len, bool throwOnIncompleteRead) mutable {
+				if (ptr == to)
+					return std::span<T>();
+				buf.resize(static_cast<size_t>(std::min<uint64_t>(len, to - ptr)));
+				const auto r = read(ptr, buf.data(), buf.size());
+				if (r < static_cast<std::streamoff>(buf.size()) && throwOnIncompleteRead)
+					throw std::runtime_error("incomplete read");
+				ptr += buf.size();
+				return std::span(buf);
+			};
 		}
 	};
 
@@ -100,7 +117,7 @@ namespace xivres {
 
 	class memory_stream : public default_base_stream {
 		std::vector<uint8_t> m_buffer;
-		std::span<uint8_t> m_view;
+		std::span<const uint8_t> m_view;
 
 	public:
 		memory_stream() = default;
@@ -108,7 +125,7 @@ namespace xivres {
 		memory_stream(const memory_stream& r);
 		memory_stream(const stream& r);
 		memory_stream(std::vector<uint8_t> buffer);
-		memory_stream(std::span<uint8_t> view);
+		memory_stream(std::span<const uint8_t> view);
 		memory_stream& operator=(std::vector<uint8_t>&& buf) noexcept;
 		memory_stream& operator=(const std::vector<uint8_t>& buf);
 		memory_stream& operator=(memory_stream&& r) noexcept;

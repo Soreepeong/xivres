@@ -37,8 +37,8 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint8_t categoryI
 	return get_sqpack((categoryId << 16) | (expacId << 8) | partId);
 }
 
-const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& rawpath_spec) const {
-	return get_sqpack(rawpath_spec.PackNameValue());
+const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& raw_path_spec) const {
+	return get_sqpack(raw_path_spec.PackNameValue());
 }
 
 const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) const {

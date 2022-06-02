@@ -24,14 +24,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\xivres\common.h" />
-    <ClInclude Include="include\xivres\Eqdp.h" />
-    <ClInclude Include="include\xivres\EqpGmp.h" />
-    <ClInclude Include="include\xivres\Est.h" />
+    <ClInclude Include="include\xivres\equipment_deformer_parameter.h" />
+    <ClInclude Include="include\xivres\equipment_and_gimmick_parameter.h" />
+    <ClInclude Include="include\xivres\ex_skeleton_table.h" />
     <ClInclude Include="include\xivres\excel.h" />
     <ClInclude Include="include\xivres\excel.type2gen.h" />
-    <ClInclude Include="include\xivres\Fontdata.h" />
+    <ClInclude Include="include\xivres\fontdata.h" />
     <ClInclude Include="include\xivres\installation.h" />
-    <ClInclude Include="include\xivres\Imc.h" />
+    <ClInclude Include="include\xivres\image_change_data.h" />
     <ClInclude Include="include\xivres\path_spec.h" />
     <ClInclude Include="include\xivres\util.byte_order.h" />
     <ClInclude Include="include\xivres\util.on_dtor.h" />
@@ -48,10 +48,8 @@
     <ClInclude Include="include\xivres\model.h" />
     <ClInclude Include="include\xivres\PixelFormats.h" />
     <ClInclude Include="include\xivres\stream.h" />
-    <ClInclude Include="include\xivres\ScdReader.h" />
-    <ClInclude Include="include\xivres\ScdWriter.h" />
     <ClInclude Include="include\xivres\xivstring.h" />
-    <ClInclude Include="include\xivres\Scd.h" />
+    <ClInclude Include="include\xivres\sound.h" />
     <ClInclude Include="include\xivres\sqpack.h" />
     <ClInclude Include="include\xivres\packed_stream.standard.h" />
     <ClInclude Include="include\xivres\unpacked_stream.standard.h" />
@@ -76,15 +74,11 @@
     <ClCompile Include="impl\common.cpp" />
     <ClCompile Include="impl\unpacked_stream.placeholder.cpp" />
     <ClCompile Include="impl\packed_stream.placeholder.cpp" />
-    <ClCompile Include="impl\Eqdp.cpp" />
-    <ClCompile Include="impl\EqpGmp.cpp" />
-    <ClCompile Include="impl\Est.cpp" />
     <ClCompile Include="impl\excel.cpp" />
     <ClCompile Include="impl\excel.type2gen.cpp" />
-    <ClCompile Include="impl\Fontdata.cpp" />
+    <ClCompile Include="impl\fontdata.cpp" />
     <ClCompile Include="impl\installation.cpp" />
     <ClCompile Include="impl\packed_stream.hotswap.cpp" />
-    <ClCompile Include="impl\Imc.cpp" />
     <ClCompile Include="impl\util.bitmap_copy.cpp" />
     <ClCompile Include="impl\util.dxt.cpp" />
     <ClCompile Include="impl\TexturePreview.Windows.cpp" />
@@ -96,7 +90,7 @@
     <ClCompile Include="impl\packed_stream.cpp" />
     <ClCompile Include="impl\unpacked_stream.cpp" />
     <ClCompile Include="impl\PixelFormats.cpp" />
-    <ClCompile Include="impl\Scd.cpp" />
+    <ClCompile Include="impl\sound.cpp" />
     <ClCompile Include="impl\ScdReader.cpp" />
     <ClCompile Include="impl\ScdWriter.cpp" />
     <ClCompile Include="impl\xivstring.cpp" />

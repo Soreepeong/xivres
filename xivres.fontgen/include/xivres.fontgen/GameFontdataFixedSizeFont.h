@@ -28,7 +28,7 @@ namespace xivres::fontgen {
 
 	class GameFontdataFixedSizeFont : public DefaultAbstractFixedSizeFont {
 		struct InfoStruct {
-			std::shared_ptr<const FontdataStream> Font;
+			std::shared_ptr<const fontdata::stream> Font;
 			std::string FamilyName;
 			std::string SubfamilyName;
 			std::vector<std::shared_ptr<MemoryMipmapStream>> Mipmaps;
@@ -40,7 +40,7 @@ namespace xivres::fontgen {
 		std::shared_ptr<const InfoStruct> m_info;
 
 	public:
-		GameFontdataFixedSizeFont(std::shared_ptr<const FontdataStream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName);
+		GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName);
 
 		GameFontdataFixedSizeFont();
 		GameFontdataFixedSizeFont(GameFontdataFixedSizeFont&&) noexcept;
@@ -75,7 +75,7 @@ namespace xivres::fontgen {
 		const IFixedSizeFont* GetBaseFont(char32_t codepoint) const override;
 
 	private:
-		GlyphMetrics GlyphMetricsFromEntry(const FontdataGlyphEntry* pEntry, int x = 0, int y = 0) const;
+		GlyphMetrics GlyphMetricsFromEntry(const fontdata::glyph_entry* pEntry, int x = 0, int y = 0) const;
 	};
 
 	class GameFontdataSet {

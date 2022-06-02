@@ -14,7 +14,7 @@
 #include "../include/xivres.fontgen/TeamHypersomnia-rectpack2D/src/finders_interface.h"
 #endif
 
-xivres::fontgen::FontdataPacker::TargetPlan::TargetGlyph::TargetGlyph(FontdataStream& font, const FontdataGlyphEntry& entry, size_t sourceFontIndex)
+xivres::fontgen::FontdataPacker::TargetPlan::TargetGlyph::TargetGlyph(fontdata::stream& font, const fontdata::glyph_entry& entry, size_t sourceFontIndex)
 	: Font(font)
 	, Entry(entry)
 	, SourceFontIndex(sourceFontIndex) {
@@ -36,7 +36,7 @@ const std::vector<std::shared_ptr<xivres::MemoryMipmapStream>>& xivres::fontgen:
 	return m_targetMipmapStreams;
 }
 
-const std::vector<std::shared_ptr<xivres::FontdataStream>>& xivres::fontgen::FontdataPacker::GetTargetFonts() const {
+const std::vector<std::shared_ptr<xivres::fontdata::stream>>& xivres::fontgen::FontdataPacker::GetTargetFonts() const {
 	return m_targetFonts;
 }
 
@@ -176,7 +176,7 @@ void xivres::fontgen::FontdataPacker::LayoutGlyphs() {
 				target.Entry.TextureOffsetX = util::range_check_cast<uint16_t>(r.x + 1 + info.BaseEntry.BoundingWidth - *target.Entry.BoundingWidth);
 				target.Entry.TextureOffsetY = static_cast<uint16_t>(r.y + 1);
 				target.Entry.TextureIndex = static_cast<uint16_t>(planeIndex);
-				target.Font.AddFontEntry(target.Entry);
+				target.Font.add_glyph(target.Entry);
 			}
 
 			successfulPlans.emplace_back(&info);
@@ -232,7 +232,7 @@ void xivres::fontgen::FontdataPacker::DrawLayouttedGlyphs(size_t planeIndex, uti
 		return;
 
 	const auto mipmapIndex = planeIndex >> 2;
-	const auto channelIndex = FontdataGlyphEntry::ChannelMap[planeIndex % 4];
+	const auto channelIndex = fontdata::glyph_entry::ChannelMap[planeIndex % 4];
 
 	while (m_targetMipmapStreams.size() <= mipmapIndex)
 		m_targetMipmapStreams.emplace_back(std::make_shared<xivres::MemoryMipmapStream>(m_nSideLength, m_nSideLength, 1, xivres::TextureFormat::A8R8G8B8));
@@ -337,11 +337,11 @@ void xivres::fontgen::FontdataPacker::PrepareTargetCodepoints() {
 					m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->GetThreadSafeView();
 				}
 				pInfo->UnicodeBlock = &block;
-				pInfo->BaseEntry.Char(pInfo->Codepoint);
+				pInfo->BaseEntry.codepoint(pInfo->Codepoint);
 			}
-			pInfo->Targets.emplace_back(*m_targetFonts[i], FontdataGlyphEntry(), i);
-			pInfo->Targets.back().Entry.Char(codepoint);
-			pInfo->Targets.back().Font.AddFontEntry(codepoint, 0, 0, 0, 0, 0, 0, 0);
+			pInfo->Targets.emplace_back(*m_targetFonts[i], fontdata::glyph_entry(), i);
+			pInfo->Targets.back().Entry.codepoint(codepoint);
+			pInfo->Targets.back().Font.add_glyph(codepoint, 0, 0, 0, 0, 0, 0, 0);
 		}
 	}
 }
@@ -350,21 +350,21 @@ void xivres::fontgen::FontdataPacker::PrepareTargetFontBasicInfo() {
 	m_targetFonts.clear();
 	m_targetFonts.reserve(m_sourceFonts.size());
 	for (size_t i = 0; i < m_sourceFonts.size(); i++) {
-		m_targetFonts.emplace_back(std::make_shared<FontdataStream>());
+		m_targetFonts.emplace_back(std::make_shared<fontdata::stream>());
 
 		auto& targetFont = *m_targetFonts.back();
 		const auto& sourceFont = *m_sourceFonts[i];
 
-		targetFont.TextureWidth(m_nSideLength);
-		targetFont.TextureHeight(m_nSideLength);
-		targetFont.Size(sourceFont.GetSize());
-		targetFont.LineHeight(sourceFont.GetLineHeight());
-		targetFont.Ascent(sourceFont.GetAscent());
-		targetFont.ReserveFontEntries(sourceFont.GetAllCodepoints().size());
-		targetFont.ReserveKerningEntries(sourceFont.GetAllKerningPairs().size());
+		targetFont.texture_width(m_nSideLength);
+		targetFont.texture_height(m_nSideLength);
+		targetFont.font_size(sourceFont.GetSize());
+		targetFont.line_height(sourceFont.GetLineHeight());
+		targetFont.ascent(sourceFont.GetAscent());
+		targetFont.reserve_glyphs(sourceFont.GetAllCodepoints().size());
+		targetFont.reserve_kernings(sourceFont.GetAllKerningPairs().size());
 		for (const auto& kerning : sourceFont.GetAllKerningPairs()) {
 			if (kerning.second)
-				targetFont.AddKerning(kerning.first.first, kerning.first.second, kerning.second);
+				targetFont.add_kerning(kerning.first.first, kerning.first.second, kerning.second);
 		}
 	}
 }

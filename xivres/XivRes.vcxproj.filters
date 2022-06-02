@@ -31,9 +31,6 @@
     <Filter Include="Headers\resource types\excel">
       <UniqueIdentifier>{fdd80b22-3353-4573-80dc-61db18bd7979}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers\resource types\sound container">
-      <UniqueIdentifier>{cd306381-91c4-4276-b052-ccb1b979e66a}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Impl\resource types">
       <UniqueIdentifier>{2e0d0943-03e3-4cee-862b-e3ce724b25ce}</UniqueIdentifier>
     </Filter>
@@ -42,6 +39,9 @@
     </Filter>
     <Filter Include="Impl\sqpack">
       <UniqueIdentifier>{1c6a6c4b-2b04-4fa6-ba38-6e9826047e86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers\resource types\sound resource">
+      <UniqueIdentifier>{cd306381-91c4-4276-b052-ccb1b979e66a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -119,19 +119,19 @@
     <ClInclude Include="include\xivres\packed_stream.standard.h">
       <Filter>Headers\sqpack</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\Eqdp.h">
+    <ClInclude Include="include\xivres\equipment_deformer_parameter.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\EqpGmp.h">
+    <ClInclude Include="include\xivres\equipment_and_gimmick_parameter.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\Est.h">
+    <ClInclude Include="include\xivres\ex_skeleton_table.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\Imc.h">
+    <ClInclude Include="include\xivres\image_change_data.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\Fontdata.h">
+    <ClInclude Include="include\xivres\fontdata.h">
       <Filter>Headers\resource types</Filter>
     </ClInclude>
     <ClInclude Include="include\xivres\MipmapStream.h">
@@ -158,14 +158,8 @@
     <ClInclude Include="include\xivres\util.unicode.h">
       <Filter>Headers\util</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\ScdWriter.h">
-      <Filter>Headers\resource types\sound container</Filter>
-    </ClInclude>
-    <ClInclude Include="include\xivres\Scd.h">
-      <Filter>Headers\resource types\sound container</Filter>
-    </ClInclude>
-    <ClInclude Include="include\xivres\ScdReader.h">
-      <Filter>Headers\resource types\sound container</Filter>
+    <ClInclude Include="include\xivres\sound.h">
+      <Filter>Headers\resource types\sound resource</Filter>
     </ClInclude>
     <ClInclude Include="include\xivres\excel.type2gen.h">
       <Filter>Headers\resource types\excel</Filter>
@@ -196,22 +190,7 @@
     <ClCompile Include="impl\common.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
-    <ClCompile Include="impl\Eqdp.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\EqpGmp.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\Est.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\Fontdata.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
     <ClCompile Include="impl\installation.cpp">
-      <Filter>Impl</Filter>
-    </ClCompile>
-    <ClCompile Include="impl\Imc.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
     <ClCompile Include="impl\stream.cpp">
@@ -223,7 +202,7 @@
     <ClCompile Include="impl\PixelFormats.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
-    <ClCompile Include="impl\Scd.cpp">
+    <ClCompile Include="impl\sound.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
     <ClCompile Include="impl\ScdReader.cpp">
@@ -303,6 +282,9 @@
     </ClCompile>
     <ClCompile Include="impl\packed_stream.hotswap.cpp">
       <Filter>Impl\sqpack</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\fontdata.cpp">
+      <Filter>Impl\resource types</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

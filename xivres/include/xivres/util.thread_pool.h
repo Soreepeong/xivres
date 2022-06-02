@@ -11,9 +11,14 @@
 #include <type_traits>
 
 namespace xivres::util {
+	class cancelled_error : public std::runtime_error {
+	public:
+		cancelled_error() : std::runtime_error("Cancelled") {}
+	};
+
 	template<typename TIdentifier = void*, typename TResult = void*, typename = std::enable_if_t<std::is_move_assignable_v<TIdentifier>&& std::is_move_assignable_v<TResult>>>
 	class thread_pool {
-		struct Task {
+		struct task_type {
 			std::optional<TIdentifier> Identifier;
 			std::function<TResult(size_t)> Function;
 		};
@@ -33,16 +38,11 @@ namespace xivres::util {
 
 		std::mutex m_queuedTaskLock;
 		std::condition_variable m_queuedTaskAvailable;
-		std::deque<Task> m_queuedTasks;
+		std::deque<task_type> m_queuedTasks;
 
 		std::mutex m_finishedTaskLock;
 		std::condition_variable m_finishedTaskAvailable;
 		std::deque<std::pair<TIdentifier, TResult>> m_finishedTasks;
-
-		class InternalCancelledError : public std::exception {
-		public:
-			InternalCancelledError() = default;
-		};
 
 	public:
 		thread_pool(size_t nThreads = SIZE_MAX)
@@ -95,7 +95,7 @@ namespace xivres::util {
 
 		void AbortIfErrorOccurred() const {
 			if (m_bErrorOccurred)
-				throw InternalCancelledError();
+				throw cancelled_error();
 		}
 
 		void PropagateInnerErrorIfErrorOccurred() const {
@@ -112,7 +112,7 @@ namespace xivres::util {
 		}
 
 		void Submit(std::function<TResult(size_t)> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::nullopt,
 				std::move(fn),
 			});
@@ -120,21 +120,21 @@ namespace xivres::util {
 
 		template<typename = std::enable_if_t<!std::is_void_v<TResult>>>
 		void Submit(std::function<void(size_t)> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::nullopt,
 				[fn = std::move(fn), this](size_t nThreadIndex){ fn(nThreadIndex); return TResult(); },
 			});
 		}
 
 		void Submit(TIdentifier identifier, std::function<TResult(size_t)> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::move(identifier),
 				std::move(fn),
 			});
 		}
 
 		void Submit(std::function<TResult()> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::nullopt,
 				[fn = std::move(fn), this](size_t){ return fn(); },
 			});
@@ -142,14 +142,14 @@ namespace xivres::util {
 
 		template<typename = std::enable_if_t<!std::is_void_v<TResult>>>
 		void Submit(std::function<void()> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::nullopt,
 				[fn = std::move(fn), this](size_t){ fn(); return TResult(); },
 			});
 		}
 
 		void Submit(TIdentifier identifier, std::function<TResult()> fn) {
-			return Submit(Task{
+			return Submit(task_type{
 				std::move(identifier),
 				[fn = std::move(fn), this](size_t){ return fn(); },
 			});
@@ -240,7 +240,7 @@ namespace xivres::util {
 				throw std::runtime_error("Marked as no more tasks will be forthcoming.");
 		}
 
-		void Submit(Task task) {
+		void Submit(task_type task) {
 			if (!task.Function)
 				throw std::invalid_argument("Function must be specified");
 
@@ -268,7 +268,7 @@ namespace xivres::util {
 					for (const auto& cb : m_onNewThreadCallbacks)
 						cb(nThreadIndex);
 
-				} catch (const InternalCancelledError&) {
+				} catch (const cancelled_error&) {
 					return;
 
 				} catch (const std::exception& e) {
@@ -277,7 +277,7 @@ namespace xivres::util {
 				}
 
 				while (!m_bQuitting) {
-					Task task;
+					task_type task;
 
 					{
 						auto lock = std::unique_lock(m_queuedTaskLock);
@@ -295,7 +295,7 @@ namespace xivres::util {
 					try {
 						result = task.Function(nThreadIndex);
 
-					} catch (const InternalCancelledError&) {
+					} catch (const cancelled_error&) {
 						break;
 
 					} catch (const std::exception& e) {

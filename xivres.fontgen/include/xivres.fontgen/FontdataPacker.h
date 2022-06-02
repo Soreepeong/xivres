@@ -17,21 +17,21 @@ namespace xivres::fontgen {
 		struct TargetPlan {
 			char32_t Codepoint{};
 			const IFixedSizeFont* BaseFont{};
-			FontdataGlyphEntry BaseEntry{};
+			fontdata::glyph_entry BaseEntry{};
 			const util::unicode::blocks::block_definition* UnicodeBlock{};
 			int CurrentOffsetX{};
 
 			struct TargetGlyph {
-				FontdataStream& Font;
-				FontdataGlyphEntry Entry;
+				fontdata::stream& Font;
+				fontdata::glyph_entry Entry;
 				size_t SourceFontIndex;
 
-				TargetGlyph(FontdataStream& font, const FontdataGlyphEntry& entry, size_t sourceFontIndex);
+				TargetGlyph(fontdata::stream& font, const fontdata::glyph_entry& entry, size_t sourceFontIndex);
 			};
 
 			std::vector<TargetGlyph> Targets{};
 		};
-		std::vector<std::shared_ptr<FontdataStream>> m_targetFonts;
+		std::vector<std::shared_ptr<fontdata::stream>> m_targetFonts;
 		std::vector<std::shared_ptr<MemoryMipmapStream>> m_targetMipmapStreams;
 		std::vector<TargetPlan> m_targetPlans;
 
@@ -80,7 +80,7 @@ namespace xivres::fontgen {
 
 		std::string GetErrorIfFailed() const;
 
-		const std::vector<std::shared_ptr<FontdataStream>>& GetTargetFonts() const;
+		const std::vector<std::shared_ptr<fontdata::stream>>& GetTargetFonts() const;
 
 		const std::vector<std::shared_ptr<MemoryMipmapStream>>& GetMipmapStreams() const;
 

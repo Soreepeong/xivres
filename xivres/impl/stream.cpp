@@ -197,7 +197,7 @@ xivres::memory_stream& xivres::memory_stream::operator=(std::vector<uint8_t> && 
 	return *this;
 }
 
-xivres::memory_stream::memory_stream(std::span<uint8_t> view) : m_view(view) {}
+xivres::memory_stream::memory_stream(std::span<const uint8_t> view) : m_view(view) {}
 
 xivres::memory_stream::memory_stream(memory_stream && r) noexcept
 	: m_buffer(std::move(r.m_buffer)), m_view(std::move(r.m_view)) {
@@ -211,7 +211,7 @@ xivres::memory_stream::memory_stream(const memory_stream & r)
 xivres::memory_stream::memory_stream(const stream & r)
 	: m_buffer(static_cast<size_t>(r.size()))
 	, m_view(std::span(m_buffer)) {
-	r.read_fully(0, m_view);
+	r.read_fully(0, std::span(m_buffer));
 }
 
 xivres::memory_stream::memory_stream(std::vector<uint8_t> buffer)

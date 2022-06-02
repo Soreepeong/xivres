@@ -3,7 +3,7 @@
 #include "xivres/TextureStream.h"
 #include "xivres/util.bitmap_copy.h"
 
-xivres::fontgen::GlyphMetrics xivres::fontgen::GameFontdataFixedSizeFont::GlyphMetricsFromEntry(const FontdataGlyphEntry* pEntry, int x, int y) const {
+xivres::fontgen::GlyphMetrics xivres::fontgen::GameFontdataFixedSizeFont::GlyphMetricsFromEntry(const fontdata::glyph_entry* pEntry, int x, int y) const {
 	GlyphMetrics src{
 		.X1 = x,
 		.Y1 = y + pEntry->CurrentOffsetY,
@@ -23,14 +23,14 @@ std::shared_ptr<xivres::fontgen::IFixedSizeFont> xivres::fontgen::GameFontdataFi
 }
 
 bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
-	const auto pEntry = m_info->Font->GetFontEntry(codepoint);
+	const auto pEntry = m_info->Font->get_glyph(codepoint);
 	if (!pEntry)
 		return false;
 
 	auto src = GlyphMetrics{ *pEntry->TextureOffsetX, *pEntry->TextureOffsetY, *pEntry->TextureOffsetX + *pEntry->BoundingWidth, *pEntry->TextureOffsetY + *pEntry->BoundingHeight };
 	auto dest = GlyphMetricsFromEntry(pEntry, drawX, drawY);
-	const auto& mipmapStream = *m_info->Mipmaps.at(pEntry->TextureFileIndex());
-	const auto planeIndex = FontdataGlyphEntry::ChannelMap[pEntry->TexturePlaneIndex()];
+	const auto& mipmapStream = *m_info->Mipmaps.at(pEntry->texture_file_index());
+	const auto planeIndex = fontdata::glyph_entry::ChannelMap[pEntry->texture_plane_index()];
 	src.AdjustToIntersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
 	util::bitmap_copy::to_l8()
 		.from(&mipmapStream.View<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
@@ -45,14 +45,14 @@ bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, uint8_
 }
 
 bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
-	const auto pEntry = m_info->Font->GetFontEntry(codepoint);
+	const auto pEntry = m_info->Font->get_glyph(codepoint);
 	if (!pEntry)
 		return false;
 
 	auto src = GlyphMetrics{ *pEntry->TextureOffsetX, *pEntry->TextureOffsetY, *pEntry->TextureOffsetX + *pEntry->BoundingWidth, *pEntry->TextureOffsetY + *pEntry->BoundingHeight };
 	auto dest = GlyphMetricsFromEntry(pEntry, drawX, drawY);
-	const auto& mipmapStream = *m_info->Mipmaps.at(pEntry->TextureFileIndex());
-	const auto planeIndex = FontdataGlyphEntry::ChannelMap[pEntry->TexturePlaneIndex()];
+	const auto& mipmapStream = *m_info->Mipmaps.at(pEntry->texture_file_index());
+	const auto planeIndex = fontdata::glyph_entry::ChannelMap[pEntry->texture_plane_index()];
 	src.AdjustToIntersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
 	util::bitmap_copy::to_rgba8888()
 		.from(&mipmapStream.View<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
@@ -69,7 +69,7 @@ int xivres::fontgen::GameFontdataFixedSizeFont::GetAdjustedAdvanceX(char32_t lef
 	if (!GetGlyphMetrics(left, gm))
 		return 0;
 
-	return gm.AdvanceX + m_info->Font->GetKerningDistance(left, right);
+	return gm.AdvanceX + m_info->Font->get_kerning(left, right);
 }
 
 const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::GameFontdataFixedSizeFont::GetAllKerningPairs() const {
@@ -77,7 +77,7 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::GameFontdat
 }
 
 bool xivres::fontgen::GameFontdataFixedSizeFont::GetGlyphMetrics(char32_t codepoint, GlyphMetrics& gm) const {
-	const auto p = m_info->Font->GetFontEntry(codepoint);
+	const auto p = m_info->Font->get_glyph(codepoint);
 	if (!p)
 		return false;
 
@@ -90,15 +90,15 @@ const std::set<char32_t>& xivres::fontgen::GameFontdataFixedSizeFont::GetAllCode
 }
 
 int xivres::fontgen::GameFontdataFixedSizeFont::GetLineHeight() const {
-	return m_info->Font->LineHeight();
+	return m_info->Font->line_height();
 }
 
 int xivres::fontgen::GameFontdataFixedSizeFont::GetAscent() const {
-	return m_info->Font->Ascent();
+	return m_info->Font->ascent();
 }
 
 float xivres::fontgen::GameFontdataFixedSizeFont::GetSize() const {
-	return m_info->Font->Size();
+	return m_info->Font->font_size();
 }
 
 std::string xivres::fontgen::GameFontdataFixedSizeFont::GetSubfamilyName() const {
@@ -109,7 +109,7 @@ std::string xivres::fontgen::GameFontdataFixedSizeFont::GetFamilyName() const {
 	return m_info->FamilyName;
 }
 
-xivres::fontgen::GameFontdataFixedSizeFont::GameFontdataFixedSizeFont(std::shared_ptr<const FontdataStream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName) {
+xivres::fontgen::GameFontdataFixedSizeFont::GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName) {
 	for (const auto& mipmapStream : mipmapStreams) {
 		if (mipmapStream->Type != TextureFormat::A8R8G8B8)
 			throw std::invalid_argument("All mipmap streams must be in A8R8G8B8 format.");
@@ -122,11 +122,11 @@ xivres::fontgen::GameFontdataFixedSizeFont::GameFontdataFixedSizeFont(std::share
 	info->Mipmaps = std::move(mipmapStreams);
 	info->GammaTable = util::bitmap_copy::create_gamma_table(1.f);
 
-	for (const auto& entry : info->Font->GetFontTableEntries())
-		info->Codepoints.insert(info->Codepoints.end(), entry.Char());
+	for (const auto& entry : info->Font->get_glyphs())
+		info->Codepoints.insert(info->Codepoints.end(), entry.codepoint());
 
-	for (const auto& entry : info->Font->GetKerningEntries())
-		info->KerningPairs.emplace_hint(info->KerningPairs.end(), std::make_pair(entry.Left(), entry.Right()), entry.RightOffset);
+	for (const auto& entry : info->Font->get_kernings())
+		info->KerningPairs.emplace_hint(info->KerningPairs.end(), std::make_pair(entry.left(), entry.right()), entry.RightOffset);
 
 	m_info = std::move(info);
 }
@@ -304,7 +304,7 @@ inline xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(x
 	fonts.reserve(gameFontdataDefinitions.size());
 	for (const auto& def : gameFontdataDefinitions) {
 		fonts.emplace_back(std::make_shared<fontgen::GameFontdataFixedSizeFont>(
-			std::make_shared<FontdataStream>(*get_file(def.Path)),
+			std::make_shared<fontdata::stream>(*get_file(def.Path)),
 			textures,
 			def.Name,
 			def.Family));

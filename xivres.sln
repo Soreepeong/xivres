@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "example", "XivRes.Example\X
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.fontgen", "xivres.fontgen\xivres.fontgen.vcxproj", "{90E4B098-E528-44EE-B643-56A0EE1A4FFB}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.vorbis", "xivres.vorbis\xivres.vorbis.vcxproj", "{58FAD283-8045-4C8E-9531-5B2B37856F74}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -61,6 +63,18 @@ Global
 		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.ReleaseWithoutAsm|Win32.Build.0 = Release|Win32
 		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.ReleaseWithoutAsm|x64.ActiveCfg = Release|x64
 		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.ReleaseWithoutAsm|x64.Build.0 = Release|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|Win32.ActiveCfg = Debug|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|Win32.Build.0 = Debug|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|x64.ActiveCfg = Debug|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|x64.Build.0 = Debug|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Release|Win32.ActiveCfg = Release|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Release|Win32.Build.0 = Release|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Release|x64.ActiveCfg = Release|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Release|x64.Build.0 = Release|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.ReleaseWithoutAsm|Win32.ActiveCfg = Release|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.ReleaseWithoutAsm|Win32.Build.0 = Release|Win32
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.ReleaseWithoutAsm|x64.ActiveCfg = Release|x64
+		{58FAD283-8045-4C8E-9531-5B2B37856F74}.ReleaseWithoutAsm|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
