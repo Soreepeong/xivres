@@ -1,13 +1,13 @@
-#include "../include/xivres.fontgen/TextMeasurer.h"
+#include "../include/xivres.fontgen/text_measurer.h"
 
-std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::fontgen::TextMeasureResult::CreateMipmap(const IFixedSizeFont& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad) const {
+std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::fontgen::text_measure_result::create_mipmap(const fixed_size_font& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad) const {
 	auto res = std::make_shared<xivres::texture::memory_mipmap_stream>(
 		pad * 2 + Occupied.X2 - (std::min)(0, Occupied.X1),
 		pad * 2 + Occupied.Y2 - (std::min)(0, Occupied.Y1),
 		1,
 		xivres::texture::format::A8R8G8B8);
 	std::ranges::fill(res->as_span<util::RGBA8888>(), bgColor);
-	DrawTo(
+	draw_to(
 		*res,
 		fontFace,
 		pad - (std::min)(0, Occupied.X1),
@@ -17,13 +17,13 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::fontgen::TextMeas
 	return res;
 }
 
-void xivres::fontgen::TextMeasureResult::DrawTo(xivres::texture::memory_mipmap_stream& mipmapStream, const IFixedSizeFont& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+void xivres::fontgen::text_measure_result::draw_to(xivres::texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	const auto buf = mipmapStream.as_span<util::RGBA8888>();
 	for (const auto& c : Characters) {
-		if (c.Metrics.IsEffectivelyEmpty())
+		if (c.Metrics.is_effectively_empty())
 			continue;
 
-		fontFace.Draw(
+		fontFace.draw(
 			c.Displayed,
 			&buf[0],
 			x + c.X, y + c.Y,
@@ -33,7 +33,7 @@ void xivres::fontgen::TextMeasureResult::DrawTo(xivres::texture::memory_mipmap_s
 	}
 }
 
-xivres::fontgen::TextMeasureResult& xivres::fontgen::TextMeasurer::Measure(TextMeasureResult& res) const {
+xivres::fontgen::text_measure_result& xivres::fontgen::text_measurer::measure(text_measure_result& res) const {
 	std::vector<size_t> lineBreakIndices;
 
 	if (res.Characters.empty())
@@ -43,9 +43,9 @@ xivres::fontgen::TextMeasureResult& xivres::fontgen::TextMeasurer::Measure(TextM
 		if (curr.Codepoint < IsCharacterControlCharacter.size() && IsCharacterControlCharacter[curr.Codepoint])
 			continue;
 
-		if (!FontFace.GetGlyphMetrics(curr.Displayed, curr.Metrics)) {
+		if (!FontFace.try_get_glyph_metrics(curr.Displayed, curr.Metrics)) {
 			for (auto pfc = FallbackCharacters; (curr.Displayed = *pfc); pfc++) {
-				if (FontFace.GetGlyphMetrics(curr.Displayed, curr.Metrics))
+				if (FontFace.try_get_glyph_metrics(curr.Displayed, curr.Metrics))
 					break;
 			}
 		}
@@ -59,9 +59,9 @@ xivres::fontgen::TextMeasureResult& xivres::fontgen::TextMeasurer::Measure(TextM
 		if (prev.Codepoint == '\n') {
 			lineBreakIndices.push_back(i);
 			curr.X = 0;
-			curr.Y = prev.Y + LineHeight.value_or(FontFace.GetLineHeight());
+			curr.Y = prev.Y + LineHeight.value_or(FontFace.line_height());
 		} else {
-			curr.X = prev.X + (UseKerning ? FontFace.GetAdjustedAdvanceX(prev.Displayed, curr.Displayed) : prev.Metrics.AdvanceX);
+			curr.X = prev.X + (UseKerning ? FontFace.get_adjusted_advance_width(prev.Displayed, curr.Displayed) : prev.Metrics.AdvanceX);
 			curr.Y = prev.Y;
 		}
 
@@ -79,44 +79,44 @@ xivres::fontgen::TextMeasureResult& xivres::fontgen::TextMeasurer::Measure(TextM
 		else
 			lastBreakIndex = i;
 		res.Characters[i].X = 0;
-		res.Characters[i].Y = res.Characters[i - 1].Y + LineHeight.value_or(FontFace.GetLineHeight());
+		res.Characters[i].Y = res.Characters[i - 1].Y + LineHeight.value_or(FontFace.line_height());
 		lineBreakIndices.push_back(i);
 	}
 
 	for (auto& elem : res.Characters) {
-		elem.Metrics.Translate(elem.X, elem.Y);
-		res.Occupied.ExpandToFit(elem.Metrics);
+		elem.Metrics.translate(elem.X, elem.Y);
+		res.Occupied.expand_to_fit(elem.Metrics);
 	}
 
 	return res;
 }
 
-xivres::fontgen::TextMeasurer& xivres::fontgen::TextMeasurer::WithFallbackCharacters(char32_t* fallbackCharacters) {
+xivres::fontgen::text_measurer& xivres::fontgen::text_measurer::fallback_characters(char32_t* fallbackCharacters) {
 	FallbackCharacters = fallbackCharacters;
 	return *this;
 }
 
-xivres::fontgen::TextMeasurer& xivres::fontgen::TextMeasurer::WithLineHeight(std::optional<int> lineHeight) {
+xivres::fontgen::text_measurer& xivres::fontgen::text_measurer::line_height(std::optional<int> lineHeight) {
 	LineHeight = lineHeight;
 	return *this;
 }
 
-xivres::fontgen::TextMeasurer& xivres::fontgen::TextMeasurer::WithMaxHeight(int height) {
+xivres::fontgen::text_measurer& xivres::fontgen::text_measurer::max_height(int height) {
 	MaxHeight = height;
 	return *this;
 }
 
-xivres::fontgen::TextMeasurer& xivres::fontgen::TextMeasurer::WithMaxWidth(int width) {
+xivres::fontgen::text_measurer& xivres::fontgen::text_measurer::max_width(int width) {
 	MaxWidth = width;
 	return *this;
 }
 
-xivres::fontgen::TextMeasurer& xivres::fontgen::TextMeasurer::WithUseKerning(bool use) {
+xivres::fontgen::text_measurer& xivres::fontgen::text_measurer::use_kerning(bool use) {
 	UseKerning = use;
 	return *this;
 }
 
-xivres::fontgen::TextMeasurer::TextMeasurer(const IFixedSizeFont& fontFace) : FontFace(fontFace) {
+xivres::fontgen::text_measurer::text_measurer(const fixed_size_font& fontFace) : FontFace(fontFace) {
 	IsCharacterWhiteSpace.resize(256);
 	IsCharacterWhiteSpace[U' '] = true;
 	IsCharacterWhiteSpace[U'\r'] = true;

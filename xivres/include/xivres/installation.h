@@ -9,9 +9,9 @@ namespace xivres::excel {
 }
 
 namespace xivres::fontgen {
-	class GameFontdataFixedSizeFont;
-	class GameFontdataSet;
-	struct GameFontdataDefinition;
+	class fontdata_fixed_size_font;
+	class game_fontdata_set;
+	struct game_fontdata_definition;
 }
 
 namespace xivres {
@@ -45,9 +45,9 @@ namespace xivres {
 
 		[[nodiscard]] excel::reader get_excel(const std::string& name) const;
 
-		fontgen::GameFontdataSet get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::GameFontdataDefinition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const;
+		fontgen::game_fontdata_set get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::game_fontdata_definition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const;
 
-		fontgen::GameFontdataSet get_fontdata_set(font_type fontType = font_type::font) const;
+		fontgen::game_fontdata_set get_fontdata_set(font_type fontType = font_type::font) const;
 
 		void preload_all_sqpacks() const;
 	};

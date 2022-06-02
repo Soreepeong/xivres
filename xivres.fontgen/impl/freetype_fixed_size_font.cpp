@@ -1,4 +1,4 @@
-#include "../include/xivres.fontgen/FreeTypeFixedSizeFont.h"
+#include "../include/xivres.fontgen/freetype_fixed_size_font.h"
 
 static FT_Error SuccessOrThrow(FT_Error error, std::initializer_list<FT_Error> acceptables = {}) {
 	if (!error)
@@ -58,12 +58,12 @@ public:
 	std::span<uint8_t> GetBuffer() const;
 };
 
-xivres::fontgen::GlyphMetrics xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeGlyphToMetrics(FT_Glyph glyph, int x, int y) const {
+xivres::fontgen::glyph_metrics xivres::fontgen::freetype_fixed_size_font::FreeTypeGlyphToMetrics(FT_Glyph glyph, int x, int y) const {
 	FT_BBox cbox;
 	FT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &cbox);
-	GlyphMetrics src{
+	glyph_metrics src{
 		.X1 = x + cbox.xMin,
-		.Y1 = y + GetAscent() - cbox.yMax,
+		.Y1 = y + ascent() - cbox.yMax,
 		.X2 = src.X1 + static_cast<int>(cbox.xMax - cbox.xMin),
 		.Y2 = src.Y1 + static_cast<int>(cbox.yMax - cbox.yMin),
 		.AdvanceX = (glyph->advance.x + 1024 * 64 - 1) / (1024 * 64),
@@ -71,29 +71,29 @@ xivres::fontgen::GlyphMetrics xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeGl
 	return src;
 }
 
-const xivres::fontgen::IFixedSizeFont* xivres::fontgen::FreeTypeFixedSizeFont::GetBaseFont(char32_t codepoint) const {
+const xivres::fontgen::fixed_size_font* xivres::fontgen::freetype_fixed_size_font::get_base_font(char32_t codepoint) const {
 	return this;
 }
 
-std::shared_ptr<xivres::fontgen::IFixedSizeFont> xivres::fontgen::FreeTypeFixedSizeFont::GetThreadSafeView() const {
-	return std::make_shared<FreeTypeFixedSizeFont>(*this);
+std::shared_ptr<xivres::fontgen::fixed_size_font> xivres::fontgen::freetype_fixed_size_font::get_threadsafe_view() const {
+	return std::make_shared<freetype_fixed_size_font>(*this);
 }
 
-bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
-	const auto glyphIndex = m_face.GetCharIndex(codepoint);
+bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
+	const auto glyphIndex = m_face.get_char_index(codepoint);
 	if (!glyphIndex)
 		return false;
 
-	auto glyph = m_face.LoadGlyph(glyphIndex, true);
+	auto glyph = m_face.load_glyph(glyphIndex, true);
 	auto bitmapGlyph = reinterpret_cast<FT_BitmapGlyph>(glyph.get());
 	auto dest = FreeTypeGlyphToMetrics(glyph.get(), drawX, drawY);
 	auto src = dest;
-	src.Translate(-src.X1, -src.Y1);
-	src.AdjustToIntersection(dest, src.GetWidth(), src.GetHeight(), destWidth, destHeight);
-	if (src.IsEffectivelyEmpty() || dest.IsEffectivelyEmpty())
+	src.translate(-src.X1, -src.Y1);
+	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
+	if (src.is_effectively_empty() || dest.is_effectively_empty())
 		return true;
 
-	FreeTypeBitmapWrapper bitmapWrapper(m_face.GetLibrary());
+	FreeTypeBitmapWrapper bitmapWrapper(m_face.library());
 	bitmapWrapper.ConvertFrom(bitmapGlyph->bitmap, 1);
 
 	util::bitmap_copy::to_l8()
@@ -103,26 +103,26 @@ bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, uint8_t* p
 		.fore_opacity(fgOpacity)
 		.back_color(bgColor)
 		.back_opacity(bgOpacity)
-		.gamma_table(m_face.GetGammaTable())
+		.gamma_table(m_face.gamma_table())
 		.copy(src.X1, src.Y1, src.X2, src.Y2, dest.X1, dest.Y1);
 	return true;
 }
 
-bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
-	const auto glyphIndex = m_face.GetCharIndex(codepoint);
+bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+	const auto glyphIndex = m_face.get_char_index(codepoint);
 	if (!glyphIndex)
 		return false;
 
-	auto glyph = m_face.LoadGlyph(glyphIndex, true);
+	auto glyph = m_face.load_glyph(glyphIndex, true);
 	auto bitmapGlyph = reinterpret_cast<FT_BitmapGlyph>(glyph.get());
 	auto dest = FreeTypeGlyphToMetrics(glyph.get(), drawX, drawY);
 	auto src = dest;
-	src.Translate(-src.X1, -src.Y1);
-	src.AdjustToIntersection(dest, src.GetWidth(), src.GetHeight(), destWidth, destHeight);
-	if (src.IsEffectivelyEmpty() || dest.IsEffectivelyEmpty())
+	src.translate(-src.X1, -src.Y1);
+	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
+	if (src.is_effectively_empty() || dest.is_effectively_empty())
 		return true;
 
-	FreeTypeBitmapWrapper bitmapWrapper(m_face.GetLibrary());
+	FreeTypeBitmapWrapper bitmapWrapper(m_face.library());
 	bitmapWrapper.ConvertFrom(bitmapGlyph->bitmap, 1);
 
 	util::bitmap_copy::to_rgba8888()
@@ -130,52 +130,52 @@ bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, util::RGBA
 		.to(pBuf, destWidth, destHeight, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)
 		.back_color(bgColor)
-		.gamma_table(m_face.GetGammaTable())
+		.gamma_table(m_face.gamma_table())
 		.copy(src.X1, src.Y1, src.X2, src.Y2, dest.X1, dest.Y1);
 	return true;
 }
 
-int xivres::fontgen::FreeTypeFixedSizeFont::GetAdjustedAdvanceX(char32_t left, char32_t right) const {
-	GlyphMetrics gm;
-	if (!GetGlyphMetrics(left, gm))
+int xivres::fontgen::freetype_fixed_size_font::get_adjusted_advance_width(char32_t left, char32_t right) const {
+	glyph_metrics gm;
+	if (!try_get_glyph_metrics(left, gm))
 		return 0;
 
-	if (const auto it = m_face.GetAllKerningPairs().find(std::make_pair(left, right)); it != m_face.GetAllKerningPairs().end())
+	if (const auto it = m_face.all_kerning_pairs().find(std::make_pair(left, right)); it != m_face.all_kerning_pairs().end())
 		return gm.AdvanceX + it->second;
 
 	return gm.AdvanceX;
 }
 
-const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::FreeTypeFixedSizeFont::GetAllKerningPairs() const {
-	return m_face.GetAllKerningPairs();
+const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::freetype_fixed_size_font::all_kerning_pairs() const {
+	return m_face.all_kerning_pairs();
 }
 
-bool xivres::fontgen::FreeTypeFixedSizeFont::GetGlyphMetrics(char32_t codepoint, GlyphMetrics& gm) const {
-	const auto glyphIndex = m_face.GetCharIndex(codepoint);
+bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const {
+	const auto glyphIndex = m_face.get_char_index(codepoint);
 	if (!glyphIndex)
 		return false;
 
-	gm = FreeTypeGlyphToMetrics(m_face.LoadGlyph(glyphIndex, false).get());
+	gm = FreeTypeGlyphToMetrics(m_face.load_glyph(glyphIndex, false).get());
 	return true;
 }
 
-const std::set<char32_t>& xivres::fontgen::FreeTypeFixedSizeFont::GetAllCodepoints() const {
-	return m_face.GetAllCharacters();
+const std::set<char32_t>& xivres::fontgen::freetype_fixed_size_font::all_codepoints() const {
+	return m_face.all_characters();
 }
 
-int xivres::fontgen::FreeTypeFixedSizeFont::GetLineHeight() const {
+int xivres::fontgen::freetype_fixed_size_font::line_height() const {
 	return (m_face->size->metrics.height + 63) / 64;
 }
 
-int xivres::fontgen::FreeTypeFixedSizeFont::GetAscent() const {
+int xivres::fontgen::freetype_fixed_size_font::ascent() const {
 	return (m_face->size->metrics.ascender + 63) / 64;
 }
 
-float xivres::fontgen::FreeTypeFixedSizeFont::GetSize() const {
-	return m_face.GetSize();
+float xivres::fontgen::freetype_fixed_size_font::font_size() const {
+	return m_face.font_size();
 }
 
-std::string xivres::fontgen::FreeTypeFixedSizeFont::GetSubfamilyName() const {
+std::string xivres::fontgen::freetype_fixed_size_font::subfamily_name() const {
 	FreeTypeFontTable nameDataRef(*m_face, util::TrueType::Name::DirectoryTableTag.ReverseNativeValue);
 	util::TrueType::Name::View name(nameDataRef.GetSpan<char>());
 	if (!name)
@@ -184,7 +184,7 @@ std::string xivres::fontgen::FreeTypeFixedSizeFont::GetSubfamilyName() const {
 	return name.GetPreferredSubfamilyName<std::string>(0);
 }
 
-std::string xivres::fontgen::FreeTypeFixedSizeFont::GetFamilyName() const {
+std::string xivres::fontgen::freetype_fixed_size_font::family_name() const {
 	FreeTypeFontTable nameDataRef(*m_face, util::TrueType::Name::DirectoryTableTag.ReverseNativeValue);
 	util::TrueType::Name::View name(nameDataRef.GetSpan<char>());
 	if (!name)
@@ -193,30 +193,30 @@ std::string xivres::fontgen::FreeTypeFixedSizeFont::GetFamilyName() const {
 	return name.GetPreferredFamilyName<std::string>(0);
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont() = default;
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font() = default;
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont(std::vector<uint8_t> data, int faceIndex, float fSize, float gamma, const FontRenderTransformationMatrix & matrix, CreateStruct createStruct)
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font(std::vector<uint8_t> data, int faceIndex, float fSize, float gamma, const font_render_transformation_matrix & matrix, create_struct createStruct)
 	: m_face(std::move(data), faceIndex, fSize, gamma, matrix, createStruct) {
 
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont(stream & strm, int faceIndex, float fSize, float gamma, const FontRenderTransformationMatrix & matrix, CreateStruct createStruct)
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font(stream & strm, int faceIndex, float fSize, float gamma, const font_render_transformation_matrix & matrix, create_struct createStruct)
 	: m_face(strm.read_vector<uint8_t>(), faceIndex, fSize, gamma, matrix, createStruct) {
 
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont(const std::filesystem::path & path, int faceIndex, float size, float gamma, const FontRenderTransformationMatrix & matrix, CreateStruct createStruct)
-	: FreeTypeFixedSizeFont(file_stream(path).read_vector<uint8_t>(), faceIndex, size, gamma, matrix, createStruct) {
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font(const std::filesystem::path & path, int faceIndex, float size, float gamma, const font_render_transformation_matrix & matrix, create_struct createStruct)
+	: freetype_fixed_size_font(file_stream(path).read_vector<uint8_t>(), faceIndex, size, gamma, matrix, createStruct) {
 
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont(FreeTypeFixedSizeFont && r)  noexcept = default;
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font(freetype_fixed_size_font && r)  noexcept = default;
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFixedSizeFont(const FreeTypeFixedSizeFont & r) = default;
+xivres::fontgen::freetype_fixed_size_font::freetype_fixed_size_font(const freetype_fixed_size_font & r) = default;
 
-xivres::fontgen::FreeTypeFixedSizeFont& xivres::fontgen::FreeTypeFixedSizeFont::operator=(FreeTypeFixedSizeFont && r) noexcept = default;
+xivres::fontgen::freetype_fixed_size_font& xivres::fontgen::freetype_fixed_size_font::operator=(freetype_fixed_size_font && r) noexcept = default;
 
-xivres::fontgen::FreeTypeFixedSizeFont& xivres::fontgen::FreeTypeFixedSizeFont::operator=(const FreeTypeFixedSizeFont & r) = default;
+xivres::fontgen::freetype_fixed_size_font& xivres::fontgen::freetype_fixed_size_font::operator=(const freetype_fixed_size_font & r) = default;
 
 std::span<uint8_t> FreeTypeBitmapWrapper::GetBuffer() const {
 	return { m_bitmap.buffer, m_bitmap.rows * m_bitmap.pitch };
@@ -265,7 +265,7 @@ FreeTypeBitmapWrapper::FreeTypeBitmapWrapper(FT_Library library)
 	FT_Bitmap_Init(&m_bitmap);
 }
 
-std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*> xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::LoadGlyph(int glyphIndex, bool render) const {
+std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::load_glyph(int glyphIndex, bool render) const {
 	if (m_face->glyph->glyph_index != glyphIndex)
 		SuccessOrThrow(FT_Load_Glyph(m_face, glyphIndex, m_info->Params.LoadFlags));
 
@@ -285,7 +285,7 @@ std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*> xivre
 	return std::move(uniqueGlyphPtr);
 }
 
-FT_Face xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::CreateFace(FT_Library library, const InfoStruct & info) {
+FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::CreateFace(FT_Library library, const info_t & info) {
 	FT_Face face;
 	SuccessOrThrow(FT_New_Memory_Face(library, &info.Data[0], static_cast<FT_Long>(info.Data.size()), info.FaceIndex, &face));
 	try {
@@ -297,51 +297,43 @@ FT_Face xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::CreateFace(
 	}
 }
 
-std::span<const uint8_t> xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetRawData() const {
-	return m_info->Data;
-}
-
-int xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetLoadFlags() const {
-	return m_info->Params.LoadFlags;
-}
-
-const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetAllKerningPairs() const {
+const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::all_kerning_pairs() const {
 	return m_info->KerningPairs;
 }
 
-const std::set<char32_t>& xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetAllCharacters() const {
+const std::set<char32_t>& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::all_characters() const {
 	return m_info->Characters;
 }
 
-std::span<const uint8_t> xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetGammaTable() const {
+std::span<const uint8_t> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::gamma_table() const {
 	return std::span(m_info->GammaTable);
 }
 
-float xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetSize() const {
+float xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::font_size() const {
 	return m_info->Size;
 }
 
-FT_Library xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetLibrary() const {
+FT_Library xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::library() const {
 	return m_library.get();
 }
 
-int xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::GetCharIndex(char32_t codepoint) const {
+int xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_char_index(char32_t codepoint) const {
 	return FT_Get_Char_Index(m_face, codepoint);
 }
 
-FT_Face xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::operator->() const {
+FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator->() const {
 	return m_face;
 }
 
-FT_Face xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::operator*() const {
+FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator*() const {
 	return m_face;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::~FreeTypeFaceWrapper() {
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::~freetype_face_wrapper() {
 	*this = nullptr;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::operator=(const std::nullptr_t&) {
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator=(const std::nullptr_t&) {
 	if (!m_face)
 		return *this;
 
@@ -354,11 +346,11 @@ xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::Fr
 	return *this;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::operator=(const FreeTypeFaceWrapper & r) {
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator=(const freetype_face_wrapper & r) {
 	if (this == &r)
 		return *this;
 
-	auto library = LibraryPtr(FirstArgIsReturn<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType);
+	auto library = library_ptr_t(FirstArgIsReturn<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType);
 	auto face = CreateFace(library.get(), *r.m_info);
 
 	*this = nullptr;
@@ -370,7 +362,7 @@ xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::Fr
 	return *this;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::operator=(FreeTypeFaceWrapper && r) noexcept {
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator=(freetype_face_wrapper && r) noexcept {
 	if (this == &r)
 		return *this;
 
@@ -384,23 +376,23 @@ xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper& xivres::fontgen::Fr
 	return *this;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::FreeTypeFaceWrapper(const FreeTypeFaceWrapper & r)
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper(const freetype_face_wrapper & r)
 	: m_library(FirstArgIsReturn<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType)
 	, m_info(r.m_info) {
 	if (r.m_face)
 		m_face = CreateFace(m_library.get(), *m_info);
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::FreeTypeFaceWrapper(FreeTypeFaceWrapper && r) noexcept
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper(freetype_face_wrapper && r) noexcept
 	: m_library(std::move(r.m_library))
 	, m_info(std::move(r.m_info))
 	, m_face(r.m_face) {
 	r.m_face = nullptr;
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::FreeTypeFaceWrapper(std::vector<uint8_t> data, int faceIndex, float size, float gamma, const FontRenderTransformationMatrix & matrix, CreateStruct createStruct)
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper(std::vector<uint8_t> data, int faceIndex, float size, float gamma, const font_render_transformation_matrix & matrix, create_struct createStruct)
 	: m_library(FirstArgIsReturn<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType) {
-	auto info = std::make_shared<InfoStruct>();
+	auto info = std::make_shared<info_t>();
 	info->Data = std::move(data);
 	info->Size = size;
 	info->GammaTable = util::bitmap_copy::create_gamma_table(gamma);
@@ -451,11 +443,11 @@ xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::FreeTypeFaceWrapper
 	m_info = std::move(info);
 }
 
-xivres::fontgen::FreeTypeFixedSizeFont::FreeTypeFaceWrapper::FreeTypeFaceWrapper()
+xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper()
 	: m_library(FirstArgIsReturn<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType) {
 }
 
-std::wstring xivres::fontgen::FreeTypeFixedSizeFont::CreateStruct::GetRenderModeString() const {
+std::wstring xivres::fontgen::freetype_fixed_size_font::create_struct::GetRenderModeString() const {
 	switch (RenderMode) {
 		case FT_RENDER_MODE_NORMAL: return L"Normal";
 		case FT_RENDER_MODE_LIGHT: return L"Light";
@@ -467,7 +459,7 @@ std::wstring xivres::fontgen::FreeTypeFixedSizeFont::CreateStruct::GetRenderMode
 	}
 }
 
-std::wstring xivres::fontgen::FreeTypeFixedSizeFont::CreateStruct::GetLoadFlagsString() const {
+std::wstring xivres::fontgen::freetype_fixed_size_font::create_struct::GetLoadFlagsString() const {
 	std::wstring res;
 	if (LoadFlags & FT_LOAD_NO_HINTING) res += L", no hinting";
 	if (LoadFlags & FT_LOAD_NO_BITMAP) res += L", no bitmap";
