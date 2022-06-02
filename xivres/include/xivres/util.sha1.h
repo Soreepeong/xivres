@@ -264,7 +264,7 @@ namespace xivres {
 
 		template<typename ...Args>
 		void set_from_span(Args...args) {
-			SetFrom(std::span(std::forward<Args>(args)...));
+			set_from(std::span(std::forward<Args>(args)...));
 		}
 
 		void verify(const void* data, size_t size, const char* errorMessage) const {

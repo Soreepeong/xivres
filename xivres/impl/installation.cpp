@@ -13,16 +13,16 @@ xivres::installation::installation(std::filesystem::path gamePath)
 		packFileName.resize(6);
 
 		const auto packFileId = std::strtol(&packFileName[0], nullptr, 16);
-		m_readers.emplace(packFileId, std::optional<SqpackReader>());
+		m_readers.emplace(packFileId, std::optional<sqpack::reader>());
 	}
 }
 
-std::shared_ptr<xivres::packed_stream> xivres::installation::get_file_packed(const xiv_path_spec& pathSpec) const {
-	return get_sqpack(pathSpec).GetPackedFileStream(pathSpec);
+std::shared_ptr<xivres::packed_stream> xivres::installation::get_file_packed(const path_spec& pathSpec) const {
+	return get_sqpack(pathSpec).packed_at(pathSpec);
 }
 
-std::shared_ptr<xivres::PackedFileUnpackingStream> xivres::installation::get_file(const xiv_path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite) const {
-	return std::make_shared<PackedFileUnpackingStream>(get_sqpack(pathSpec).GetPackedFileStream(pathSpec), obfuscatedHeaderRewrite);
+std::shared_ptr<xivres::unpacked_stream> xivres::installation::get_file(const path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite) const {
+	return std::make_shared<unpacked_stream>(get_sqpack(pathSpec).packed_at(pathSpec), obfuscatedHeaderRewrite);
 }
 
 const std::vector<uint32_t> xivres::installation::get_sqpack_ids() const {
@@ -33,15 +33,15 @@ const std::vector<uint32_t> xivres::installation::get_sqpack_ids() const {
 	return res;
 }
 
-const xivres::SqpackReader& xivres::installation::get_sqpack(uint8_t categoryId, uint8_t expacId, uint8_t partId) const {
+const xivres::sqpack::reader& xivres::installation::get_sqpack(uint8_t categoryId, uint8_t expacId, uint8_t partId) const {
 	return get_sqpack((categoryId << 16) | (expacId << 8) | partId);
 }
 
-const xivres::SqpackReader& xivres::installation::get_sqpack(const xiv_path_spec& rawpath_spec) const {
+const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& rawpath_spec) const {
 	return get_sqpack(rawpath_spec.PackNameValue());
 }
 
-const xivres::SqpackReader& xivres::installation::get_sqpack(uint32_t packId) const {
+const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) const {
 	auto& item = m_readers.at(packId);
 	if (item)
 		return *item;
@@ -52,9 +52,9 @@ const xivres::SqpackReader& xivres::installation::get_sqpack(uint32_t packId) co
 
 	const auto expacId = (packId >> 8) & 0xFF;
 	if (expacId == 0)
-		return item.emplace(SqpackReader::FromPath(m_gamePath / std::format("sqpack/ffxiv/{:0>6x}.win32.index", packId)));
+		return item.emplace(sqpack::reader::from_path(m_gamePath / std::format("sqpack/ffxiv/{:0>6x}.win32.index", packId)));
 	else
-		return item.emplace(SqpackReader::FromPath(m_gamePath / std::format("sqpack/ex{}/{:0>6x}.win32.index", expacId, packId)));
+		return item.emplace(sqpack::reader::from_path(m_gamePath / std::format("sqpack/ex{}/{:0>6x}.win32.index", expacId, packId)));
 }
 
 void xivres::installation::preload_all_sqpacks() const {

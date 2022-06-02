@@ -4,13 +4,12 @@
 #include "util.zlib_wrapper.h"
 
 #include "packed_stream.h"
-#include "Model.h"
 
 namespace xivres {
-	class model_passthrough_packer : public passthrough_packer<packed_type::model> {
+	class model_passthrough_packer : public passthrough_packer<packed::type::model> {
 		struct ModelEntryHeader {
-			PackedFileHeader Entry;
-			SqpackModelPackedFileBlockLocator Model;
+			packed::file_header Entry;
+			packed::model_block_locator Model;
 		} m_header{};
 		std::vector<uint32_t> m_blockOffsets;
 		std::vector<uint16_t> m_blockDataSizes;
@@ -28,7 +27,7 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class model_compressing_packer : public compressing_packer<packed_type::model> {
+	class model_compressing_packer : public compressing_packer<packed::type::model> {
 	public:
 		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};

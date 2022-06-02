@@ -1,7 +1,7 @@
 #include "../include/xivres/excel.h"
 #include "../include/xivres/installation.h"
-#include "../include/xivres/SqpackReader.h"
-#include "../include/xivres/PackedFileUnpackingStream.h"
+#include "../include/xivres/sqpack.reader.h"
+#include "../include/xivres/unpacked_stream.h"
 #include "../include/xivres/util.span_cast.h"
 
 using namespace xivres::util;
@@ -60,7 +60,7 @@ size_t xivres::excel::exh::reader::get_owning_page_index(uint32_t rowId) const {
 	return std::distance(m_pages.begin(), it);
 }
 
-xivres::xiv_path_spec xivres::excel::exh::reader::get_exd_path(const exh::page& page, game_language language) const {
+xivres::path_spec xivres::excel::exh::reader::get_exd_path(const exh::page& page, game_language language) const {
 	const auto* languageCode = "";
 	switch (language) {
 		case game_language::Unspecified:
@@ -180,13 +180,13 @@ xivres::excel::exd::row::buffer::buffer(uint32_t rowId, const exh::reader& exhRe
 	, m_buffer(strm.read_vector<char>(offset + sizeof m_rowHeader, m_rowHeader.DataSize)) {
 	m_rows.reserve(m_rowHeader.SubRowCount);
 
-	if (exhReader.header().Depth == sheet_type::Level2) {
+	if (exhReader.header().Variant == variant::Level2) {
 		const auto fixedData = std::span(m_buffer).subspan(0, exhReader.header().FixedDataSize);
 
 		for (size_t i = 0, i_ = m_rowHeader.SubRowCount; i < i_; i++)
 			m_rows.emplace_back(fixedData, std::span(m_buffer), exhReader.get_columns());
 
-	} else if (exhReader.header().Depth == sheet_type::Level3) {
+	} else if (exhReader.header().Variant == variant::Level3) {
 		for (size_t i = 0, i_ = m_rowHeader.SubRowCount; i < i_; ++i) {
 			const auto baseOffset = i * (size_t() + 2 + exhReader.header().FixedDataSize);
 			const auto fixedData = std::span(m_buffer).subspan(2 + baseOffset, exhReader.header().FixedDataSize);
@@ -264,9 +264,9 @@ xivres::excel::reader& xivres::excel::reader::operator=(const reader& r) {
 	return *this;
 }
 
-xivres::excel::reader::reader(const SqpackReader* sqpackReader, const std::string& name)
+xivres::excel::reader::reader(const sqpack::reader* sqpackReader, const std::string& name)
 	: m_sqpackReader(sqpackReader)
-	, m_exhReader(std::in_place, name, sqpackReader->GetPackedFileStream(std::format("exd/;.exh", name))->GetUnpackedStream())
+	, m_exhReader(std::in_place, name, sqpackReader->packed_at(std::format("exd/;.exh", name))->GetUnpackedStream())
 	, m_language(m_exhReader->get_languages().front())
 	, m_exdReaders(m_exhReader->get_pages().size()) {}
 
@@ -322,7 +322,7 @@ const xivres::excel::exd::reader& xivres::excel::reader::get_exd_reader(size_t p
 	if (!m_exdReaders[pageIndex]) {
 		const auto lock = std::lock_guard(m_populateMtx);
 		if (!m_exdReaders[pageIndex])
-			m_exdReaders[pageIndex] = std::make_unique<exd::reader>(*m_exhReader, m_sqpackReader->GetPackedFileStream(m_exhReader->get_exd_path(m_exhReader->get_pages().at(pageIndex), m_language))->GetUnpackedStreamPtr());
+			m_exdReaders[pageIndex] = std::make_unique<exd::reader>(*m_exhReader, m_sqpackReader->packed_at(m_exhReader->get_exd_path(m_exhReader->get_pages().at(pageIndex), m_language))->GetUnpackedStreamPtr());
 	}
 
 	return *m_exdReaders[pageIndex];

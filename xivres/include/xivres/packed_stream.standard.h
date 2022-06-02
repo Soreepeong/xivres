@@ -6,7 +6,7 @@
 #include "packed_stream.h"
 
 namespace xivres {
-	class standard_passthrough_packer : public passthrough_packer<packed_type::standard> {
+	class standard_passthrough_packer : public passthrough_packer<packed::type::standard> {
 		std::vector<uint8_t> m_header;
 		std::mutex m_mtx;
 
@@ -20,7 +20,7 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class standard_compressing_packer : public compressing_packer<packed_type::standard> {
+	class standard_compressing_packer : public compressing_packer<packed::type::standard> {
 	public:
 		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};

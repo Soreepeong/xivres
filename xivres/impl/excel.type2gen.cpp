@@ -45,10 +45,10 @@ uint32_t xivres::excel::type2gen::calculate_fixed_data_size(const std::vector<ex
 	return xivres::Align<uint32_t>(size, 4).Alloc;
 }
 
-xivres::excel::type2gen::type2gen(std::string name, std::vector<exh::column> columns, int someSortOfBufferSize, size_t divideUnit)
+xivres::excel::type2gen::type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit)
 	: Name(std::move(name))
 	, Columns(std::move(columns))
-	, SomeSortOfBufferSize(someSortOfBufferSize)
+	, ReadStrategy(readStrategy)
 	, DivideUnit(divideUnit)
 	, FixedDataSize(calculate_fixed_data_size(Columns)) {
 
@@ -72,7 +72,7 @@ void xivres::excel::type2gen::set_row(uint32_t id, game_language language, std::
 		target = std::move(row);
 }
 
-std::pair<xivres::xiv_path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) {
+std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) {
 	exd::header exdHeader;
 	const auto exdHeaderSpan = span_cast<char>(1, &exdHeader);
 	memcpy(exdHeader.Signature, exd::header::Signature_Value, 4);
@@ -100,13 +100,13 @@ std::pair<xivres::xiv_path_spec, std::vector<char>> xivres::excel::type2gen::flu
 		std::copy_n(&row[0], row.size(), std::back_inserter(exdFile));
 
 	if (auto pcszLangCode = game_language_code(language))
-		return std::make_pair(xiv_path_spec(std::format("exd/{}_{}_{}.exd", Name, startId, pcszLangCode)), std::move(exdFile));
+		return std::make_pair(path_spec(std::format("exd/{}_{}_{}.exd", Name, startId, pcszLangCode)), std::move(exdFile));
 	else
-		return std::make_pair(xiv_path_spec(std::format("exd/{}_{}.exd", Name, startId)), std::move(exdFile));
+		return std::make_pair(path_spec(std::format("exd/{}_{}.exd", Name, startId)), std::move(exdFile));
 }
 
-std::map<xivres::xiv_path_spec, std::vector<char>, xivres::xiv_path_spec::FullPathComparator> xivres::excel::type2gen::compile() {
-	std::map<xiv_path_spec, std::vector<char>, xiv_path_spec::FullPathComparator> result;
+std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathComparator> xivres::excel::type2gen::compile() {
+	std::map<path_spec, std::vector<char>, path_spec::FullPathComparator> result;
 
 	std::vector<std::pair<exh::page, std::vector<uint32_t>>> pages;
 	for (const auto id : Data | std::views::keys) {
@@ -234,8 +234,8 @@ std::map<xivres::xiv_path_spec, std::vector<char>, xivres::xiv_path_spec::FullPa
 		exhHeader.ColumnCount = static_cast<uint16_t>(Columns.size());
 		exhHeader.PageCount = static_cast<uint16_t>(pages.size());
 		exhHeader.LanguageCount = static_cast<uint16_t>(Languages.size());
-		exhHeader.SomeSortOfBufferSize = SomeSortOfBufferSize;
-		exhHeader.Depth = sheet_type::Level2;
+		exhHeader.ReadStrategy = ReadStrategy;
+		exhHeader.Variant = variant::Level2;
 		exhHeader.RowCountWithoutSkip = static_cast<uint32_t>(Data.size());
 
 		const auto columnSpan = span_cast<char>(Columns);

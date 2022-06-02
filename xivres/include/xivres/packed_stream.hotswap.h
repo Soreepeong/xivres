@@ -1,16 +1,16 @@
 #ifndef _XIVRES_HOTSWAPPABLEPACKEDFILESTREAM_H_
 #define _XIVRES_HOTSWAPPABLEPACKEDFILESTREAM_H_
 
-#include "EmptyOrObfuscatedPackedFileStream.h"
+#include "packed_stream.placeholder.h"
 
 namespace xivres {
-	class HotSwappablePackedFileStream : public packed_stream {
+	class hotswap_packed_stream : public packed_stream {
 		const uint32_t m_reservedSize;
 		const std::shared_ptr<const packed_stream> m_baseStream;
 		std::shared_ptr<const packed_stream> m_stream;
 
 	public:
-		HotSwappablePackedFileStream(const xiv_path_spec& pathSpec, uint32_t reservedSize, std::shared_ptr<const packed_stream> strm = nullptr)
+		hotswap_packed_stream(const xivres::path_spec& pathSpec, uint32_t reservedSize, std::shared_ptr<const packed_stream> strm = nullptr)
 			: packed_stream(pathSpec)
 			, m_reservedSize(Align(reservedSize))
 			, m_baseStream(std::move(strm)) {
@@ -41,7 +41,7 @@ namespace xivres {
 				length = m_reservedSize - offset;
 
 			auto target = std::span(static_cast<uint8_t*>(buf), static_cast<size_t>(length));
-			const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : EmptyOrObfuscatedPackedFileStream::Instance();
+			const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : placeholder_packed_stream::instance();
 			const auto underlyingStreamLength = underlyingStream.size();
 			const auto dataLength = offset < underlyingStreamLength ? (std::min)(length, underlyingStreamLength - offset) : 0;
 
@@ -56,8 +56,8 @@ namespace xivres {
 			return length;
 		}
 
-		[[nodiscard]] packed_type get_packed_type() const override {
-			return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : EmptyOrObfuscatedPackedFileStream::Instance().get_packed_type());
+		[[nodiscard]] packed::type get_packed_type() const override {
+			return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type());
 		}
 	};
 }

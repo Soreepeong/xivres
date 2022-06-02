@@ -8,18 +8,18 @@
 #include "Texture.h"
 
 namespace xivres {
-	class texture_passthrough_packer : public passthrough_packer<packed_type::texture> {
+	class texture_passthrough_packer : public passthrough_packer<packed::type::texture> {
 		static constexpr auto MaxMipmapCountPerTexture = 16;
 
 		std::mutex m_mtx;
 
 		std::vector<uint8_t> m_mergedHeader;
-		std::vector<PackedLodBlockLocator> m_blockLocators;
+		std::vector<packed::mipmap_block_locator> m_blockLocators;
 		std::vector<uint32_t> m_mipmapOffsetsWithRepeats;
 		std::vector<uint32_t> m_mipmapSizes;
 
 	public:
-		using passthrough_packer<packed_type::texture>::passthrough_packer;
+		using passthrough_packer<packed::type::texture>::passthrough_packer;
 
 		[[nodiscard]] std::streamsize size() override;
 
@@ -29,7 +29,7 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class texture_compressing_packer : public compressing_packer<packed_type::texture> {
+	class texture_compressing_packer : public compressing_packer<packed::type::texture> {
 	public:
 		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};

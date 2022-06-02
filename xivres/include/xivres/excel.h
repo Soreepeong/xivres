@@ -8,12 +8,13 @@
 #include "util.byte_order.h"
 
 #include "common.h"
+#include "path_spec.h"
+#include "sqpack.h"
 #include "stream.h"
 #include "xivstring.h"
-#include "Sqpack.h"
 
-namespace xivres {
-	class SqpackReader;
+namespace xivres::sqpack {
+	class reader;
 }
 
 namespace xivres::excel {
@@ -43,7 +44,7 @@ namespace xivres::excel {
 		PackedBool7 = 0x20,
 	};
 
-	enum class sheet_type : uint8_t {
+	enum class variant : uint16_t {
 		Unknown = 0,
 		Level2 = 1,
 		Level3 = 2,
@@ -99,6 +100,18 @@ namespace xivres::excel::exh {
 		BE<uint32_t> RowCountWithSkip;
 	};
 
+	enum class read_strategy_mode : uint16_t {
+		All = 0,
+		RingBuffer_1 = 1,
+		RingBuffer_2 = 2,
+		Invalid = 3,
+	};
+
+	struct read_strategy {
+		uint16_t buffer_count : 14;
+		read_strategy_mode mode : 2;
+	};
+
 	struct header {
 		static constexpr char Signature_Value[4] = { 'E', 'X', 'H', 'F' };
 
@@ -110,9 +123,8 @@ namespace xivres::excel::exh {
 		BE<uint16_t> ColumnCount;
 		BE<uint16_t> PageCount;
 		BE<uint16_t> LanguageCount;
-		BE<uint16_t> SomeSortOfBufferSize;
-		BE<uint8_t> Padding_0x010;
-		BE<sheet_type> Depth;
+		BE<read_strategy> ReadStrategy;
+		BE<variant> Variant;
 		BE<uint16_t> Padding_0x012;
 		BE<uint32_t> RowCountWithoutSkip;
 		BE<uint64_t> Padding_0x018;
@@ -135,7 +147,7 @@ namespace xivres::excel::exh {
 		const std::vector<game_language>& get_languages() const { return m_languages; }
 		size_t get_owning_page_index(uint32_t rowId) const;
 		const exh::page& get_owning_page(uint32_t rowId) const { return m_pages[get_owning_page_index(rowId)]; }
-		[[nodiscard]] xiv_path_spec get_exd_path(const exh::page& page, game_language language) const;
+		[[nodiscard]] path_spec get_exd_path(const exh::page& page, game_language language) const;
 	};
 }
 
@@ -183,7 +195,7 @@ namespace xivres::excel::exd::row {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(CheckBoundaryOrThrow(index)) {}
+				, m_index(throw_if_out_of_boundary(index)) {}
 
 			base_iterator(const iterator& r)
 				: m_parent(r.m_parent)
@@ -197,7 +209,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator++() { //prefix increment
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
 
@@ -212,7 +224,7 @@ namespace xivres::excel::exd::row {
 
 			iterator operator++(int) { //postfix increment
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return { m_parent, index };
 			}
 
@@ -233,13 +245,13 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator--() { //prefix decrement
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
 			iterator operator--(int) { //postfix decrement
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return { m_parent, index };
 			}
 
@@ -260,7 +272,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator+=(difference_type n) {
-				m_index = CheckBoundaryOrThrow(m_index + n);
+				m_index = throw_if_out_of_boundary(m_index + n);
 				return *this;
 			}
 
@@ -273,7 +285,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator-=(difference_type n) {
-				m_index = CheckBoundaryOrThrow(m_index - n);
+				m_index = throw_if_out_of_boundary(m_index - n);
 				return *this;
 			}
 
@@ -286,12 +298,12 @@ namespace xivres::excel::exd::row {
 			}
 
 			reference operator[](difference_type n) const {
-				const auto index = CheckBoundaryOrThrow(m_index + n);
+				const auto index = throw_if_out_of_boundary(m_index + n);
 				return m_parent->resolve_cell(reversed ? m_parent->size() - 1 - index : index);
 			}
 
 		private:
-			size_t CheckBoundaryOrThrow(size_t n) const {
+			size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
 				if (n < 0)
@@ -353,7 +365,7 @@ namespace xivres::excel::exd::row {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(CheckBoundaryOrThrow(index)) {}
+				, m_index(throw_if_out_of_boundary(index)) {}
 
 			base_iterator(const iterator& r)
 				: m_parent(r.m_parent)
@@ -367,7 +379,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator++() { //prefix increment
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
 
@@ -382,7 +394,7 @@ namespace xivres::excel::exd::row {
 
 			iterator operator++(int) { //postfix increment
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return { m_parent, index };
 			}
 
@@ -403,13 +415,13 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator--() { //prefix decrement
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
 			iterator operator--(int) { //postfix decrement
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return { m_parent, index };
 			}
 
@@ -430,7 +442,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator+=(difference_type n) {
-				m_index = CheckBoundaryOrThrow(m_index + n);
+				m_index = throw_if_out_of_boundary(m_index + n);
 				return *this;
 			}
 
@@ -443,7 +455,7 @@ namespace xivres::excel::exd::row {
 			}
 
 			iterator& operator-=(difference_type n) {
-				m_index = CheckBoundaryOrThrow(m_index - n);
+				m_index = throw_if_out_of_boundary(m_index - n);
 				return *this;
 			}
 
@@ -456,12 +468,12 @@ namespace xivres::excel::exd::row {
 			}
 
 			reference operator[](difference_type n) const {
-				const auto index = CheckBoundaryOrThrow(m_index + n);
+				const auto index = throw_if_out_of_boundary(m_index + n);
 				return (*m_parent)[reversed ? m_parent->size() - 1 - index : index];
 			}
 
 		private:
-			size_t CheckBoundaryOrThrow(size_t n) const {
+			size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
 				if (n < 0)
@@ -539,7 +551,7 @@ namespace xivres::excel::exd {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(CheckBoundaryOrThrow(index)) {}
+				, m_index(throw_if_out_of_boundary(index)) {}
 
 			base_iterator(const iterator& r)
 				: m_parent(r.m_parent)
@@ -553,7 +565,7 @@ namespace xivres::excel::exd {
 			}
 
 			iterator& operator++() { //prefix increment
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
 
@@ -568,7 +580,7 @@ namespace xivres::excel::exd {
 
 			iterator operator++(int) { //postfix increment
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index + 1);
+				m_index = throw_if_out_of_boundary(m_index + 1);
 				return { m_parent, index };
 			}
 
@@ -589,18 +601,18 @@ namespace xivres::excel::exd {
 			}
 
 			iterator& operator--() { //prefix decrement
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
 			iterator operator--(int) { //postfix decrement
 				const auto index = m_index;
-				m_index = CheckBoundaryOrThrow(m_index - 1);
+				m_index = throw_if_out_of_boundary(m_index - 1);
 				return { m_parent, index };
 			}
 
 		private:
-			size_t CheckBoundaryOrThrow(size_t n) const {
+			size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
 				if (n < 0)
@@ -625,7 +637,7 @@ namespace xivres::excel::exd {
 
 namespace xivres::excel {
 	class reader {
-		const SqpackReader* m_sqpackReader;
+		const sqpack::reader* m_sqpackReader;
 		std::optional<exh::reader> m_exhReader;
 		game_language m_language;
 		mutable std::vector<std::unique_ptr<exd::reader>> m_exdReaders;
@@ -633,7 +645,7 @@ namespace xivres::excel {
 
 	public:
 		reader();
-		reader(const SqpackReader* sqpackReader, const std::string& name);
+		reader(const sqpack::reader* sqpackReader, const std::string& name);
 		reader(const reader& r);
 		reader(reader&& r) noexcept;
 		reader& operator=(const reader& r);

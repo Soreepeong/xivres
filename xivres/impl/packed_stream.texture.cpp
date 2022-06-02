@@ -1,16 +1,16 @@
-#include "../xivres/xivres/include/xivres/packed_stream.texture.h"
-#include "../xivres/xivres/include/xivres/util.thread_pool.h"
+#include "../include/xivres/packed_stream.texture.h"
+#include "../include/xivres/util.thread_pool.h"
 
 std::streamsize xivres::texture_passthrough_packer::size() {
-	const auto blockCount = MaxMipmapCountPerTexture + Align<uint64_t>(m_stream->size(), EntryBlockDataSize).Count;
+	const auto blockCount = MaxMipmapCountPerTexture + Align<uint64_t>(m_stream->size(), packed::MaxBlockDataSize).Count;
 
 	std::streamsize size = 0;
 
-	// PackedFileHeader packedFileHeader;
-	size += sizeof PackedFileHeader;
+	// packed::file_header packedFileHeader;
+	size += sizeof packed::file_header;
 
-	// PackedLodBlockLocator lodBlocks[mipmapCount];
-	size += MaxMipmapCountPerTexture * sizeof PackedLodBlockLocator;
+	// packed::mipmap_block_locator lodBlocks[mipmapCount];
+	size += MaxMipmapCountPerTexture * sizeof packed::mipmap_block_locator;
 
 	// uint16_t subBlockSizes[blockCount];
 	size += blockCount * sizeof uint16_t;
@@ -28,7 +28,7 @@ std::streamsize xivres::texture_passthrough_packer::size() {
 	size = Align(size);
 
 	// PackedBlock blocksOfMaximumSize[blockCount];
-	size += blockCount * EntryBlockSize;
+	size += blockCount * packed::MaxBlockSize;
 
 	return size;
 }
@@ -44,9 +44,9 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 	std::vector<uint16_t> subBlockSizes;
 	std::vector<uint8_t> textureHeaderAndMipmapOffsets;
 
-	auto entryHeader = PackedFileHeader{
-		.HeaderSize = sizeof PackedFileHeader,
-		.Type = packed_type::texture,
+	auto entryHeader = packed::file_header{
+		.HeaderSize = sizeof packed::file_header,
+		.Type = packed::type::texture,
 		.DecompressedSize = static_cast<uint32_t>(m_stream->size()),
 	};
 
@@ -93,8 +93,8 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 	for (size_t i = 0; i < m_mipmapOffsetsWithRepeats.size(); ++i) {
 		const auto mipmapSize = m_mipmapSizes[i];
 		for (uint32_t repeatI = 0; repeatI < repeatCount; repeatI++) {
-			const auto blockAlignment = Align<uint32_t>(mipmapSize, EntryBlockDataSize);
-			PackedLodBlockLocator loc{
+			const auto blockAlignment = Align<uint32_t>(mipmapSize, packed::MaxBlockDataSize);
+			packed::mipmap_block_locator loc{
 				.CompressedOffset = blockOffsetCounter,
 				.CompressedSize = 0,
 				.DecompressedSize = mipmapSize,
@@ -103,10 +103,10 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 			};
 
 			blockAlignment.IterateChunked([&](uint32_t, const uint32_t offset, const uint32_t length) {
-				PackedBlockHeader header{
-					.HeaderSize = sizeof PackedBlockHeader,
+				packed::block_header header{
+					.HeaderSize = sizeof packed::block_header,
 					.Version = 0,
-					.CompressedSize = PackedBlockHeader::CompressedSizeNotCompressed,
+					.CompressedSize = packed::block_header::CompressedSizeNotCompressed,
 					.DecompressedSize = length,
 				};
 				const auto alignmentInfo = Align(sizeof header + length);
@@ -127,7 +127,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 		sizeof entryHeader +
 		std::span(m_blockLocators).size_bytes() +
 		std::span(subBlockSizes).size_bytes()));
-	entryHeader.SetSpaceUnits(m_size);
+	entryHeader.set_space_units(m_size);
 
 	m_mergedHeader.reserve(entryHeader.HeaderSize + m_blockLocators.front().CompressedOffset);
 	m_mergedHeader.insert(m_mergedHeader.end(),
@@ -152,7 +152,7 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 	if (!length)
 		return 0;
 
-	const auto& packedFileHeader = *reinterpret_cast<const PackedFileHeader*>(&m_mergedHeader[0]);
+	const auto& packedFileHeader = *reinterpret_cast<const packed::file_header*>(&m_mergedHeader[0]);
 	const auto& texHeader = *reinterpret_cast<const TextureHeader*>(&m_mergedHeader[packedFileHeader.HeaderSize]);
 
 	auto relativeOffset = static_cast<uint64_t>(offset);
@@ -176,7 +176,7 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 
 		// 1. Find the first LOD block
 		relativeOffset += m_blockLocators[0].CompressedOffset;
-		auto it = std::ranges::lower_bound(m_blockLocators, PackedLodBlockLocator{ .CompressedOffset = static_cast<uint32_t>(relativeOffset) },
+		auto it = std::ranges::lower_bound(m_blockLocators, packed::mipmap_block_locator{ .CompressedOffset = static_cast<uint32_t>(relativeOffset) },
 			[&](const auto& l, const auto& r) { return l.CompressedOffset < r.CompressedOffset; });
 		if (it == m_blockLocators.end() || relativeOffset < it->CompressedOffset)
 			--it;
@@ -185,20 +185,20 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 		// 2. Iterate through LOD block headers
 		for (; it != m_blockLocators.end(); ++it) {
 			const auto blockIndex = it - m_blockLocators.begin();
-			auto j = relativeOffset / EntryBlockSize;
-			relativeOffset -= j * EntryBlockSize;
+			auto j = relativeOffset / packed::MaxBlockSize;
+			relativeOffset -= j * packed::MaxBlockSize;
 
 			// Iterate through packed blocks belonging to current LOD block
 			for (; j < it->BlockCount; ++j) {
-				const auto decompressedSize = j == it->BlockCount - 1 ? m_mipmapSizes[blockIndex] % EntryBlockDataSize : EntryBlockDataSize;
-				const auto pad = Align(sizeof PackedBlockHeader + decompressedSize).Pad;
+				const auto decompressedSize = j == it->BlockCount - 1 ? m_mipmapSizes[blockIndex] % packed::MaxBlockDataSize : packed::MaxBlockDataSize;
+				const auto pad = Align(sizeof packed::block_header + decompressedSize).Pad;
 
 				// 1. Read packed block header
-				if (relativeOffset < sizeof PackedBlockHeader) {
-					const auto header = PackedBlockHeader{
-						.HeaderSize = sizeof PackedBlockHeader,
+				if (relativeOffset < sizeof packed::block_header) {
+					const auto header = packed::block_header{
+						.HeaderSize = sizeof packed::block_header,
 						.Version = 0,
-						.CompressedSize = PackedBlockHeader::CompressedSizeNotCompressed,
+						.CompressedSize = packed::block_header::CompressedSizeNotCompressed,
 						.DecompressedSize = decompressedSize,
 					};
 					const auto src = util::span_cast<uint8_t>(1, &header).subspan(static_cast<size_t>(relativeOffset));
@@ -209,12 +209,12 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 
 					if (out.empty()) return length;
 				} else
-					relativeOffset -= sizeof PackedBlockHeader;
+					relativeOffset -= sizeof packed::block_header;
 
 				// 2. Read packed block data
 				if (relativeOffset < decompressedSize) {
 					const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(decompressedSize - relativeOffset));
-					m_stream->read_fully(m_mipmapOffsetsWithRepeats[blockIndex] + j * EntryBlockDataSize + relativeOffset, &out[0], available);
+					m_stream->read_fully(m_mipmapOffsetsWithRepeats[blockIndex] + j * packed::MaxBlockDataSize + relativeOffset, &out[0], available);
 					out = out.subspan(available);
 					relativeOffset = 0;
 
@@ -371,7 +371,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 					if (is_cancelled())
 						return nullptr;
 
-					const auto blockAlignment = Align<uint32_t>(mipmapSize, EntryBlockDataSize);
+					const auto blockAlignment = Align<uint32_t>(mipmapSize, packed::MaxBlockDataSize);
 					auto& blockDataVector = blockDataList[i][repeatI];
 					blockDataVector.resize(blockAlignment.Count);
 					subBlockCount += blockAlignment.Count;
@@ -422,15 +422,15 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 		return nullptr;
 
 	const auto entryHeaderLength = static_cast<uint16_t>(Align(0
-		+ sizeof PackedFileHeader
-		+ blockLocatorCount * sizeof PackedLodBlockLocator
+		+ sizeof packed::file_header
+		+ blockLocatorCount * sizeof packed::mipmap_block_locator
 		+ subBlockCount * sizeof uint16_t
 	));
 	size_t entryBodyLength = textureHeaderAndMipmapOffsets.size();
 	for (const auto& repeatedItem : blockDataList) {
 		for (const auto& mipmapItem : repeatedItem) {
 			for (const auto& blockItem : mipmapItem) {
-				entryBodyLength += Align(sizeof PackedBlockHeader + blockItem.second.size());
+				entryBodyLength += Align(sizeof packed::block_header + blockItem.second.size());
 			}
 		}
 	}
@@ -438,14 +438,14 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
-	auto& entryHeader = *reinterpret_cast<PackedFileHeader*>(&result[0]);
-	entryHeader.Type = packed_type::texture;
+	auto& entryHeader = *reinterpret_cast<packed::file_header*>(&result[0]);
+	entryHeader.Type = packed::type::texture;
 	entryHeader.DecompressedSize = rawStreamSize;
 	entryHeader.BlockCountOrVersion = static_cast<uint32_t>(blockLocatorCount);
 	entryHeader.HeaderSize = entryHeaderLength;
-	entryHeader.SetSpaceUnits(entryBodyLength);
+	entryHeader.set_space_units(entryBodyLength);
 
-	const auto blockLocators = util::span_cast<PackedLodBlockLocator>(result, sizeof entryHeader, blockLocatorCount);
+	const auto blockLocators = util::span_cast<packed::mipmap_block_locator>(result, sizeof entryHeader, blockLocatorCount);
 	const auto subBlockSizes = util::span_cast<uint16_t>(result, sizeof entryHeader + blockLocators.size_bytes(), subBlockCount);
 	auto resultDataPtr = result.begin() + entryHeaderLength;
 	resultDataPtr = std::copy(textureHeaderAndMipmapOffsets.begin(), textureHeaderAndMipmapOffsets.end(), resultDataPtr);
@@ -461,7 +461,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 			if (is_cancelled())
 				return nullptr;
 
-			const auto blockAlignment = Align<uint32_t>(maxMipmapSize, EntryBlockDataSize);
+			const auto blockAlignment = Align<uint32_t>(maxMipmapSize, packed::MaxBlockDataSize);
 
 			auto& loc = blockLocators[blockLocatorIndexCounter++];
 			loc.CompressedOffset = blockOffsetCounter;
@@ -476,10 +476,10 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 
 				auto& [useCompressed, targetBuf] = blockDataList[i][repeatI][index];
 
-				auto& header = *reinterpret_cast<PackedBlockHeader*>(&*resultDataPtr);
-				header.HeaderSize = sizeof PackedBlockHeader;
+				auto& header = *reinterpret_cast<packed::block_header*>(&*resultDataPtr);
+				header.HeaderSize = sizeof packed::block_header;
 				header.Version = 0;
-				header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : PackedBlockHeader::CompressedSizeNotCompressed;
+				header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : packed::block_header::CompressedSizeNotCompressed;
 				header.DecompressedSize = length;
 
 				std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
