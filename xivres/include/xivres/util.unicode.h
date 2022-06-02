@@ -42,7 +42,7 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo>
-	inline TTo& ConvertFromChar(TTo& out, char32_t c, bool strict = true) {
+	inline TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = true) {
 		const auto encLen = util::unicode::encode<TTo::value_type>(nullptr, c, strict);
 		const auto baseIndex = out.size();
 		out.resize(baseIndex + encLen);
@@ -51,9 +51,9 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo>
-	inline TTo ConvertFromChar(char32_t c, bool strict = true) {
+	inline TTo convert_from_codepoint(char32_t c, bool strict = true) {
 		TTo out{};
-		return ConvertFromChar(out, c, strict);
+		return convert_from_codepoint(out, c, strict);
 	}
 
 	const char32_t* codepoint_name(char32_t c);
@@ -62,7 +62,7 @@ namespace xivres::util::unicode {
 	inline TTo& represent_codepoint(TTo& out, char32_t c, bool strict = true) {
 		if (const auto name = codepoint_name(c))
 			return convert<TTo>(out, name);
-		return ConvertFromChar<TTo>(out, c, strict);
+		return convert_from_codepoint<TTo>(out, c, strict);
 	}
 
 	template<class TTo>

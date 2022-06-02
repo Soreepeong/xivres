@@ -88,7 +88,9 @@ namespace xivres::fontgen {
 
 		void RequestCancel();
 
-		void Wait();
+		void Wait() {
+			void(std::lock_guard(m_runningMtx));
+		}
 
 		template <class _Rep, class _Period>
 		[[nodiscard]] bool Wait(const std::chrono::duration<_Rep, _Period>& t) {

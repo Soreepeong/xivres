@@ -102,17 +102,9 @@ namespace xivres::fontgen {
 		operator bool() const;
 	};
 
-	static std::span<const fontgen::GameFontdataDefinition> GetFontDefinition(font_type fontType = font_type::font);
+	std::span<const fontgen::GameFontdataDefinition> GetFontDefinition(font_type fontType = font_type::font);
 
-	static const char* GetFontTexFilenameFormat(font_type fontType = font_type::font) {
-		switch (fontType) {
-			case xivres::font_type::font: return "common/font/font{}.tex";
-			case xivres::font_type::font_lobby: return "common/font/font_lobby{}.tex";
-			case xivres::font_type::chn_axis: return "common/font/font_chn_{}.tex";
-			case xivres::font_type::krn_axis: return "common/font/font_krn_{}.tex";
-			default: return nullptr;
-		}
-	}
+	const char* GetFontTexFilenameFormat(font_type fontType = font_type::font);
 }
 
 #endif

@@ -291,7 +291,17 @@ std::span<const xivres::fontgen::GameFontdataDefinition> xivres::fontgen::GetFon
 	}
 }
 
-inline xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::GameFontdataDefinition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const {
+const char* xivres::fontgen::GetFontTexFilenameFormat(font_type fontType /*= font_type::font*/) {
+	switch (fontType) {
+		case xivres::font_type::font: return "common/font/font{}.tex";
+		case xivres::font_type::font_lobby: return "common/font/font_lobby{}.tex";
+		case xivres::font_type::chn_axis: return "common/font/font_chn_{}.tex";
+		case xivres::font_type::krn_axis: return "common/font/font_krn_{}.tex";
+		default: return nullptr;
+	}
+}
+
+xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::GameFontdataDefinition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const {
 	std::vector<std::shared_ptr<xivres::texture::memory_mipmap_stream>> textures;
 	try {
 		for (int i = 1; ; i++)
@@ -313,6 +323,6 @@ inline xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(x
 	return { gameFontType, fonts };
 }
 
-inline xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(xivres::font_type fontType) const {
+xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(xivres::font_type fontType) const {
 	return get_fontdata_set(fontType, xivres::fontgen::GetFontDefinition(fontType), xivres::fontgen::GetFontTexFilenameFormat(fontType));
 }
