@@ -7,7 +7,7 @@
 
 #include "util.h"
 
-namespace xivres {
+namespace xivres::util {
 	union Float {
 		float Value;
 		uint32_t UintValue;

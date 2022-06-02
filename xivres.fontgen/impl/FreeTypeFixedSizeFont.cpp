@@ -108,7 +108,7 @@ bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, uint8_t* p
 	return true;
 }
 
-bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
+bool xivres::fontgen::FreeTypeFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	const auto glyphIndex = m_face.GetCharIndex(codepoint);
 	if (!glyphIndex)
 		return false;

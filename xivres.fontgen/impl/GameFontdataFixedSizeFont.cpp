@@ -1,6 +1,6 @@
 #include "../include/xivres.fontgen/GameFontdataFixedSizeFont.h"
 
-#include "xivres/TextureStream.h"
+#include "xivres/texture.stream.h"
 #include "xivres/util.bitmap_copy.h"
 
 xivres::fontgen::GlyphMetrics xivres::fontgen::GameFontdataFixedSizeFont::GlyphMetricsFromEntry(const fontdata::glyph_entry* pEntry, int x, int y) const {
@@ -33,7 +33,7 @@ bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, uint8_
 	const auto planeIndex = fontdata::glyph_entry::ChannelMap[pEntry->texture_plane_index()];
 	src.AdjustToIntersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
 	util::bitmap_copy::to_l8()
-		.from(&mipmapStream.View<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
+		.from(&mipmapStream.as_span<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
 		.to(pBuf, destWidth, destHeight, 4, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)
 		.fore_opacity(fgOpacity)
@@ -44,7 +44,7 @@ bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, uint8_
 	return true;
 }
 
-bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
+bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	const auto pEntry = m_info->Font->get_glyph(codepoint);
 	if (!pEntry)
 		return false;
@@ -55,7 +55,7 @@ bool xivres::fontgen::GameFontdataFixedSizeFont::Draw(char32_t codepoint, RGBA88
 	const auto planeIndex = fontdata::glyph_entry::ChannelMap[pEntry->texture_plane_index()];
 	src.AdjustToIntersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
 	util::bitmap_copy::to_rgba8888()
-		.from(&mipmapStream.View<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
+		.from(&mipmapStream.as_span<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
 		.to(pBuf, destWidth, destHeight, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)
 		.back_color(bgColor)
@@ -109,9 +109,9 @@ std::string xivres::fontgen::GameFontdataFixedSizeFont::GetFamilyName() const {
 	return m_info->FamilyName;
 }
 
-xivres::fontgen::GameFontdataFixedSizeFont::GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName) {
+xivres::fontgen::GameFontdataFixedSizeFont::GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<texture::memory_mipmap_stream>> mipmapStreams, std::string familyName, std::string subfamilyName) {
 	for (const auto& mipmapStream : mipmapStreams) {
-		if (mipmapStream->Type != TextureFormat::A8R8G8B8)
+		if (mipmapStream->Type != texture::format::A8R8G8B8)
 			throw std::invalid_argument("All mipmap streams must be in A8R8G8B8 format.");
 	}
 
@@ -292,10 +292,10 @@ std::span<const xivres::fontgen::GameFontdataDefinition> xivres::fontgen::GetFon
 }
 
 inline xivres::fontgen::GameFontdataSet xivres::installation::get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::GameFontdataDefinition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const {
-	std::vector<std::shared_ptr<xivres::MemoryMipmapStream>> textures;
+	std::vector<std::shared_ptr<xivres::texture::memory_mipmap_stream>> textures;
 	try {
 		for (int i = 1; ; i++)
-			textures.emplace_back(xivres::MemoryMipmapStream::AsARGB8888(*xivres::TextureStream(get_file(std::format(pcszTexturePathPattern, i))).GetMipmap(0, 0)));
+			textures.emplace_back(xivres::texture::memory_mipmap_stream::as_argb8888(*xivres::texture::stream(get_file(std::format(pcszTexturePathPattern, i))).mipmap_at(0, 0)));
 	} catch (const std::out_of_range&) {
 		// do nothing
 	}

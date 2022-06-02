@@ -5,8 +5,8 @@
 
 #include "common.h"
 
-namespace xivres {
-	enum class TextureFormat : uint32_t {
+namespace xivres::texture {
+	enum class format : uint32_t {
 		Unknown = 0,
 		L8 = 4400,
 		A8 = 4401,
@@ -25,10 +25,10 @@ namespace xivres {
 		D16 = 16704,
 	};
 
-	struct TextureHeader {
+	struct header {
 		LE<uint16_t> Unknown1;
 		LE<uint16_t> HeaderSize;
-		LE<TextureFormat> Type;
+		LE<texture::format> Type;
 		LE<uint16_t> Width;
 		LE<uint16_t> Height;
 		LE<uint16_t> Depth;
@@ -36,49 +36,9 @@ namespace xivres {
 		char Unknown2[0xC]{};
 	};
 
-	inline size_t TextureRawDataLength(TextureFormat type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0) {
-		width = (std::max<size_t>)(1, width >> mipmapIndex);
-		height = (std::max<size_t>)(1, height >> mipmapIndex);
-		depth = (std::max<size_t>)(1, depth >> mipmapIndex);
-		switch (type) {
-			case TextureFormat::L8:
-			case TextureFormat::A8:
-				return width * height * depth;
+	size_t calc_raw_data_length(texture::format type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);
 
-			case TextureFormat::A4R4G4B4:
-			case TextureFormat::A1R5G5B5:
-				return width * height * depth * 2;
-
-			case TextureFormat::A8R8G8B8:
-			case TextureFormat::X8R8G8B8:
-			case TextureFormat::R32F:
-			case TextureFormat::G16R16F:
-				return width * height * depth * 4;
-
-			case TextureFormat::A16B16G16R16F:
-			case TextureFormat::G32R32F:
-				return width * height * depth * 8;
-
-			case TextureFormat::A32B32G32R32F:
-				return width * height * depth * 16;
-
-			case TextureFormat::DXT1:
-				return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 8;
-
-			case TextureFormat::DXT3:
-			case TextureFormat::DXT5:
-				return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 16;
-
-			case TextureFormat::D16:
-			case TextureFormat::Unknown:
-			default:
-				throw std::invalid_argument("Unsupported type");
-		}
-	}
-
-	inline size_t TextureRawDataLength(const TextureHeader& header, size_t mipmapIndex = 0) {
-		return TextureRawDataLength(header.Type, header.Width, header.Height, header.Depth, mipmapIndex);
-	}
+	size_t calc_raw_data_length(const texture::header& header, size_t mipmapIndex = 0);
 }
 
 #endif

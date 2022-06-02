@@ -358,7 +358,7 @@ xivres::fontgen::DirectWriteFixedSizeFont& xivres::fontgen::DirectWriteFixedSize
 
 xivres::fontgen::DirectWriteFixedSizeFont& xivres::fontgen::DirectWriteFixedSizeFont::operator=(DirectWriteFixedSizeFont&&) noexcept = default;
 
-bool xivres::fontgen::DirectWriteFixedSizeFont::Draw(char32_t codepoint, RGBA8888 * pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
+bool xivres::fontgen::DirectWriteFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888 * pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	GlyphMetrics gm;
 	if (!GetGlyphMetrics(codepoint, gm, analysis))

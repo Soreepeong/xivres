@@ -32,7 +32,7 @@ namespace xivres::fontgen {
 			std::vector<TargetGlyph> Targets{};
 		};
 		std::vector<std::shared_ptr<fontdata::stream>> m_targetFonts;
-		std::vector<std::shared_ptr<MemoryMipmapStream>> m_targetMipmapStreams;
+		std::vector<std::shared_ptr<texture::memory_mipmap_stream>> m_targetMipmapStreams;
 		std::vector<TargetPlan> m_targetPlans;
 
 		std::map<const IFixedSizeFont*, std::vector<std::shared_ptr<IFixedSizeFont>>> m_threadSafeBaseFonts;
@@ -82,7 +82,7 @@ namespace xivres::fontgen {
 
 		const std::vector<std::shared_ptr<fontdata::stream>>& GetTargetFonts() const;
 
-		const std::vector<std::shared_ptr<MemoryMipmapStream>>& GetMipmapStreams() const;
+		const std::vector<std::shared_ptr<texture::memory_mipmap_stream>>& GetMipmapStreams() const;
 
 		bool IsRunning() const;
 

@@ -10,7 +10,7 @@ xivres::placeholder_packed_stream::placeholder_packed_stream(xivres::path_spec p
 	, m_header(packed::file_header::new_empty()) {}
 
 std::streamsize xivres::placeholder_packed_stream::size() const {
-	return m_header.HeaderSize + (m_stream ? Align(m_stream->size()).Alloc : 0);
+	return m_header.HeaderSize + (m_stream ? align(m_stream->size()).Alloc : 0);
 }
 
 std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
@@ -54,7 +54,7 @@ std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, v
 			relativeOffset -= dataSize;
 	}
 
-	if (const auto pad = m_stream ? Align(m_stream->size()).Pad : 0) {
+	if (const auto pad = m_stream ? align(m_stream->size()).Pad : 0) {
 		if (relativeOffset < pad) {
 			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(pad));
 			std::fill_n(out.begin(), available, 0);

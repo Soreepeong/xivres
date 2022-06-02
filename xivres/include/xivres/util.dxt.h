@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "util.byte_order.h"
-#include "PixelFormats.h"
+#include "util.pixel_formats.h"
 
 // From https://github.com/Benjamin-Dobell/s3tc-dxt-decompression/blob/master/s3tc.h
 #pragma warning(push, 0)
@@ -17,7 +17,7 @@ namespace xivres::util {
 	// uint32_t height:                height of the texture being decompressed.
 	// const uint8_t *blockStorage:   pointer to the block to decompress.
 	// uint32_t *image:                pointer to image where the decompressed pixel data should be stored.
-	void DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<RGBA8888>* image);
+	void DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<util::RGBA8888>* image);
 
 	// void BlockDecompressImageDXT1(): Decompresses all the blocks of a DXT1 compressed texture and stores the resulting pixels in 'image'.
 	//
@@ -25,7 +25,7 @@ namespace xivres::util {
 	// uint32_t height:                Texture height.
 	// const uint8_t *blockStorage:   pointer to compressed DXT1 blocks.
 	// uint32_t *image:                pointer to the image where the decompressed pixels will be stored.
-	void BlockDecompressImageDXT1(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<RGBA8888>* image);
+	void BlockDecompressImageDXT1(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<util::RGBA8888>* image);
 
 	// void DecompressBlockDXT5(): Decompresses one block of a DXT5 texture and stores the resulting pixels at the appropriate offset in 'image'.
 	//
@@ -35,7 +35,7 @@ namespace xivres::util {
 	// uint32_t height:                height of the texture being decompressed.
 	// const uint8_t *blockStorage:   pointer to the block to decompress.
 	// uint32_t *image:                pointer to image where the decompressed pixel data should be stored.
-	void DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<RGBA8888>* image);
+	void DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<util::RGBA8888>* image);
 
 	// void BlockDecompressImageDXT5(): Decompresses all the blocks of a DXT5 compressed texture and stores the resulting pixels in 'image'.
 	//
@@ -43,7 +43,7 @@ namespace xivres::util {
 	// uint32_t height:                Texture height.
 	// const uint8_t *blockStorage:   pointer to compressed DXT5 blocks.
 	// uint32_t *image:                pointer to the image where the decompressed pixels will be stored.
-	void BlockDecompressImageDXT5(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<RGBA8888>* image);
+	void BlockDecompressImageDXT5(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<util::RGBA8888>* image);
 }
 #pragma warning(pop)
 

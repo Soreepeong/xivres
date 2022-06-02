@@ -12,7 +12,7 @@ namespace xivres {
 	public:
 		hotswap_packed_stream(const xivres::path_spec& pathSpec, uint32_t reservedSize, std::shared_ptr<const packed_stream> strm = nullptr)
 			: packed_stream(pathSpec)
-			, m_reservedSize(Align(reservedSize))
+			, m_reservedSize(align(reservedSize))
 			, m_baseStream(std::move(strm)) {
 			if (m_baseStream && m_baseStream->size() > m_reservedSize)
 				throw std::invalid_argument("Provided strm requires more space than reserved size");

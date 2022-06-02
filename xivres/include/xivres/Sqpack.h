@@ -274,7 +274,7 @@ namespace xivres::packed {
 
 		static file_header new_empty(uint64_t decompressedSize = 0, uint64_t compressedSize = 0) {
 			file_header res{
-				.HeaderSize = static_cast<uint32_t>(Align(sizeof file_header)),
+				.HeaderSize = static_cast<uint32_t>(align(sizeof file_header)),
 				.Type = packed::type::placeholder,
 				.DecompressedSize = static_cast<uint32_t>(decompressedSize),
 				.BlockCountOrVersion = static_cast<uint32_t>(compressedSize),
@@ -284,7 +284,7 @@ namespace xivres::packed {
 		}
 
 		void set_space_units(uint64_t dataSize) {
-			AllocatedSpaceUnitCount = OccupiedSpaceUnitCount = Align<uint64_t, uint32_t>(dataSize, EntryAlignment).Count;
+			AllocatedSpaceUnitCount = OccupiedSpaceUnitCount = align<uint64_t, uint32_t>(dataSize, EntryAlignment).Count;
 		}
 
 		[[nodiscard]] uint64_t packed_size() const {

@@ -37,7 +37,7 @@ bool xivres::fontgen::MergedFixedSizeFont::Draw(char32_t codepoint, uint8_t* pBu
 	return false;
 }
 
-bool xivres::fontgen::MergedFixedSizeFont::Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
+bool xivres::fontgen::MergedFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	if (const auto it = m_info->UsedFonts.find(codepoint); it != m_info->UsedFonts.end())
 		return it->second->Draw(codepoint, pBuf, drawX, drawY + GetVerticalAdjustment(*m_info, *it->second), destWidth, destHeight, fgColor, bgColor);
 

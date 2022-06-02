@@ -331,10 +331,10 @@ std::vector<uint8_t> xivres::sound::writer::Export() const {
 		throw std::invalid_argument("table1.size != table4.size");
 
 	const auto table1OffsetsOffset = sizeof header + sizeof offsets;
-	const auto table2OffsetsOffset = xivres::Align<size_t>(table1OffsetsOffset + sizeof uint32_t * (1 + m_table1.size()), 0x10).Alloc;
-	const auto soundEntryOffsetsOffset = xivres::Align<size_t>(table2OffsetsOffset + sizeof uint32_t * (1 + m_table2.size()), 0x10).Alloc;
-	const auto table4OffsetsOffset = xivres::Align<size_t>(soundEntryOffsetsOffset + sizeof uint32_t * (1 + m_soundEntries.size()), 0x10).Alloc;
-	const auto table5OffsetsOffset = xivres::Align<size_t>(table4OffsetsOffset + sizeof uint32_t * (1 + m_table4.size()), 0x10).Alloc;
+	const auto table2OffsetsOffset = xivres::align<size_t>(table1OffsetsOffset + sizeof uint32_t * (1 + m_table1.size()), 0x10).Alloc;
+	const auto soundEntryOffsetsOffset = xivres::align<size_t>(table2OffsetsOffset + sizeof uint32_t * (1 + m_table2.size()), 0x10).Alloc;
+	const auto table4OffsetsOffset = xivres::align<size_t>(soundEntryOffsetsOffset + sizeof uint32_t * (1 + m_soundEntries.size()), 0x10).Alloc;
+	const auto table5OffsetsOffset = xivres::align<size_t>(table4OffsetsOffset + sizeof uint32_t * (1 + m_table4.size()), 0x10).Alloc;
 
 	std::vector<uint8_t> res;
 	size_t requiredSize = table5OffsetsOffset + sizeof uint32_t * 4;
@@ -348,7 +348,7 @@ std::vector<uint8_t> xivres::sound::writer::Export() const {
 		requiredSize += item.size();
 	for (const auto& item : m_soundEntries)
 		requiredSize += item.calculate_entry_size();
-	requiredSize = xivres::Align<size_t>(requiredSize, 0x10).Alloc;
+	requiredSize = xivres::align<size_t>(requiredSize, 0x10).Alloc;
 	res.reserve(requiredSize);
 
 	res.resize(table5OffsetsOffset + sizeof uint32_t * 4);

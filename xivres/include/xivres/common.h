@@ -27,7 +27,7 @@ namespace xivres {
 	};
 
 	template<typename T, typename CountT = T>
-	struct AlignResult {
+	struct align_result {
 		CountT Count;
 		T Value;
 		T By;
@@ -69,7 +69,7 @@ namespace xivres {
 	};
 
 	template<typename T, typename CountT = T>
-	AlignResult<T, CountT> Align(T value, T by = static_cast<T>(EntryAlignment)) {
+	align_result<T, CountT> align(T value, T by = static_cast<T>(EntryAlignment)) {
 		const auto count = (value + by - 1) / by;
 		const auto alloc = count * by;
 		const auto pad = alloc - value;

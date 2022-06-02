@@ -302,7 +302,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	for (size_t i = 0; i < res.Entries.size(); ++i) {
 		auto& entry = res.Entries[i];
 		const auto& pathSpec = entry->Provider->path_spec();
-		entry->EntrySize = Align((std::max)(entry->EntrySize, static_cast<uint32_t>(entry->Provider->size()))).Alloc;
+		entry->EntrySize = align((std::max)(entry->EntrySize, static_cast<uint32_t>(entry->Provider->size()))).Alloc;
 		entry->Provider = std::make_shared<hotswap_packed_stream>(pathSpec, entry->EntrySize, std::move(entry->Provider));
 
 		if (dataSubheaders.empty() ||
@@ -474,7 +474,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 				if (strict) {
 					util::hash_sha1 sha1;
 					dataFile.seekg(sizeof sqpack::header + sizeof sqdata::header, std::ios::beg);
-					Align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+					align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
 						dataFile.read(&buf[0], static_cast<size_t>(size));
 						if (!dataFile)
 							throw std::runtime_error("Failed to read from output data file.");
@@ -503,7 +503,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 		entry.Locator = { static_cast<uint32_t>(dataSubheaders.size() - 1), sizeof sqpack::header + sizeof sqdata::header + dataSubheaders.back().DataSize };
 		dataFile.seekg(entry.Locator.offset(), std::ios::beg);
-		Align<uint64_t>(entrySize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+		align<uint64_t>(entrySize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
 			const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
 			provider->read_fully(offset, bufSpan);
 			dataFile.write(&buf[0], bufSpan.size());
@@ -518,7 +518,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 		if (strict) {
 			util::hash_sha1 sha1;
 			dataFile.seekg(sizeof sqpack::header + sizeof sqdata::header, std::ios::beg);
-			Align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+			align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
 				dataFile.read(&buf[0], static_cast<size_t>(size));
 				if (!dataFile)
 					throw std::runtime_error("Failed to read from output data file.");

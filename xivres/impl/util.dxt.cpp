@@ -1,6 +1,6 @@
 #include "../include/xivres/util.dxt.h"
 
-void xivres::util::DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<RGBA8888>* image) {
+void xivres::util::DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<util::RGBA8888>* image) {
 	uint16_t color0 = *reinterpret_cast<const uint16_t*>(blockStorage);
 	uint16_t color1 = *reinterpret_cast<const uint16_t*>(blockStorage + 2);
 
@@ -24,37 +24,37 @@ void xivres::util::DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, c
 
 	for (int j = 0; j < 4; j++) {
 		for (int i = 0; i < 4; i++) {
-			RGBA8888 finalColor;
+			util::RGBA8888 finalColor;
 			uint8_t positionCode = (code >> 2 * (4 * j + i)) & 0x03;
 
 			if (color0 > color1) {
 				switch (positionCode) {
 					case 0:
-						finalColor = RGBA8888(r0, g0, b0, 255);
+						finalColor = util::RGBA8888(r0, g0, b0, 255);
 						break;
 					case 1:
-						finalColor = RGBA8888(r1, g1, b1, 255);
+						finalColor = util::RGBA8888(r1, g1, b1, 255);
 						break;
 					case 2:
-						finalColor = RGBA8888((2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, 255);
+						finalColor = util::RGBA8888((2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, 255);
 						break;
 					case 3:
-						finalColor = RGBA8888((r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, 255);
+						finalColor = util::RGBA8888((r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, 255);
 						break;
 				}
 			} else {
 				switch (positionCode) {
 					case 0:
-						finalColor = RGBA8888(r0, g0, b0, 255);
+						finalColor = util::RGBA8888(r0, g0, b0, 255);
 						break;
 					case 1:
-						finalColor = RGBA8888(r1, g1, b1, 255);
+						finalColor = util::RGBA8888(r1, g1, b1, 255);
 						break;
 					case 2:
-						finalColor = RGBA8888((r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2, 255);
+						finalColor = util::RGBA8888((r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2, 255);
 						break;
 					case 3:
-						finalColor = RGBA8888(0, 0, 0, 255);
+						finalColor = util::RGBA8888(0, 0, 0, 255);
 						break;
 				}
 			}
@@ -65,7 +65,7 @@ void xivres::util::DecompressBlockDXT1(uint32_t x, uint32_t y, uint32_t width, c
 	}
 }
 
-void xivres::util::BlockDecompressImageDXT1(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<RGBA8888>* image) {
+void xivres::util::BlockDecompressImageDXT1(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<util::RGBA8888>* image) {
 	uint32_t blockCountX = (width + 3) / 4;
 	uint32_t blockCountY = (height + 3) / 4;
 	uint32_t blockWidth = (width < 4) ? width : 4;
@@ -77,7 +77,7 @@ void xivres::util::BlockDecompressImageDXT1(uint32_t width, uint32_t height, con
 	}
 }
 
-void xivres::util::DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<RGBA8888>* image) {
+void xivres::util::DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, const uint8_t* blockStorage, LE<util::RGBA8888>* image) {
 	uint8_t alpha0 = *reinterpret_cast<const uint8_t*>(blockStorage);
 	uint8_t alpha1 = *reinterpret_cast<const uint8_t*>(blockStorage + 1);
 
@@ -140,19 +140,19 @@ void xivres::util::DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, c
 
 			uint8_t colorCode = (code >> 2 * (4 * j + i)) & 0x03;
 
-			RGBA8888 finalColor;
+			util::RGBA8888 finalColor;
 			switch (colorCode) {
 				case 0:
-					finalColor = RGBA8888(r0, g0, b0, finalAlpha);
+					finalColor = util::RGBA8888(r0, g0, b0, finalAlpha);
 					break;
 				case 1:
-					finalColor = RGBA8888(r1, g1, b1, finalAlpha);
+					finalColor = util::RGBA8888(r1, g1, b1, finalAlpha);
 					break;
 				case 2:
-					finalColor = RGBA8888((2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, finalAlpha);
+					finalColor = util::RGBA8888((2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, finalAlpha);
 					break;
 				case 3:
-					finalColor = RGBA8888((r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, finalAlpha);
+					finalColor = util::RGBA8888((r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, finalAlpha);
 					break;
 			}
 
@@ -162,7 +162,7 @@ void xivres::util::DecompressBlockDXT5(uint32_t x, uint32_t y, uint32_t width, c
 	}
 }
 
-void xivres::util::BlockDecompressImageDXT5(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<RGBA8888>* image) {
+void xivres::util::BlockDecompressImageDXT5(uint32_t width, uint32_t height, const uint8_t* blockStorage, LE<util::RGBA8888>* image) {
 	uint32_t blockCountX = (width + 3) / 4;
 	uint32_t blockCountY = (height + 3) / 4;
 	uint32_t blockWidth = (width < 4) ? width : 4;

@@ -31,7 +31,7 @@ namespace xivres::fontgen {
 			std::shared_ptr<const fontdata::stream> Font;
 			std::string FamilyName;
 			std::string SubfamilyName;
-			std::vector<std::shared_ptr<MemoryMipmapStream>> Mipmaps;
+			std::vector<std::shared_ptr<texture::memory_mipmap_stream>> Mipmaps;
 			std::set<char32_t> Codepoints;
 			std::map<std::pair<char32_t, char32_t>, int> KerningPairs;
 			std::vector<uint8_t> GammaTable;
@@ -40,7 +40,7 @@ namespace xivres::fontgen {
 		std::shared_ptr<const InfoStruct> m_info;
 
 	public:
-		GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<MemoryMipmapStream>> mipmapStreams, std::string familyName, std::string subfamilyName);
+		GameFontdataFixedSizeFont(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<texture::memory_mipmap_stream>> mipmapStreams, std::string familyName, std::string subfamilyName);
 
 		GameFontdataFixedSizeFont();
 		GameFontdataFixedSizeFont(GameFontdataFixedSizeFont&&) noexcept;
@@ -66,7 +66,7 @@ namespace xivres::fontgen {
 
 		int GetAdjustedAdvanceX(char32_t left, char32_t right) const override;
 
-		bool Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const override;
+		bool Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const override;
 
 		bool Draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const override;
 

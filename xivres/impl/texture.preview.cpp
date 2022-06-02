@@ -7,14 +7,14 @@
 #include <type_traits>
 #include "../include/xivres/util.on_dtor.h"
 
-#include "../include/xivres/TexturePreview.Windows.h"
+#include "../include/xivres/texture.preview.h"
 
-void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std::wstring title) {
+void xivres::texture::preview(const xivres::texture::stream& texStream, std::wstring title) {
 	static constexpr int Margin = 0;
 
 	struct State {
-		const xivres::TextureStream& texStream;
-		std::shared_ptr<xivres::MipmapStream> strm;
+		const xivres::texture::stream& texStream;
+		std::shared_ptr<xivres::texture::mipmap_stream> strm;
 
 		union {
 			struct {
@@ -48,22 +48,22 @@ void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std
 		}
 
 		void LoadMipmap(int repeatIndex, int mipmapIndex, int depthIndex) {
-			this->repeatIndex = repeatIndex = (std::min)(texStream.GetRepeatCount() - 1, (std::max)(0, repeatIndex));
-			this->mipmapIndex = mipmapIndex = (std::min)(texStream.GetMipmapCount() - 1, (std::max)(0, mipmapIndex));
+			this->repeatIndex = repeatIndex = (std::min)(texStream.repeat_count() - 1, (std::max)(0, repeatIndex));
+			this->mipmapIndex = mipmapIndex = (std::min)(texStream.mipmap_count() - 1, (std::max)(0, mipmapIndex));
 			this->depthIndex = depthIndex = (std::min)(DepthCount() - 1, (std::max)(0, depthIndex));
 
-			strm = xivres::MemoryMipmapStream::AsARGB8888(*texStream.GetMipmap(repeatIndex, mipmapIndex));
-			const auto planeSize = xivres::TextureRawDataLength(strm->Type, strm->Width, strm->Height, 1);
+			strm = xivres::texture::memory_mipmap_stream::as_argb8888(*texStream.mipmap_at(repeatIndex, mipmapIndex));
+			const auto planeSize = xivres::texture::calc_raw_data_length(strm->Type, strm->Width, strm->Height, 1);
 			buf = strm->read_vector<uint8_t>(depthIndex * planeSize, planeSize);
 			{
 				transparent = buf;
 				const auto w = static_cast<size_t>(strm->Width);
 				const auto h = static_cast<size_t>(strm->Height);
-				const auto view = std::span(reinterpret_cast<xivres::RGBA8888*>(&transparent[0]), w * h);
+				const auto view = std::span(reinterpret_cast<xivres::util::RGBA8888*>(&transparent[0]), w * h);
 				for (size_t i = 0; i < h; ++i) {
 					for (size_t j = 0; j < w; ++j) {
 						auto& v = view[i * w + j];
-						auto bg = (i / 8 + j / 8) % 2 ? xivres::RGBA8888(255, 255, 255, 255) : xivres::RGBA8888(150, 150, 150, 255);
+						auto bg = (i / 8 + j / 8) % 2 ? xivres::util::RGBA8888(255, 255, 255, 255) : xivres::util::RGBA8888(150, 150, 150, 255);
 						v.R = (v.R * v.A + bg.R * (255U - v.A)) / 255U;
 						v.G = (v.G * v.A + bg.G * (255U - v.A)) / 255U;
 						v.B = (v.B * v.A + bg.B * (255U - v.A)) / 255U;
@@ -98,25 +98,25 @@ void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std
 			switch (showmode) {
 				case 0:
 				case 1:
-					reinterpret_cast<xivres::RGBA8888*>(&bitfields[0])->SetFrom(255, 0, 0, 0);
-					reinterpret_cast<xivres::RGBA8888*>(&bitfields[1])->SetFrom(0, 255, 0, 0);
-					reinterpret_cast<xivres::RGBA8888*>(&bitfields[2])->SetFrom(0, 0, 255, 0);
+					reinterpret_cast<xivres::util::RGBA8888*>(&bitfields[0])->SetFrom(255, 0, 0, 0);
+					reinterpret_cast<xivres::util::RGBA8888*>(&bitfields[1])->SetFrom(0, 255, 0, 0);
+					reinterpret_cast<xivres::util::RGBA8888*>(&bitfields[2])->SetFrom(0, 0, 255, 0);
 					break;
 				case 2:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<xivres::RGBA8888*>(&bitfield)->SetFrom(255, 0, 0, 0);
+						reinterpret_cast<xivres::util::RGBA8888*>(&bitfield)->SetFrom(255, 0, 0, 0);
 					break;
 				case 3:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<xivres::RGBA8888*>(&bitfield)->SetFrom(0, 255, 0, 0);
+						reinterpret_cast<xivres::util::RGBA8888*>(&bitfield)->SetFrom(0, 255, 0, 0);
 					break;
 				case 4:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<xivres::RGBA8888*>(&bitfield)->SetFrom(0, 0, 255, 0);
+						reinterpret_cast<xivres::util::RGBA8888*>(&bitfield)->SetFrom(0, 0, 255, 0);
 					break;
 				case 5:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<xivres::RGBA8888*>(&bitfield)->SetFrom(0, 0, 0, 255);
+						reinterpret_cast<xivres::util::RGBA8888*>(&bitfield)->SetFrom(0, 0, 0, 255);
 					break;
 			}
 			StretchDIBits(hdc, renderOffset.x, renderOffset.y, dw, dh, 0, 0, strm->Width, strm->Height, showmode == 0 ? &transparent[0] : &buf[0], &bmi, DIB_RGB_COLORS, SRCCOPY);
@@ -174,7 +174,7 @@ void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std
 		}
 
 		void UpdateTitle() {
-			auto w = std::format(L"{} (r{}/{} m{}/{} d{}/{}): {:.2f}%", title, 1 + repeatIndex, texStream.GetRepeatCount(), 1 + mipmapIndex, texStream.GetMipmapCount(), 1 + depthIndex, DepthCount(), 100. * GetZoom());
+			auto w = std::format(L"{} (r{}/{} m{}/{} d{}/{}): {:.2f}%", title, 1 + repeatIndex, texStream.repeat_count(), 1 + mipmapIndex, texStream.mipmap_count(), 1 + depthIndex, DepthCount(), 100. * GetZoom());
 			switch (showmode) {
 				case 0:
 					w += L" (All channels)";
@@ -199,7 +199,7 @@ void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std
 		}
 
 		int DepthCount() const {
-			return (std::max)(1, texStream.GetDepth() / (1 << mipmapIndex));
+			return (std::max)(1, texStream.depth() / (1 << mipmapIndex));
 		}
 	} state{ .texStream = texStream, .title = std::move(title), };
 
@@ -394,7 +394,7 @@ void xivres::util::ShowTextureStream(const xivres::TextureStream& texStream, std
 		UnregisterClassW(wcex.lpszClassName, wcex.hInstance);
 	});
 
-	RECT rc{ 0, 0, texStream.GetWidth(), texStream.GetHeight() };
+	RECT rc{ 0, 0, texStream.width(), texStream.height() };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 	state.hwnd = CreateWindowExW(0, wcex.lpszClassName, state.title.c_str(), WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,

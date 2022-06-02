@@ -1,5 +1,5 @@
 #include "../include/xivres/unpacked_stream.texture.h"
-#include "../include/xivres/Texture.h"
+#include "../include/xivres/texture.h"
 
 xivres::texture_unpacker::texture_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm) : base_unpacker(std::move(strm)) {
 	uint64_t readOffset = sizeof packed::file_header;
@@ -8,16 +8,16 @@ xivres::texture_unpacker::texture_unpacker(const packed::file_header& header, st
 
 	m_head = m_stream->read_vector<uint8_t>(header.HeaderSize, locators[0].CompressedOffset);
 
-	const auto& texHeader = *reinterpret_cast<const TextureHeader*>(&m_head[0]);
+	const auto& texHeader = *reinterpret_cast<const texture::header*>(&m_head[0]);
 	const auto mipmapOffsets = util::span_cast<uint32_t>(m_head, sizeof texHeader, texHeader.MipmapCount);
 
-	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (mipmapOffsets[1] - mipmapOffsets[0]) / static_cast<uint32_t>(TextureRawDataLength(texHeader, 0));
+	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (mipmapOffsets[1] - mipmapOffsets[0]) / static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, 0));
 
 	for (uint32_t i = 0; i < locators.size(); ++i) {
 		const auto& locator = locators[i];
 		const auto mipmapIndex = i / repeatCount;
 		const auto mipmapPlaneIndex = i % repeatCount;
-		const auto mipmapPlaneSize = static_cast<uint32_t>(TextureRawDataLength(texHeader, mipmapIndex));
+		const auto mipmapPlaneSize = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, mipmapIndex));
 		uint32_t baseRequestOffset = 0;
 		if (mipmapIndex < mipmapOffsets.size())
 			baseRequestOffset = mipmapOffsets[mipmapIndex] - mipmapOffsets[0] + mipmapPlaneSize * mipmapPlaneIndex;

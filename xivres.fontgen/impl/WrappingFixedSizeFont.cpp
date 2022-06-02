@@ -36,7 +36,7 @@ bool xivres::fontgen::WrappingFixedSizeFont::Draw(char32_t codepoint, uint8_t* p
 	return m_font->Draw(codepoint, pBuf, stride, drawX, drawY, destWidth, destHeight, fgColor, bgColor, fgOpacity, bgOpacity);
 }
 
-bool xivres::fontgen::WrappingFixedSizeFont::Draw(char32_t codepoint, RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, RGBA8888 fgColor, RGBA8888 bgColor) const {
+bool xivres::fontgen::WrappingFixedSizeFont::Draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	codepoint = TranslateCodepoint(codepoint);
 
 	GlyphMetrics gm;

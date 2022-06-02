@@ -153,7 +153,7 @@ namespace xivres {
 					}
 				}
 			}
-			newData.resize(xivres::Align<size_t>(baseOffset + newBodyIndex * sizeof uint16_t, 512).Alloc);
+			newData.resize(xivres::align<size_t>(baseOffset + newBodyIndex * sizeof uint16_t, 512).Alloc);
 			m_data.swap(newData);
 		}
 	};

@@ -5,7 +5,7 @@
 #include "util.zlib_wrapper.h"
 
 #include "packed_stream.h"
-#include "Texture.h"
+#include "texture.h"
 
 namespace xivres {
 	class texture_passthrough_packer : public passthrough_packer<packed::type::texture> {

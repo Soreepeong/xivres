@@ -32,7 +32,7 @@ bool xivres::fontgen::FontdataPacker::IsRunning() const {
 	return m_pszProgressString;
 }
 
-const std::vector<std::shared_ptr<xivres::MemoryMipmapStream>>& xivres::fontgen::FontdataPacker::GetMipmapStreams() const {
+const std::vector<std::shared_ptr<xivres::texture::memory_mipmap_stream>>& xivres::fontgen::FontdataPacker::GetMipmapStreams() const {
 	return m_targetMipmapStreams;
 }
 
@@ -235,9 +235,9 @@ void xivres::fontgen::FontdataPacker::DrawLayouttedGlyphs(size_t planeIndex, uti
 	const auto channelIndex = fontdata::glyph_entry::ChannelMap[planeIndex % 4];
 
 	while (m_targetMipmapStreams.size() <= mipmapIndex)
-		m_targetMipmapStreams.emplace_back(std::make_shared<xivres::MemoryMipmapStream>(m_nSideLength, m_nSideLength, 1, xivres::TextureFormat::A8R8G8B8));
+		m_targetMipmapStreams.emplace_back(std::make_shared<xivres::texture::memory_mipmap_stream>(m_nSideLength, m_nSideLength, 1, xivres::texture::format::A8R8G8B8));
 	const auto& pStream = m_targetMipmapStreams[mipmapIndex];
-	const auto pCurrentTargetBuffer = &pStream->View<uint8_t>()[channelIndex];
+	const auto pCurrentTargetBuffer = &pStream->as_span<uint8_t>()[channelIndex];
 
 	auto pSuccesses = std::make_shared<std::vector<TargetPlan*>>(std::move(successfulPlans));
 

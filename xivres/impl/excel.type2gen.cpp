@@ -42,7 +42,7 @@ uint32_t xivres::excel::type2gen::calculate_fixed_data_size(const std::vector<ex
 				throw std::invalid_argument(std::format("Invald column type {}", static_cast<uint32_t>(*col.Type)));
 		}
 	}
-	return xivres::Align<uint32_t>(size, 4).Alloc;
+	return xivres::align<uint32_t>(size, 4).Alloc;
 }
 
 xivres::excel::type2gen::type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit)
@@ -211,7 +211,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 						std::reverse(target.begin(), target.end());
 					}
 				}
-				row.resize(xivres::Align<size_t>(row.size(), 4));
+				row.resize(xivres::align<size_t>(row.size(), 4));
 
 				auto& rowHeader = *reinterpret_cast<exd::row::header*>(&row[0]);
 				rowHeader.DataSize = static_cast<uint32_t>(row.size() - sizeof rowHeader);

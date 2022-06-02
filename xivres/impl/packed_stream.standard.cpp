@@ -20,8 +20,8 @@ void xivres::standard_passthrough_packer::ensure_initialized() {
 		return;
 
 	const auto size = m_stream->size();
-	const auto blockAlignment = Align<uint32_t>(static_cast<uint32_t>(size), packed::MaxBlockDataSize);
-	const auto headerAlignment = Align(sizeof packed::file_header + blockAlignment.Count * sizeof packed::standard_block_locator);
+	const auto blockAlignment = align<uint32_t>(static_cast<uint32_t>(size), packed::MaxBlockDataSize);
+	const auto headerAlignment = align(sizeof packed::file_header + blockAlignment.Count * sizeof packed::standard_block_locator);
 
 	m_header.resize(headerAlignment.Alloc);
 	auto& header = *reinterpret_cast<packed::file_header*>(&m_header[0]);
@@ -37,7 +37,7 @@ void xivres::standard_passthrough_packer::ensure_initialized() {
 
 	blockAlignment.IterateChunked([&](uint32_t index, uint32_t offset, uint32_t size) {
 		locators[index].Offset = index == 0 ? 0 : locators[index - 1].Offset + locators[index - 1].BlockSize;
-		locators[index].BlockSize = static_cast<uint16_t>(Align(sizeof packed::block_header + size));
+		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof packed::block_header + size));
 		locators[index].DecompressedDataSize = static_cast<uint16_t>(size);
 	});
 }
@@ -62,7 +62,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 	} else
 		relativeOffset -= m_header.size();
 
-	const auto blockAlignment = Align<uint32_t>(static_cast<uint32_t>(m_stream->size()), packed::MaxBlockDataSize);
+	const auto blockAlignment = align<uint32_t>(static_cast<uint32_t>(m_stream->size()), packed::MaxBlockDataSize);
 	if (static_cast<uint32_t>(relativeOffset) < header.OccupiedSpaceUnitCount * EntryAlignment) {
 		const auto i = relativeOffset / packed::MaxBlockSize;
 		relativeOffset -= i * packed::MaxBlockSize;
@@ -95,7 +95,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 			} else
 				relativeOffset -= size;
 
-			if (const auto pad = Align(sizeof packed::block_header + size).Pad; relativeOffset < pad) {
+			if (const auto pad = align(sizeof packed::block_header + size).Pad; relativeOffset < pad) {
 				const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(pad - relativeOffset));
 				std::fill_n(out.begin(), available, 0);
 				out = out.subspan(static_cast<size_t>(available));
@@ -115,7 +115,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const stream& strm, int compressionLevel) const {
 	const auto rawStreamSize = static_cast<uint32_t>(strm.size());
 
-	const auto blockAlignment = Align<uint32_t>(rawStreamSize, packed::MaxBlockDataSize);
+	const auto blockAlignment = align<uint32_t>(rawStreamSize, packed::MaxBlockDataSize);
 	std::vector<std::pair<bool, std::vector<uint8_t>>> blockDataList(blockAlignment.Count);
 
 	{
@@ -158,13 +158,13 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 	if (is_cancelled())
 		return nullptr;
 
-	const auto entryHeaderLength = static_cast<uint16_t>(Align(0
+	const auto entryHeaderLength = static_cast<uint16_t>(align(0
 		+ sizeof packed::file_header
 		+ sizeof packed::standard_block_locator * blockAlignment.Count
 	));
 	size_t entryBodyLength = 0;
 	for (const auto& blockItem : blockDataList)
-		entryBodyLength += Align(sizeof packed::block_header + blockItem.second.size());
+		entryBodyLength += align(sizeof packed::block_header + blockItem.second.size());
 
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
@@ -192,7 +192,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 		std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
 
 		locators[index].Offset = index == 0 ? 0 : locators[index - 1].BlockSize + locators[index - 1].Offset;
-		locators[index].BlockSize = static_cast<uint16_t>(Align(sizeof header + targetBuf.size()));
+		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof header + targetBuf.size()));
 		locators[index].DecompressedDataSize = static_cast<uint16_t>(length);
 
 		resultDataPtr += locators[index].BlockSize;
