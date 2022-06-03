@@ -91,6 +91,7 @@ namespace xivres::fontgen {
 		freetype_fixed_size_font(const freetype_fixed_size_font& r);
 		freetype_fixed_size_font& operator=(freetype_fixed_size_font&& r) noexcept;
 		freetype_fixed_size_font& operator=(const freetype_fixed_size_font& r);
+		~freetype_fixed_size_font() override = default;
 
 		[[nodiscard]] std::string family_name() const override;
 

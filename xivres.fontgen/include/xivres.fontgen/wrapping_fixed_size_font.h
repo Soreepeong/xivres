@@ -34,6 +34,7 @@ namespace xivres::fontgen {
 		wrapping_fixed_size_font(wrapping_fixed_size_font&& r) noexcept;
 		wrapping_fixed_size_font& operator=(const wrapping_fixed_size_font& r);
 		wrapping_fixed_size_font& operator=(wrapping_fixed_size_font&& r) noexcept;
+		~wrapping_fixed_size_font() override = default;
 
 		[[nodiscard]] std::string family_name() const override;
 

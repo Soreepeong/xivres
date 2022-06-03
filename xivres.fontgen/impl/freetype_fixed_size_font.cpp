@@ -320,7 +320,7 @@ FT_Library xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::lib
 }
 
 int xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_char_index(char32_t codepoint) const {
-	return FT_Get_Char_Index(m_face, codepoint);
+	return static_cast<int>(FT_Get_Char_Index(m_face, codepoint));
 }
 
 FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::operator->() const {

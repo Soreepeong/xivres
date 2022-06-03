@@ -61,13 +61,18 @@ namespace xivres::fontgen {
 		void layout_glyphs();
 
 	public:
+		fontdata_packer() = default;
+		fontdata_packer(fontdata_packer&&) = delete;
+		fontdata_packer(const fontdata_packer&) = delete;
+		fontdata_packer& operator=(fontdata_packer&&) = delete;
+		fontdata_packer& operator=(const fontdata_packer&) = delete;
+		~fontdata_packer();
+		
 		void set_thread_count(size_t n = std::thread::hardware_concurrency());
 
 		void set_discard_step(int n);
 
 		void set_side_length(int n);
-
-		~fontdata_packer();
 
 		size_t add_font(std::shared_ptr<fixed_size_font> font);
 
@@ -99,7 +104,7 @@ namespace xivres::fontgen {
 			return std::unique_lock(m_runningMtx, std::defer_lock).try_lock_until(t);
 		}
 
-		[[nodiscard]] const char* progress_description();
+		[[nodiscard]] const char* progress_description() const;
 
 		[[nodiscard]] float progress_scaled() const;
 	};

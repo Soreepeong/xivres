@@ -38,6 +38,7 @@ namespace xivres::fontgen {
 		merged_fixed_size_font(const merged_fixed_size_font&);
 		merged_fixed_size_font& operator=(merged_fixed_size_font&&) noexcept;
 		merged_fixed_size_font& operator=(const merged_fixed_size_font&);
+		~merged_fixed_size_font() override = default;
 
 		merged_fixed_size_font(std::vector<std::pair<std::shared_ptr<fixed_size_font>, codepoint_merge_mode>> fonts, vertical_alignment verticalAlignment = vertical_alignment::Baseline);
 

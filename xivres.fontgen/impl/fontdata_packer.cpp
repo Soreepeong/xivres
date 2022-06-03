@@ -24,7 +24,7 @@ float xivres::fontgen::fontdata_packer::progress_scaled() const {
 	return 1.f * static_cast<float>(m_nCurrentProgress) / static_cast<float>(m_nMaxProgress);
 }
 
-const char* xivres::fontgen::fontdata_packer::progress_description() {
+const char* xivres::fontgen::fontdata_packer::progress_description() const {
 	return m_pszProgressString;
 }
 
@@ -283,7 +283,6 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 				if (!baseFont.try_get_glyph_metrics(info.Codepoint, gm))
 					throw std::runtime_error("Base font reported to have a codepoint but it's failing to report glyph metrics");
 
-				const auto baseY1 = gm.Y1;
 				info.CurrentOffsetX = (std::min)(0, gm.X1);
 				info.BaseEntry.CurrentOffsetY = gm.Y1;
 				info.BaseEntry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());

@@ -47,6 +47,7 @@ namespace xivres::fontgen {
 		fontdata_fixed_size_font(const fontdata_fixed_size_font& r);
 		fontdata_fixed_size_font& operator=(fontdata_fixed_size_font&&) noexcept;
 		fontdata_fixed_size_font& operator=(const fontdata_fixed_size_font&);
+		~fontdata_fixed_size_font() override = default;
 
 		[[nodiscard]] std::string family_name() const override;
 

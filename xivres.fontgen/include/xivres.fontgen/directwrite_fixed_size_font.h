@@ -1,3 +1,4 @@
+// ReSharper disable CppClangTidyClangDiagnosticLanguageExtensionToken
 #ifndef XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
 #define XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
 
@@ -85,6 +86,7 @@ namespace xivres::fontgen {
 		directwrite_fixed_size_font& operator=(directwrite_fixed_size_font&&) noexcept;
 		directwrite_fixed_size_font(const directwrite_fixed_size_font& r);
 		directwrite_fixed_size_font& operator=(const directwrite_fixed_size_font& r);
+		~directwrite_fixed_size_font() override = default;
 
 		[[nodiscard]] std::string family_name() const override;
 
