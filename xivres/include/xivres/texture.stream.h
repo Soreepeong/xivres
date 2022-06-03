@@ -1,5 +1,5 @@
-#ifndef _XIVRES_TEXTURESTREAM_H_
-#define _XIVRES_TEXTURESTREAM_H_
+#ifndef XIVRES_TEXTURESTREAM_H_
+#define XIVRES_TEXTURESTREAM_H_
 
 #include "common.h"
 #include "texture.h"

@@ -1,5 +1,5 @@
-#ifndef _XIVRES_IMC_H_
-#define _XIVRES_IMC_H_
+#ifndef XIVRES_IMC_H_
+#define XIVRES_IMC_H_
 
 #include <cstdint>
 #include <span>

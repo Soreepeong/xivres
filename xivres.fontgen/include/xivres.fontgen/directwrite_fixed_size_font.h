@@ -1,16 +1,13 @@
-#ifndef _XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
-#define _XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
-
-#include <filesystem>
-#include <numeric>
-
-#include "fixed_size_font.h"
-
-#include "xivres/util.bitmap_copy.h"
-#include "util.truetype.h"
+#ifndef XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
+#define XIVRES_FONTGENERATOR_DIRECTWRITEFIXEDSIZEFONT_H_
 
 #include <comdef.h>
 #include <dwrite_3.h>
+#include <filesystem>
+#include "fixed_size_font.h"
+#include "util.truetype.h"
+#include "xivres/util.bitmap_copy.h"
+
 #pragma comment(lib, "dwrite.lib")
 
 _COM_SMARTPTR_TYPEDEF(IDWriteFactory, __uuidof(IDWriteFactory));
@@ -38,11 +35,11 @@ namespace xivres::fontgen {
 			DWRITE_MEASURING_MODE MeasureMode = DWRITE_MEASURING_MODE_GDI_CLASSIC;
 			DWRITE_GRID_FIT_MODE GridFitMode = DWRITE_GRID_FIT_MODE_ENABLED;
 
-			const wchar_t* get_measuring_mode_string() const;
+			[[nodiscard]] const wchar_t* get_measuring_mode_string() const;
 
-			const wchar_t* get_rendering_mode_string() const;
+			[[nodiscard]] const wchar_t* get_rendering_mode_string() const;
 
-			const wchar_t* get_grid_fit_mode_string() const;
+			[[nodiscard]] const wchar_t* get_grid_fit_mode_string() const;
 		};
 
 	private:
@@ -60,7 +57,7 @@ namespace xivres::fontgen {
 			float Size = 0.f;
 
 			template<decltype(std::roundf) TIntCastFn = std::roundf, typename T>
-			int scale_from_font_unit(T fontUnitValue) const {
+			[[nodiscard]] int scale_from_font_unit(T fontUnitValue) const {
 				return static_cast<int>(TIntCastFn(static_cast<float>(fontUnitValue) * Size / static_cast<float>(Metrics.designUnitsPerEm)));
 			}
 		};
@@ -81,42 +78,42 @@ namespace xivres::fontgen {
 
 	public:
 		directwrite_fixed_size_font();
-		directwrite_fixed_size_font(std::filesystem::path path, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params);
-		directwrite_fixed_size_font(IDWriteFactoryPtr factory, IDWriteFontPtr font, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params);
-		directwrite_fixed_size_font(std::shared_ptr<stream> strm, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params);
+		directwrite_fixed_size_font(std::filesystem::path path, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params);
+		directwrite_fixed_size_font(IDWriteFactoryPtr factory, IDWriteFontPtr font, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params);
+		directwrite_fixed_size_font(std::shared_ptr<stream> strm, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params);
 		directwrite_fixed_size_font(directwrite_fixed_size_font&&) noexcept;
 		directwrite_fixed_size_font& operator=(directwrite_fixed_size_font&&) noexcept;
 		directwrite_fixed_size_font(const directwrite_fixed_size_font& r);
 		directwrite_fixed_size_font& operator=(const directwrite_fixed_size_font& r);
 
-		std::string family_name() const override;
+		[[nodiscard]] std::string family_name() const override;
 
-		std::string subfamily_name() const override;
+		[[nodiscard]] std::string subfamily_name() const override;
 
-		float font_size() const override;
+		[[nodiscard]] float font_size() const override;
 
-		int ascent() const override;
+		[[nodiscard]] int ascent() const override;
 
-		int line_height() const override;
+		[[nodiscard]] int line_height() const override;
 
-		const std::set<char32_t>& all_codepoints() const override;
+		[[nodiscard]] const std::set<char32_t>& all_codepoints() const override;
 
-		bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const override;
+		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const override;
 
-		const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const override;
+		[[nodiscard]] const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const override;
 
 		bool draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const override;
 
 		bool draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const override;
 
-		std::shared_ptr<fixed_size_font> get_threadsafe_view() const override;
+		[[nodiscard]] std::shared_ptr<fixed_size_font> get_threadsafe_view() const override;
 
-		const fixed_size_font* get_base_font(char32_t codepoint) const override;
+		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
 	private:
-		static dwrite_interfaces_t FaceFromInfoStruct(const info_t& info);
+		[[nodiscard]] static dwrite_interfaces_t face_from_info_t(const info_t& info);
 
-		bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const;
+		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const;
 	};
 }
 

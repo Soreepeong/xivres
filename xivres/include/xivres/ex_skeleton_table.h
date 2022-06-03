@@ -1,5 +1,5 @@
-#ifndef _XIVRES_EST_H_
-#define _XIVRES_EST_H_
+#ifndef XIVRES_EST_H_
+#define XIVRES_EST_H_
 
 #include <cstdint>
 #include <map>

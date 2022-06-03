@@ -1,5 +1,5 @@
-#ifndef _XIVRES_FONTGENERATOR_TEXTMEASURER_H_
-#define _XIVRES_FONTGENERATOR_TEXTMEASURER_H_
+#ifndef XIVRES_FONTGENERATOR_TEXTMEASURER_H_
+#define XIVRES_FONTGENERATOR_TEXTMEASURER_H_
 
 #include "fixed_size_font.h"
 
@@ -16,9 +16,9 @@ namespace xivres::fontgen {
 		glyph_metrics Occupied;
 		std::vector<character_info> Characters;
 
-		void draw_to(xivres::texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const;
+		void draw_to(texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const;
 
-		std::shared_ptr<xivres::texture::memory_mipmap_stream> create_mipmap(const fixed_size_font& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad = 0) const;
+		[[nodiscard]] std::shared_ptr<texture::memory_mipmap_stream> create_mipmap(const fixed_size_font& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad = 0) const;
 	};
 
 	struct text_measurer {
@@ -45,17 +45,17 @@ namespace xivres::fontgen {
 		text_measurer& fallback_characters(char32_t* fallbackCharacters);
 
 		template <class TStringElem, class TStringTraits = std::char_traits<TStringElem>, class TStringAlloc = std::allocator<TStringElem>>
-		text_measure_result measure(const std::basic_string<TStringElem, TStringTraits, TStringAlloc>& pcszString) const {
+		[[nodiscard]] text_measure_result measure(const std::basic_string<TStringElem, TStringTraits, TStringAlloc>& pcszString) const {
 			return measure(&pcszString[0], pcszString.size());
 		}
 
 		template <class TStringElem, class TStringTraits = std::char_traits<TStringElem>>
-		text_measure_result measure(const std::basic_string_view<TStringElem, TStringTraits>& pcszString) const {
+		[[nodiscard]] text_measure_result measure(const std::basic_string_view<TStringElem, TStringTraits>& pcszString) const {
 			return measure(&pcszString[0], pcszString.size());
 		}
 
 		template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-		text_measure_result measure(const T* pcszString, size_t nLength = (std::numeric_limits<size_t>::max)()) const {
+		[[nodiscard]] text_measure_result measure(const T* pcszString, size_t nLength = (std::numeric_limits<size_t>::max)()) const {
 			if (nLength == (std::numeric_limits<size_t>::max)())
 				nLength = std::char_traits<T>::length(pcszString);
 
@@ -77,7 +77,7 @@ namespace xivres::fontgen {
 		}
 
 	private:
-		text_measure_result& measure(text_measure_result& res) const;
+		[[nodiscard]] text_measure_result& measure(text_measure_result& res) const;
 	};
 }
 

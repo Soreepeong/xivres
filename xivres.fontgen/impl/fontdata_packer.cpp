@@ -21,7 +21,7 @@ xivres::fontgen::fontdata_packer::target_plan::target_glyph::target_glyph(fontda
 }
 
 float xivres::fontgen::fontdata_packer::progress_scaled() const {
-	return 1.f * m_nCurrentProgress / m_nMaxProgress;
+	return 1.f * static_cast<float>(m_nCurrentProgress) / static_cast<float>(m_nMaxProgress);
 }
 
 const char* xivres::fontgen::fontdata_packer::progress_description() {
@@ -120,6 +120,8 @@ xivres::fontgen::fontdata_packer::~fontdata_packer() {
 }
 
 void xivres::fontgen::fontdata_packer::set_side_length(int n) {
+	if (n > 4096)
+		throw std::out_of_range("Side length can be up to 4096");
 	m_nSideLength = n;
 }
 
@@ -133,7 +135,7 @@ void xivres::fontgen::fontdata_packer::set_thread_count(size_t n) {
 
 void xivres::fontgen::fontdata_packer::layout_glyphs() {
 	using namespace rectpack2D;
-	using spaces_type = rectpack2D::empty_spaces<false, default_empty_spaces>;
+	using spaces_type = empty_spaces<false, default_empty_spaces>;
 	using rect_type = output_rect_t<spaces_type>;
 
 	std::vector<rect_type> pendingRectangles;
@@ -235,7 +237,7 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(size_t planeIndex, 
 	const auto channelIndex = fontdata::glyph_entry::ChannelMap[planeIndex % 4];
 
 	while (m_targetMipmapStreams.size() <= mipmapIndex)
-		m_targetMipmapStreams.emplace_back(std::make_shared<xivres::texture::memory_mipmap_stream>(m_nSideLength, m_nSideLength, 1, xivres::texture::format::A8R8G8B8));
+		m_targetMipmapStreams.emplace_back(std::make_shared<texture::memory_mipmap_stream>(m_nSideLength, m_nSideLength, 1, texture::format::A8R8G8B8));
 	const auto& pStream = m_targetMipmapStreams[mipmapIndex];
 	const auto pCurrentTargetBuffer = &pStream->as_span<uint8_t>()[channelIndex];
 
@@ -244,7 +246,7 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(size_t planeIndex, 
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(pSuccesses->size()))));
 
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		pool.Submit([this, planeIndex, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](size_t nThreadIndex) {
+		pool.Submit([this, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](size_t nThreadIndex) {
 			for (size_t i = nBase; i < pSuccesses->size() && !m_bCancelRequested; i += divideUnit) {
 				++m_nCurrentProgress;
 				const auto& info = *(*pSuccesses)[i];
@@ -333,11 +335,8 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 				pInfo->BaseFont = font->get_base_font(codepoint);
 				pInfo->Codepoint = pInfo->BaseFont->uniqid_to_glyph(uniqid);
 				if (m_threadSafeBaseFonts[pInfo->BaseFont].empty()) {
-					// m_threadSafeBaseFonts[pInfo->BaseFont].resize(m_nThreads);
-					// m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->get_threadsafe_view();
-					m_threadSafeBaseFonts[pInfo->BaseFont].reserve(m_nThreads);
-					for (size_t i = 0; i < m_nThreads; i++)
-						m_threadSafeBaseFonts[pInfo->BaseFont].emplace_back(pInfo->BaseFont->get_threadsafe_view());
+					m_threadSafeBaseFonts[pInfo->BaseFont].resize(m_nThreads);
+					m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->get_threadsafe_view();
 				}
 				pInfo->UnicodeBlock = &block;
 				pInfo->BaseEntry.codepoint(pInfo->Codepoint);
@@ -352,24 +351,18 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 void xivres::fontgen::fontdata_packer::prepare_target_font_basic_info() {
 	m_targetFonts.clear();
 	m_targetFonts.reserve(m_sourceFonts.size());
-	for (size_t i = 0; i < m_sourceFonts.size(); i++) {
+	for (auto& pSourceFont : m_sourceFonts) {
 		m_targetFonts.emplace_back(std::make_shared<fontdata::stream>());
 
 		auto& targetFont = *m_targetFonts.back();
-		const auto& sourceFont = *m_sourceFonts[i];
+		const auto& sourceFont = *pSourceFont;
 
-		targetFont.texture_width(m_nSideLength);
-		targetFont.texture_height(m_nSideLength);
+		targetFont.texture_width(static_cast<uint16_t>(m_nSideLength));
+		targetFont.texture_height(static_cast<uint16_t>(m_nSideLength));
 		targetFont.font_size(sourceFont.font_size());
 		targetFont.line_height(sourceFont.line_height());
 		targetFont.ascent(sourceFont.ascent());
 		targetFont.reserve_glyphs(sourceFont.all_codepoints().size());
-		/*
-		targetFont.reserve_kernings(sourceFont.all_kerning_pairs().size());
-		for (const auto& kerning : sourceFont.all_kerning_pairs()) {
-			if (kerning.second)
-				targetFont.add_kerning(kerning.first.first, kerning.first.second, kerning.second);
-		}*/
 	}
 }
 
@@ -379,11 +372,8 @@ void xivres::fontgen::fontdata_packer::prepare_threadsafe_source_fonts() {
 	for (const auto& font : m_sourceFonts) {
 		nMaxCharacterCount += font->all_codepoints().size();
 		m_threadSafeSourceFonts.emplace_back();
-		// m_threadSafeSourceFonts.back().resize(m_nThreads);
-		// m_threadSafeSourceFonts.back()[0] = font->get_threadsafe_view();
-		m_threadSafeSourceFonts.back().reserve(m_nThreads);
-		for (size_t i = 0; i < m_nThreads; i++)
-			m_threadSafeSourceFonts.back().emplace_back(font->get_threadsafe_view());
+		m_threadSafeSourceFonts.back().resize(m_nThreads);
+		m_threadSafeSourceFonts.back()[0] = font->get_threadsafe_view();
 	}
 
 	m_targetPlans.reserve(nMaxCharacterCount);

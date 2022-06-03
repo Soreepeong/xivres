@@ -1,5 +1,5 @@
-#ifndef _XIVRES_TEXTUREPACKEDFILESTREAM_H_
-#define _XIVRES_TEXTUREPACKEDFILESTREAM_H_
+#ifndef XIVRES_TEXTUREPACKEDFILESTREAM_H_
+#define XIVRES_TEXTUREPACKEDFILESTREAM_H_
 
 #include "util.span_cast.h"
 #include "util.zlib_wrapper.h"

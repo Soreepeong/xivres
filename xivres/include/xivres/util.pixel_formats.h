@@ -1,5 +1,5 @@
-#ifndef _XIVRES_PIXELFORMATS_H_
-#define _XIVRES_PIXELFORMATS_H_
+#ifndef XIVRES_PIXELFORMATS_H_
+#define XIVRES_PIXELFORMATS_H_
 
 #include <cinttypes>
 #include <cmath>

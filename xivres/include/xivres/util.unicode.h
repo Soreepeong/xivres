@@ -1,5 +1,5 @@
-#ifndef _XIVRES_UNICODE_H_
-#define _XIVRES_UNICODE_H_
+#ifndef XIVRES_UNICODE_H_
+#define XIVRES_UNICODE_H_
 
 #include <array>
 #include <cstdint>

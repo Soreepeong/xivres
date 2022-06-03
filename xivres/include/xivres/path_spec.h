@@ -1,5 +1,5 @@
-#ifndef _XIVRES_PATHSPEC_H_
-#define _XIVRES_PATHSPEC_H_
+#ifndef XIVRES_PATHSPEC_H_
+#define XIVRES_PATHSPEC_H_
 
 #include <cinttypes>
 #include <format>

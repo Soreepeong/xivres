@@ -1,5 +1,5 @@
-#ifndef _XIVRES_INTERNAL_BitmapCopy_H_
-#define _XIVRES_INTERNAL_BitmapCopy_H_
+#ifndef XIVRES_INTERNAL_BitmapCopy_H_
+#define XIVRES_INTERNAL_BitmapCopy_H_
 
 #include <array>
 #include <cinttypes>

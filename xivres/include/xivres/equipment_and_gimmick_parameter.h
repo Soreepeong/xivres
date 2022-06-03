@@ -1,5 +1,5 @@
-#ifndef _XIVRES_EQPGMP_H_
-#define _XIVRES_EQPGMP_H_
+#ifndef XIVRES_EQPGMP_H_
+#define XIVRES_EQPGMP_H_
 
 #include <cstdint>
 #include <span>

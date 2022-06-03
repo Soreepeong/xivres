@@ -1,5 +1,5 @@
-#ifndef _XIVRES_SCD_H_
-#define _XIVRES_SCD_H_
+#ifndef XIVRES_SCD_H_
+#define XIVRES_SCD_H_
 
 #include <map>
 #include <ranges>

@@ -1,5 +1,5 @@
-#ifndef _XIVRES_INTERNAL_SPANCAST_H_
-#define _XIVRES_INTERNAL_SPANCAST_H_
+#ifndef XIVRES_INTERNAL_SPANCAST_H_
+#define XIVRES_INTERNAL_SPANCAST_H_
 
 #include <climits>
 #include <span>

@@ -1,8 +1,8 @@
 #include "../include/xivres/excel.h"
+
 #include "../include/xivres/installation.h"
 #include "../include/xivres/sqpack.reader.h"
 #include "../include/xivres/unpacked_stream.h"
-#include "../include/xivres/util.span_cast.h"
 
 using namespace xivres::util;
 

@@ -1,5 +1,5 @@
-#ifndef _XIVRES_STREAM_H_
-#define _XIVRES_STREAM_H_
+#ifndef XIVRES_STREAM_H_
+#define XIVRES_STREAM_H_
 
 #include <algorithm>
 #include <fstream>

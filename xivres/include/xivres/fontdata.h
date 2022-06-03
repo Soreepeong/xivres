@@ -1,5 +1,5 @@
-#ifndef _XIVRES_Fontdata_H_
-#define _XIVRES_Fontdata_H_
+#ifndef XIVRES_Fontdata_H_
+#define XIVRES_Fontdata_H_
 
 #include <map>
 #include <stdexcept>

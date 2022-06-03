@@ -1,5 +1,5 @@
-#ifndef _XIVRES_SQPACKGENERATOR_H_
-#define _XIVRES_SQPACKGENERATOR_H_
+#ifndef XIVRES_SQPACKGENERATOR_H_
+#define XIVRES_SQPACKGENERATOR_H_
 
 #include "util.listener_manager.h"
 

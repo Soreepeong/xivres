@@ -22,7 +22,7 @@ static HRESULT success_or_throw(HRESULT hr, std::initializer_list<HRESULT> accep
 		MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
 		reinterpret_cast<LPWSTR>(&pszMsg),
 		0,
-		NULL);
+		nullptr);
 	if (pszMsg) {
 		std::unique_ptr<wchar_t, decltype(LocalFree)*> pszMsgFree(pszMsg, LocalFree);
 
@@ -50,43 +50,49 @@ class stream_based_dwrite_font_file_loader : public IDWriteFontFileLoader {
 		stream_based_dwrite_font_file_stream(std::shared_ptr<xivres::stream> pStream);
 
 	public:
+		virtual ~stream_based_dwrite_font_file_stream() = default;
+
 		static stream_based_dwrite_font_file_stream* New(std::shared_ptr<xivres::stream> pStream);
 
-		HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
+		HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) noexcept override;
 
-		ULONG __stdcall AddRef() override;
+		ULONG __stdcall AddRef() noexcept override;
 
-		ULONG __stdcall Release() override;
+		ULONG __stdcall Release() noexcept override;
 
-		HRESULT __stdcall ReadFileFragment(void const** pFragmentStart, uint64_t fileOffset, uint64_t fragmentSize, void** pFragmentContext) override;
+		HRESULT __stdcall ReadFileFragment(void const** pFragmentStart, uint64_t fileOffset, uint64_t fragmentSize, void** pFragmentContext) noexcept override;
 
-		void __stdcall ReleaseFileFragment(void* fragmentContext) override;
+		void __stdcall ReleaseFileFragment(void* fragmentContext) noexcept override;
 
-		HRESULT __stdcall GetFileSize(uint64_t* pFileSize) override;
+		HRESULT __stdcall GetFileSize(uint64_t* pFileSize) noexcept override;
 
-		HRESULT __stdcall GetLastWriteTime(uint64_t* pLastWriteTime) override;
+		HRESULT __stdcall GetLastWriteTime(uint64_t* pLastWriteTime) noexcept override;
 	};
 
 	stream_based_dwrite_font_file_loader() = default;
+
+public:
 	stream_based_dwrite_font_file_loader(stream_based_dwrite_font_file_loader&&) = delete;
 	stream_based_dwrite_font_file_loader(const stream_based_dwrite_font_file_loader&) = delete;
 	stream_based_dwrite_font_file_loader& operator=(stream_based_dwrite_font_file_loader&&) = delete;
 	stream_based_dwrite_font_file_loader& operator=(const stream_based_dwrite_font_file_loader&) = delete;
+	virtual ~stream_based_dwrite_font_file_loader() = default;
 
-public:
 	static stream_based_dwrite_font_file_loader& GetInstance();
 
-	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
+	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) noexcept override;
 
-	ULONG __stdcall AddRef() override;
+	ULONG __stdcall AddRef() noexcept override;
 
-	ULONG __stdcall Release() override;
+	ULONG __stdcall Release() noexcept override;
 
-	HRESULT __stdcall CreateStreamFromKey(void const* fontFileReferenceKey, uint32_t fontFileReferenceKeySize, IDWriteFontFileStream** pFontFileStream) override;
+	HRESULT __stdcall CreateStreamFromKey(void const* fontFileReferenceKey, uint32_t fontFileReferenceKeySize, IDWriteFontFileStream** pFontFileStream) noexcept override;
 };
 
 class stream_based_dwrite_font_collection_loader : public IDWriteFontCollectionLoader {
 public:
+	virtual ~stream_based_dwrite_font_collection_loader() = default;
+
 	class stream_based_dwrite_font_collection_enumerator : public IDWriteFontFileEnumerator {
 		const IDWriteFactoryPtr m_factory;
 		const std::shared_ptr<xivres::stream> m_stream;
@@ -97,17 +103,19 @@ public:
 		stream_based_dwrite_font_collection_enumerator(IDWriteFactoryPtr factoryPtr, std::shared_ptr<xivres::stream> pStream);
 
 	public:
+		virtual ~stream_based_dwrite_font_collection_enumerator() = default;
+
 		static stream_based_dwrite_font_collection_enumerator* New(IDWriteFactoryPtr factoryPtr, std::shared_ptr<xivres::stream> pStream);
 
-		HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
+		HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) noexcept override;
 
-		ULONG __stdcall AddRef() override;
+		ULONG __stdcall AddRef() noexcept override;
 
-		ULONG __stdcall Release() override;
+		ULONG __stdcall Release() noexcept override;
 
-		HRESULT __stdcall MoveNext(BOOL* pHasCurrentFile) override;
+		HRESULT __stdcall MoveNext(BOOL* pHasCurrentFile) noexcept override;
 
-		HRESULT __stdcall GetCurrentFontFile(IDWriteFontFile** pFontFile) override;
+		HRESULT __stdcall GetCurrentFontFile(IDWriteFontFile** pFontFile) noexcept override;
 	};
 
 	stream_based_dwrite_font_collection_loader() = default;
@@ -116,16 +124,15 @@ public:
 	stream_based_dwrite_font_collection_loader& operator=(stream_based_dwrite_font_collection_loader&&) = delete;
 	stream_based_dwrite_font_collection_loader& operator=(const stream_based_dwrite_font_collection_loader&) = delete;
 
-public:
 	static stream_based_dwrite_font_collection_loader& GetInstance();
 
-	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
+	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) noexcept override;
 
-	ULONG __stdcall AddRef() override;
+	ULONG __stdcall AddRef() noexcept override;
 
-	ULONG __stdcall Release() override;
+	ULONG __stdcall Release() noexcept override;
 
-	HRESULT __stdcall CreateEnumeratorFromKey(IDWriteFactory* factory, void const* collectionKey, uint32_t collectionKeySize, IDWriteFontFileEnumerator** pFontFileEnumerator) override;
+	HRESULT __stdcall CreateEnumeratorFromKey(IDWriteFactory* factory, void const* collectionKey, uint32_t collectionKeySize, IDWriteFontFileEnumerator** pFontFileEnumerator) noexcept override;
 };
 
 class dwrite_font_table {
@@ -143,36 +150,36 @@ public:
 	operator bool() const;
 
 	template<typename T = uint8_t>
-	std::span<const T> get_span() const {
+	[[nodiscard]] std::span<const T> get_span() const {
 		if (!m_bExists)
 			return {};
 
-		return { static_cast<const T*>(m_pData), m_nSize };
+		return {static_cast<const T*>(m_pData), m_nSize};
 	}
 };
 
-xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::filesystem::path path, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params)
-	: directwrite_fixed_size_font(std::make_shared<memory_stream>(file_stream(path)), fontIndex, size, gamma, matrix, std::move(params)) {
+xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::filesystem::path path, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params)
+	: directwrite_fixed_size_font(std::make_shared<memory_stream>(file_stream(std::move(path))), fontIndex, size, gamma, matrix, params) {
 }
 
-xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWriteFactoryPtr factory, IDWriteFontPtr font, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params) {
+xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWriteFactoryPtr factory, IDWriteFontPtr font, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params) {
 	if (!font)
 		return;
 
 	auto info = std::make_shared<info_t>();
 	info->Factory = std::move(factory);
 	info->Font = std::move(font);
-	info->Params = std::move(params);
+	info->Params = params;
 	info->Size = size;
 	info->GammaTable = util::bitmap_copy::create_gamma_table(gamma);
-	info->Matrix = { matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f };
+	info->Matrix = {matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f};
 
-	m_dwrite = FaceFromInfoStruct(*info);
+	m_dwrite = face_from_info_t(*info);
 	m_dwrite.Face->GetMetrics(&info->Metrics);
 
 	{
 		uint32_t rangeCount;
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), { E_NOT_SUFFICIENT_BUFFER });
+		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
 		std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
 		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
 
@@ -199,7 +206,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 				info->KerningPairs.insert(pairs.begin(), pairs.end());
 			}
 
-			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end(); ) {
+			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end();) {
 				it->second = info->scale_from_font_unit(it->second);
 				if (it->second)
 					++it;
@@ -212,24 +219,24 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 	m_info = std::move(info);
 }
 
-xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::shared_ptr<xivres::stream> strm, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct params) {
+xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::shared_ptr<xivres::stream> strm, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params) {
 	if (!strm)
 		return;
 
 	auto info = std::make_shared<info_t>();
 	info->Stream = std::move(strm);
-	info->Params = std::move(params);
+	info->Params = params;
 	info->FontIndex = fontIndex;
 	info->Size = size;
 	info->GammaTable = util::bitmap_copy::create_gamma_table(gamma);
-	info->Matrix = { matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f };
+	info->Matrix = {matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f};
 
-	m_dwrite = FaceFromInfoStruct(*info);
+	m_dwrite = face_from_info_t(*info);
 	m_dwrite.Face->GetMetrics(&info->Metrics);
 
 	{
 		uint32_t rangeCount;
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), { E_NOT_SUFFICIENT_BUFFER });
+		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
 		std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
 		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
 
@@ -256,7 +263,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 				info->KerningPairs.insert(pairs.begin(), pairs.end());
 			}
 
-			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end(); ) {
+			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end();) {
 				it->second = info->scale_from_font_unit(it->second);
 				if (it->second)
 					++it;
@@ -269,17 +276,18 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 	m_info = std::move(info);
 }
 
-xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(const directwrite_fixed_size_font& r) : directwrite_fixed_size_font() {
+xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(const directwrite_fixed_size_font& r)
+	: directwrite_fixed_size_font() {
 	if (r.m_info == nullptr)
 		return;
 
-	m_dwrite = FaceFromInfoStruct(*r.m_info);
+	m_dwrite = face_from_info_t(*r.m_info);
 	m_info = r.m_info;
 }
 
 xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font() = default;
 
-xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(directwrite_fixed_size_font&&)  noexcept = default;
+xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(directwrite_fixed_size_font&&) noexcept = default;
 
 const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::directwrite_fixed_size_font::all_kerning_pairs() const {
 	return m_info->KerningPairs;
@@ -341,7 +349,7 @@ std::string xivres::fontgen::directwrite_fixed_size_font::family_name() const {
 	return util::unicode::convert<std::string>(res);
 }
 
-xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed_size_font::operator=(const directwrite_fixed_size_font & r) {
+xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed_size_font::operator=(const directwrite_fixed_size_font& r) {
 	if (this == &r)
 		return *this;
 
@@ -349,7 +357,7 @@ xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed
 		m_dwrite = {};
 		m_info = nullptr;
 	} else {
-		m_dwrite = FaceFromInfoStruct(*r.m_info);
+		m_dwrite = face_from_info_t(*r.m_info);
 		m_info = r.m_info;
 	}
 
@@ -358,7 +366,7 @@ xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed
 
 xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed_size_font::operator=(directwrite_fixed_size_font&&) noexcept = default;
 
-bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util::RGBA8888 * pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	glyph_metrics gm;
 	if (!try_get_glyph_metrics(codepoint, gm, analysis))
@@ -386,7 +394,7 @@ bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util
 	return true;
 }
 
-bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, uint8_t * pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
+bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	glyph_metrics gm;
 	if (!try_get_glyph_metrics(codepoint, gm, analysis))
@@ -423,7 +431,7 @@ const xivres::fontgen::fixed_size_font* xivres::fontgen::directwrite_fixed_size_
 	return this;
 }
 
-xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontgen::directwrite_fixed_size_font::FaceFromInfoStruct(const info_t & info) {
+xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontgen::directwrite_fixed_size_font::face_from_info_t(const info_t& info) {
 	dwrite_interfaces_t res{};
 
 	if (!!info.Font != !!info.Factory)
@@ -432,7 +440,7 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontge
 	if (info.Font) {
 		res.Font = info.Font;
 		res.Factory = info.Factory;
-		success_or_throw(res.Factory.QueryInterface(decltype(res.Factory3)::GetIID(), &res.Factory3), { E_NOINTERFACE });
+		success_or_throw(res.Factory.QueryInterface(decltype(res.Factory3)::GetIID(), &res.Factory3), {E_NOINTERFACE});
 		success_or_throw(res.Font->GetFontFamily(&res.Family));
 		success_or_throw(res.Family->GetFontCollection(&res.Collection));
 		success_or_throw(res.Font->CreateFontFace(&res.Face));
@@ -440,9 +448,9 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontge
 
 	} else {
 		success_or_throw(DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&res.Factory)));
-		success_or_throw(res.Factory->RegisterFontFileLoader(&stream_based_dwrite_font_file_loader::GetInstance()), { DWRITE_E_ALREADYREGISTERED });
-		success_or_throw(res.Factory->RegisterFontCollectionLoader(&stream_based_dwrite_font_collection_loader::GetInstance()), { DWRITE_E_ALREADYREGISTERED });
-		success_or_throw(res.Factory.QueryInterface(decltype(res.Factory3)::GetIID(), &res.Factory3), { E_NOINTERFACE });
+		success_or_throw(res.Factory->RegisterFontFileLoader(&stream_based_dwrite_font_file_loader::GetInstance()), {DWRITE_E_ALREADYREGISTERED});
+		success_or_throw(res.Factory->RegisterFontCollectionLoader(&stream_based_dwrite_font_collection_loader::GetInstance()), {DWRITE_E_ALREADYREGISTERED});
+		success_or_throw(res.Factory.QueryInterface(decltype(res.Factory3)::GetIID(), &res.Factory3), {E_NOINTERFACE});
 		success_or_throw(res.Factory->CreateCustomFontCollection(&stream_based_dwrite_font_collection_loader::GetInstance(), &info.Stream, sizeof info.Stream, &res.Collection));
 		success_or_throw(res.Collection->GetFontFamily(0, &res.Family));
 		success_or_throw(res.Family->GetFont(info.FontIndex, &res.Font));
@@ -453,7 +461,7 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontge
 	return res;
 }
 
-bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics & gm, IDWriteGlyphRunAnalysisPtr & analysis) const {
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const {
 	try {
 		uint16_t glyphIndex;
 		success_or_throw(m_dwrite.Face->GetGlyphIndices(reinterpret_cast<const uint32_t*>(&codepoint), 1, &glyphIndex));
@@ -505,7 +513,7 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 	}
 }
 
-bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics & gm) const {
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	if (!try_get_glyph_metrics(codepoint, gm, analysis))
 		return false;
@@ -553,12 +561,12 @@ dwrite_font_table::~dwrite_font_table() {
 		m_pFontFace->ReleaseFontTable(m_pTableContext);
 }
 
-dwrite_font_table::dwrite_font_table(IDWriteFontFace * pFace, uint32_t tag)
+dwrite_font_table::dwrite_font_table(IDWriteFontFace* pFace, uint32_t tag)
 	: m_pFontFace(pFace, true) {
 	success_or_throw(pFace->TryGetFontTable(tag, &m_pData, &m_nSize, &m_pTableContext, &m_bExists));
 }
 
-HRESULT __stdcall stream_based_dwrite_font_collection_loader::CreateEnumeratorFromKey(IDWriteFactory * factory, void const* collectionKey, uint32_t collectionKeySize, IDWriteFontFileEnumerator * *pFontFileEnumerator) {
+HRESULT __stdcall stream_based_dwrite_font_collection_loader::CreateEnumeratorFromKey(IDWriteFactory* factory, void const* collectionKey, uint32_t collectionKeySize, IDWriteFontFileEnumerator* * pFontFileEnumerator) noexcept {
 	if (collectionKeySize != sizeof(std::shared_ptr<xivres::stream>))
 		return E_INVALIDARG;
 
@@ -567,15 +575,15 @@ HRESULT __stdcall stream_based_dwrite_font_collection_loader::CreateEnumeratorFr
 	return S_OK;
 }
 
-ULONG __stdcall stream_based_dwrite_font_collection_loader::Release(void) {
+ULONG __stdcall stream_based_dwrite_font_collection_loader::Release() noexcept {
 	return 0;
 }
 
-ULONG __stdcall stream_based_dwrite_font_collection_loader::AddRef(void) {
+ULONG __stdcall stream_based_dwrite_font_collection_loader::AddRef() noexcept {
 	return 1;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_collection_loader::QueryInterface(REFIID riid, void** ppvObject) {
+HRESULT __stdcall stream_based_dwrite_font_collection_loader::QueryInterface(REFIID riid, void** ppvObject) noexcept {
 	if (riid == __uuidof(IUnknown))
 		*ppvObject = static_cast<IUnknown*>(this);
 	else if (riid == __uuidof(IDWriteFontCollectionLoader))
@@ -595,14 +603,14 @@ stream_based_dwrite_font_collection_loader& stream_based_dwrite_font_collection_
 	return s_instance;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::GetCurrentFontFile(IDWriteFontFile * *pFontFile) {
+HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::GetCurrentFontFile(IDWriteFontFile** pFontFile) noexcept {
 	if (m_nCurrentFile != 0)
 		return E_FAIL;
 
 	return m_factory->CreateCustomFontFileReference(&m_stream, sizeof m_stream, &stream_based_dwrite_font_file_loader::GetInstance(), pFontFile);
 }
 
-HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::MoveNext(BOOL * pHasCurrentFile) {
+HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::MoveNext(BOOL* pHasCurrentFile) noexcept {
 	if (m_nCurrentFile == -1) {
 		m_nCurrentFile = 0;
 		*pHasCurrentFile = TRUE;
@@ -613,18 +621,18 @@ HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrit
 	return S_OK;
 }
 
-ULONG __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::Release(void) {
+ULONG __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::Release() noexcept {
 	const auto newRef = --m_nRef;
 	if (!newRef)
 		delete this;
 	return newRef;
 }
 
-ULONG __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::AddRef(void) {
+ULONG __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::AddRef() noexcept {
 	return ++m_nRef;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::QueryInterface(REFIID riid, void** ppvObject) {
+HRESULT __stdcall stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::QueryInterface(REFIID riid, void** ppvObject) noexcept {
 	if (riid == __uuidof(IUnknown))
 		*ppvObject = static_cast<IUnknown*>(this);
 	else if (riid == __uuidof(IDWriteFontFileEnumerator))
@@ -644,12 +652,12 @@ stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_
 }
 
 stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::stream_based_dwrite_font_collection_enumerator(IDWriteFactoryPtr factoryPtr, std::shared_ptr<xivres::stream> pStream)
-	: m_factory(factoryPtr)
+	: m_factory(std::move(factoryPtr))
 	, m_stream(std::move(pStream)) {
 
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::CreateStreamFromKey(void const* fontFileReferenceKey, uint32_t fontFileReferenceKeySize, IDWriteFontFileStream * *pFontFileStream) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::CreateStreamFromKey(void const* fontFileReferenceKey, uint32_t fontFileReferenceKeySize, IDWriteFontFileStream* * pFontFileStream) noexcept {
 	if (fontFileReferenceKeySize != sizeof(std::shared_ptr<xivres::stream>))
 		return E_INVALIDARG;
 
@@ -657,15 +665,15 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::CreateStreamFromKey(void
 	return S_OK;
 }
 
-ULONG __stdcall stream_based_dwrite_font_file_loader::Release(void) {
+ULONG __stdcall stream_based_dwrite_font_file_loader::Release() noexcept {
 	return 0;
 }
 
-ULONG __stdcall stream_based_dwrite_font_file_loader::AddRef(void) {
+ULONG __stdcall stream_based_dwrite_font_file_loader::AddRef() noexcept {
 	return 1;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::QueryInterface(REFIID riid, void** ppvObject) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::QueryInterface(REFIID riid, void** ppvObject) noexcept {
 	if (riid == __uuidof(IUnknown))
 		*ppvObject = static_cast<IUnknown*>(this);
 	else if (riid == __uuidof(IDWriteFontFileLoader))
@@ -685,22 +693,22 @@ stream_based_dwrite_font_file_loader& stream_based_dwrite_font_file_loader::GetI
 	return s_instance;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::GetLastWriteTime(uint64_t * pLastWriteTime) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::GetLastWriteTime(uint64_t* pLastWriteTime) noexcept {
 	*pLastWriteTime = 0;
 	return E_NOTIMPL; // E_NOTIMPL by design -- see method documentation in dwrite.h.
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::GetFileSize(uint64_t * pFileSize) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::GetFileSize(uint64_t* pFileSize) noexcept {
 	*pFileSize = static_cast<uint16_t>(m_stream->size());
 	return S_OK;
 }
 
-void __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::ReleaseFileFragment(void* fragmentContext) {
+void __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::ReleaseFileFragment(void* fragmentContext) noexcept {
 	if (fragmentContext)
 		delete static_cast<std::vector<uint8_t>*>(fragmentContext);
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::ReadFileFragment(void const** pFragmentStart, uint64_t fileOffset, uint64_t fragmentSize, void** pFragmentContext) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::ReadFileFragment(void const** pFragmentStart, uint64_t fileOffset, uint64_t fragmentSize, void** pFragmentContext) noexcept {
 	*pFragmentContext = nullptr;
 	*pFragmentStart = nullptr;
 
@@ -714,11 +722,11 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font
 
 	} else {
 		const auto size = static_cast<uint64_t>(m_stream->size());
-		if (fileOffset <= size && fileOffset + fragmentSize <= size && fragmentSize <= (std::numeric_limits<size_t>::max)()) {
+		if (fileOffset <= size && fileOffset + fragmentSize <= size && fragmentSize <= (std::numeric_limits<uint32_t>::max)()) {
 			auto pVec = new std::vector<uint8_t>();
 			try {
 				pVec->resize(static_cast<size_t>(fragmentSize));
-				if (m_stream->read(static_cast<std::streamoff>(fileOffset), pVec->data(), static_cast<std::streamsize>(fragmentSize)) == fragmentSize) {
+				if (m_stream->read(static_cast<std::streamoff>(fileOffset), pVec->data(), static_cast<std::streamsize>(fragmentSize)) == static_cast<std::streamsize>(fragmentSize)) {
 					*pFragmentStart = pVec->data();
 					*pFragmentContext = pVec;
 					return S_OK;
@@ -734,18 +742,18 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font
 	}
 }
 
-ULONG __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::Release(void) {
+ULONG __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::Release() noexcept {
 	const auto newRef = --m_nRef;
 	if (!newRef)
 		delete this;
 	return newRef;
 }
 
-ULONG __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::AddRef(void) {
+ULONG __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::AddRef() noexcept {
 	return ++m_nRef;
 }
 
-HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::QueryInterface(REFIID riid, void** ppvObject) {
+HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::QueryInterface(REFIID riid, void** ppvObject) noexcept {
 	if (riid == __uuidof(IUnknown))
 		*ppvObject = static_cast<IUnknown*>(this);
 	else if (riid == __uuidof(IDWriteFontFileStream))
@@ -766,5 +774,4 @@ stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream* stre
 
 stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::stream_based_dwrite_font_file_stream(std::shared_ptr<xivres::stream> pStream)
 	: m_stream(std::move(pStream)) {
-
 }

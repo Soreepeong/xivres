@@ -1,5 +1,5 @@
-#ifndef _XIVRES_SQPACK_H_
-#define _XIVRES_SQPACK_H_
+#ifndef XIVRES_SQPACK_H_
+#define XIVRES_SQPACK_H_
 
 #include <format>
 #include <numeric>

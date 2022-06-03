@@ -1,8 +1,5 @@
 ﻿#pragma once
 
-#include <ranges>
-#include <iostream>
-
 #include "fixed_size_font.h"
 
 #include "xivres/util.thread_pool.h"
@@ -47,10 +44,10 @@ namespace xivres::fontgen {
 		std::timed_mutex m_runningMtx;
 		std::string m_error;
 
-		const fixed_size_font& get_threadsafe_base_font(const fixed_size_font* font, size_t threadIndex);;
+		const fixed_size_font& get_threadsafe_base_font(const fixed_size_font* font, size_t threadIndex);
 
-		const fixed_size_font& get_threadsafe_source_font(size_t fontIndex, size_t threadIndex);;
-
+		const fixed_size_font& get_threadsafe_source_font(size_t fontIndex, size_t threadIndex);
+		
 		void prepare_threadsafe_source_fonts();
 
 		void prepare_target_font_basic_info();
@@ -74,17 +71,17 @@ namespace xivres::fontgen {
 
 		size_t add_font(std::shared_ptr<fixed_size_font> font);
 
-		std::shared_ptr<fixed_size_font> get_font(size_t index) const;
+		[[nodiscard]] std::shared_ptr<fixed_size_font> get_font(size_t index) const;
 
 		void compile();
 
-		std::string get_error_if_failed() const;
+		[[nodiscard]] std::string get_error_if_failed() const;
 
-		const std::vector<std::shared_ptr<fontdata::stream>>& compiled_fontdatas() const;
+		[[nodiscard]] const std::vector<std::shared_ptr<fontdata::stream>>& compiled_fontdatas() const;
 
-		const std::vector<std::shared_ptr<texture::memory_mipmap_stream>>& compiled_mipmap_streams() const;
+		[[nodiscard]] const std::vector<std::shared_ptr<texture::memory_mipmap_stream>>& compiled_mipmap_streams() const;
 
-		bool is_running() const;
+		[[nodiscard]] bool is_running() const;
 
 		void request_cancel();
 
@@ -92,18 +89,18 @@ namespace xivres::fontgen {
 			void(std::lock_guard(m_runningMtx));
 		}
 
-		template <class _Rep, class _Period>
-		[[nodiscard]] bool wait(const std::chrono::duration<_Rep, _Period>& t) {
+		template <class TRep, class TPeriod>
+		[[nodiscard]] bool wait(const std::chrono::duration<TRep, TPeriod>& t) {
 			return std::unique_lock(m_runningMtx, std::defer_lock).try_lock_for(t);
 		}
 
-		template <class _Clock, class _Duration>
-		[[nodiscard]] bool wait(const std::chrono::time_point<_Clock, _Duration>& t) {
+		template <class TClock, class TDuration>
+		[[nodiscard]] bool wait(const std::chrono::time_point<TClock, TDuration>& t) {
 			return std::unique_lock(m_runningMtx, std::defer_lock).try_lock_until(t);
 		}
 
-		const char* progress_description();
+		[[nodiscard]] const char* progress_description();
 
-		float progress_scaled() const;
+		[[nodiscard]] float progress_scaled() const;
 	};
 }

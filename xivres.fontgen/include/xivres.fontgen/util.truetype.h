@@ -1,15 +1,13 @@
-#ifndef _XIVRES_FONTGENERATOR_TRUETYPEUTILS_H_
-#define _XIVRES_FONTGENERATOR_TRUETYPEUTILS_H_
+#ifndef XIVRES_FONTGENERATOR_TRUETYPEUTILS_H_
+#define XIVRES_FONTGENERATOR_TRUETYPEUTILS_H_
 
 #include <algorithm>
-#include <cinttypes>
 #include <map>
 #include <memory>
 #include <set>
 #include <span>
 
 #include "xivres/util.byte_order.h"
-#include "xivres/util.span_cast.h"
 
 #pragma pack(push, 2)
 namespace xivres::util::TrueType {
@@ -51,7 +49,7 @@ namespace xivres::util::TrueType {
 		Macintosh = 1,  // discouraged
 		Iso = 2,  // deprecated
 		Windows = 3,
-		Custom = 4,  // OTF Windows NT compatibility mappingv
+		Custom = 4,  // OTF Windows NT compatibility mapping
 	};
 
 	enum class UnicodePlatformEncodingId : uint16_t {
@@ -105,8 +103,8 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
-			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
+			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -133,7 +131,7 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const BE<uint16_t>> Offsets() const {
+			[[nodiscard]] std::span<const BE<uint16_t>> Offsets() const {
 				return { m_obj->Offsets, *m_obj->Count };
 			}
 		};
@@ -176,7 +174,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -204,16 +202,16 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const BE<uint16_t>> SubtableOffsets() const {
+			[[nodiscard]] std::span<const BE<uint16_t>> SubtableOffsets() const {
 				return { m_obj->SubtableOffsets, *m_obj->Header.SubtableCount };
 			}
 
-			std::span<const char> SubtableSpan(size_t index) const {
+			[[nodiscard]] std::span<const char> SubtableSpan(size_t index) const {
 				const auto offset = *m_obj->SubtableOffsets[index];
 				return { m_bytes + offset, m_length - offset };
 			}
 
-			uint16_t MarkFilteringSet() const {
+			[[nodiscard]] uint16_t MarkFilteringSet() const {
 				if (m_obj->Header.LookupFlag.UseMarkFilteringSet)
 					return m_obj->SubtableOffsets[*m_obj->Header.SubtableCount];
 				return (std::numeric_limits<uint16_t>::max)();
@@ -255,7 +253,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -266,7 +264,7 @@ namespace xivres::util::TrueType {
 
 				const auto count = static_cast<size_t>(*obj->Header.Count);
 				switch (obj->Header.FormatId) {
-					case 1:
+					case 1:  // NOLINT(bugprone-branch-clone)
 						if (data.size_bytes() < sizeof FormatHeader + sizeof uint16_t * count)
 							return;
 						break;
@@ -296,21 +294,21 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const BE<uint16_t>> GlyphSpan() const {
+			[[nodiscard]] std::span<const BE<uint16_t>> GlyphSpan() const {
 				return { m_obj->Glyphs, m_obj->Header.Count };
 			}
 
-			std::span<const RangeRecord> RangeRecordSpan() const {
+			[[nodiscard]] std::span<const RangeRecord> RangeRecordSpan() const {
 				return { m_obj->RangeRecords, m_obj->Header.Count };
 			}
 
-			size_t GetCoverageIndex(size_t glyphId) const {
+			[[nodiscard]] size_t GetCoverageIndex(size_t glyphId) const {
 				switch (m_obj->Header.FormatId) {
 					case 1:
 					{
 						const auto glyphSpan = GlyphSpan();
 						const auto bec = BE<uint16_t>(static_cast<uint16_t>(glyphId));
-						const auto it = std::lower_bound(glyphSpan.begin(), glyphSpan.end(), bec, [](const BE<uint16_t>& l, const BE<uint16_t>& r) { return *l < *r; });
+						const auto it = std::ranges::lower_bound(glyphSpan, bec, [](const BE<uint16_t>& l, const BE<uint16_t>& r) { return *l < *r; });
 						if (it != glyphSpan.end() && **it == glyphId)
 							return it - glyphSpan.begin();
 
@@ -321,7 +319,7 @@ namespace xivres::util::TrueType {
 					{
 						const auto rangeSpan = RangeRecordSpan();
 						const auto bec = RangeRecord{ .EndGlyphId = static_cast<uint16_t>(glyphId) };
-						const auto i = std::upper_bound(rangeSpan.begin(), rangeSpan.end(), bec, [](const RangeRecord& l, const RangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
+						const auto i = std::ranges::upper_bound(rangeSpan, bec, [](const RangeRecord& l, const RangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
 						if (i >= 0 && rangeSpan[i].StartGlyphId <= glyphId && glyphId <= rangeSpan[i].EndGlyphId)
 							return rangeSpan[i].StartCoverageIndex + glyphId - rangeSpan[i].StartGlyphId;
 
@@ -384,7 +382,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -424,7 +422,7 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::map<uint16_t, std::set<uint16_t>> ClassToGlyphMap() const {
+			[[nodiscard]] std::map<uint16_t, std::set<uint16_t>> ClassToGlyphMap() const {
 				std::map<uint16_t, std::set<uint16_t>> res;
 				switch (m_obj->FormatId) {
 					case 1:
@@ -449,7 +447,7 @@ namespace xivres::util::TrueType {
 				return res;
 			}
 
-			std::map<uint16_t, uint16_t> GlyphToClassMap() const {
+			[[nodiscard]] std::map<uint16_t, uint16_t> GlyphToClassMap() const {
 				std::map<uint16_t, uint16_t> res;
 				switch (m_obj->FormatId) {
 					case 1:
@@ -474,7 +472,7 @@ namespace xivres::util::TrueType {
 				return res;
 			}
 
-			uint16_t GetClass(uint16_t glyphId) const {
+			[[nodiscard]] uint16_t GetClass(uint16_t glyphId) const {
 				switch (m_obj->FormatId) {
 					case 1:
 					{
@@ -489,7 +487,7 @@ namespace xivres::util::TrueType {
 					{
 						const auto rangeSpan = std::span(m_obj->Format2.ClassValueArray, m_obj->Format2.Header.ClassRangeCount);
 						const auto bec = Format2ClassRanges::ClassRangeRecord{ .EndGlyphId = glyphId };
-						const auto i = std::upper_bound(rangeSpan.begin(), rangeSpan.end(), bec, [](const Format2ClassRanges::ClassRangeRecord& l, const Format2ClassRanges::ClassRangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
+						const auto i = std::ranges::upper_bound(rangeSpan, bec, [](const Format2ClassRanges::ClassRangeRecord& l, const Format2ClassRanges::ClassRangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
 						if (i >= 0 && rangeSpan[i].StartGlyphId <= glyphId && glyphId <= rangeSpan[i].EndGlyphId)
 							return rangeSpan[i].Class;
 
@@ -578,7 +576,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -692,7 +690,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -717,26 +715,26 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const NameRecord> RecordSpan() const {
+			[[nodiscard]] std::span<const NameRecord> RecordSpan() const {
 				return { m_obj->Record, *m_obj->Header.Count };
 			}
 
-			uint16_t LanguageCount() const {
+			[[nodiscard]] uint16_t LanguageCount() const {
 				return *m_obj->Header.Version >= 1 ? **reinterpret_cast<const BE<uint16_t>*>(&m_obj->Record[*m_obj->Header.Count]) : 0;
 			}
 
-			std::span<const LanguageRecord> LanguageSpan() const {
+			[[nodiscard]] std::span<const LanguageRecord> LanguageSpan() const {
 				if (*m_obj->Header.Version == 0)
 					return {};
 				return { reinterpret_cast<const LanguageRecord*>(reinterpret_cast<const char*>(&m_obj->Record[*m_obj->Header.Count]) + 2), LanguageCount() };
 			}
 
-			const LanguageRecord& Language(size_t i) {
+			[[nodiscard]] const LanguageRecord& Language(size_t i) {
 				return reinterpret_cast<const LanguageRecord*>(reinterpret_cast<const char*>(&m_obj->Record[*m_obj->Header.Count]) + 2)[i];
 			}
 
 			template<typename TUnicodeString = std::string>
-			TUnicodeString GetUnicodeName(uint16_t preferredLanguageId, NameId nameId) const {
+			[[nodiscard]] TUnicodeString GetUnicodeName(uint16_t preferredLanguageId, NameId nameId) const {
 				const auto recordSpans = RecordSpan();
 				for (const auto usePreferredLanguageId : { true, false }) {
 					for (const auto& record : recordSpans) {
@@ -819,7 +817,7 @@ namespace xivres::util::TrueType {
 			}
 
 			template<typename TUnicodeString = std::string>
-			TUnicodeString GetPreferredFamilyName(uint16_t preferredLanguageId) const {
+			[[nodiscard]] TUnicodeString GetPreferredFamilyName(uint16_t preferredLanguageId) const {
 				auto r = GetUnicodeName<TUnicodeString>(preferredLanguageId, NameId::TypographicFamilyName);
 				if (!r.empty())
 					return r;
@@ -827,7 +825,7 @@ namespace xivres::util::TrueType {
 			}
 
 			template<typename TUnicodeString = std::string>
-			TUnicodeString GetPreferredSubfamilyName(uint16_t preferredLanguageId) const {
+			[[nodiscard]] TUnicodeString GetPreferredSubfamilyName(uint16_t preferredLanguageId) const {
 				auto r = GetUnicodeName<TUnicodeString>(preferredLanguageId, NameId::TypographicSubfamilyName);
 				if (!r.empty())
 					return r;
@@ -870,6 +868,8 @@ namespace xivres::util::TrueType {
 
 			class IFormatView {
 			public:
+				virtual ~IFormatView() = default;
+
 				virtual void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const = 0;
 
 				virtual operator bool() const = 0;
@@ -877,7 +877,7 @@ namespace xivres::util::TrueType {
 
 			class ValidButUnsupportedFormatView : public IFormatView {
 			public:
-				void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const {}
+				void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {}
 				operator bool() const override { return true; }
 			};
 
@@ -909,7 +909,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -940,7 +940,7 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						return c >= 256 ? 0 : m_obj->GlyphIdArray[c];
 					}
 
@@ -988,7 +988,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1016,7 +1016,7 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						if (c >= 0x10000)
 							return 0;
 
@@ -1070,7 +1070,7 @@ namespace xivres::util::TrueType {
 					BE<uint16_t> EntrySelector;
 					BE<uint16_t> RangeShift;
 
-					const size_t SegCount() const {
+					[[nodiscard]] const size_t SegCount() const {
 						return *SegCountX2 / 2;
 					}
 				};
@@ -1094,7 +1094,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1128,19 +1128,19 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					const BE<uint16_t>& EndCode(size_t i) const { return m_obj->Data[0 + m_obj->Header.SegCount() * 0 + i]; }
-					const BE<uint16_t>& StartCode(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 1 + i]; }
-					const BE<uint16_t>& IdDelta(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 2 + i]; }
-					const BE<uint16_t>& IdRangeOffset(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 3 + i]; }
-					const BE<uint16_t>& GlyphIndex(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 4 + i]; }
+					[[nodiscard]] const BE<uint16_t>& EndCode(size_t i) const { return m_obj->Data[0 + m_obj->Header.SegCount() * 0 + i]; }
+					[[nodiscard]] const BE<uint16_t>& StartCode(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 1 + i]; }
+					[[nodiscard]] const BE<uint16_t>& IdDelta(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 2 + i]; }
+					[[nodiscard]] const BE<uint16_t>& IdRangeOffset(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 3 + i]; }
+					[[nodiscard]] const BE<uint16_t>& GlyphIndex(size_t i) const { return m_obj->Data[1 + m_obj->Header.SegCount() * 4 + i]; }
 
-					std::span<const BE<uint16_t>> EndCodeSpan() const { return { &EndCode(0), m_obj->Header.SegCount() }; }
-					std::span<const BE<uint16_t>> StartCodeSpan() const { return { &StartCode(0), m_obj->Header.SegCount() }; }
-					std::span<const BE<uint16_t>> IdDeltaSpan() const { return { &IdDelta(0), m_obj->Header.SegCount() }; }
-					std::span<const BE<uint16_t>> IdRangeOffsetSpan() const { return { &IdRangeOffset(0), m_obj->Header.SegCount() }; }
-					std::span<const BE<uint16_t>> GlyphIndexSpan() const { return { &GlyphIndex(0), static_cast<size_t>((m_bytes + m_length - reinterpret_cast<const char*>(&GlyphIndex(0))) / 2) }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> EndCodeSpan() const { return { &EndCode(0), m_obj->Header.SegCount() }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> StartCodeSpan() const { return { &StartCode(0), m_obj->Header.SegCount() }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> IdDeltaSpan() const { return { &IdDelta(0), m_obj->Header.SegCount() }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> IdRangeOffsetSpan() const { return { &IdRangeOffset(0), m_obj->Header.SegCount() }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> GlyphIndexSpan() const { return { &GlyphIndex(0), static_cast<size_t>((m_bytes + m_length - reinterpret_cast<const char*>(&GlyphIndex(0))) / 2) }; }
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						if (c >= 0x10000)
 							return 0;
 
@@ -1243,7 +1243,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1274,9 +1274,9 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					std::span<const BE<uint16_t>> GlyphIdSpan() const { return { m_obj->GlyphId, *m_obj->Header.EntryCount }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> GlyphIdSpan() const { return { m_obj->GlyphId, *m_obj->Header.EntryCount }; }
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						if (c < *m_obj->Header.FirstCode || c >= static_cast<uint32_t>(*m_obj->Header.FirstCode + *m_obj->Header.EntryCount))
 							return 0;
 
@@ -1322,7 +1322,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1353,9 +1353,9 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					std::span<const MapGroup> GroupSpan() const { return { const_cast<MapGroup*>(m_obj->Group), static_cast<size_t>(*m_obj->Header.GroupCount) }; }
+					[[nodiscard]] std::span<const MapGroup> GroupSpan() const { return { const_cast<MapGroup*>(m_obj->Group), static_cast<size_t>(*m_obj->Header.GroupCount) }; }
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						MapGroup tmp;
 						tmp.EndCharCode = c;
 						const auto& group = std::upper_bound(GroupSpan().begin(), GroupSpan().end(), tmp, [](const MapGroup& l, const MapGroup& r) { return *l.EndCharCode < *r.EndCharCode; })[-1];
@@ -1404,7 +1404,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1435,9 +1435,9 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					std::span<const BE<uint16_t>> GlyphIdSpan() const { return { m_obj->GlyphId, *m_obj->Header.EntryCount }; }
+					[[nodiscard]] std::span<const BE<uint16_t>> GlyphIdSpan() const { return { m_obj->GlyphId, *m_obj->Header.EntryCount }; }
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						if (c < m_obj->Header.FirstCode || c >= m_obj->Header.FirstCode + m_obj->Header.EntryCount)
 							return 0;
 
@@ -1482,7 +1482,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -1513,9 +1513,9 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					std::span<const MapGroup> MapGroupSpan() const { return { const_cast<MapGroup*>(m_obj->MapGroups), *m_obj->Header.GroupCount }; }
+					[[nodiscard]] std::span<const MapGroup> MapGroupSpan() const { return { const_cast<MapGroup*>(m_obj->MapGroups), *m_obj->Header.GroupCount }; }
 
-					uint16_t CharToGlyph(uint32_t c) const {
+					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
 						MapGroup tmp;
 						tmp.EndCharCode = c;
 						const auto& group = std::upper_bound(MapGroupSpan().begin(), MapGroupSpan().end(), tmp, [](const MapGroup& l, const MapGroup& r) { return *l.EndCharCode < *r.EndCharCode; })[-1];
@@ -1590,7 +1590,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -1628,22 +1628,18 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::vector<std::set<char32_t>> GetGlyphToCharMap() const {
+			[[nodiscard]] std::vector<std::set<char32_t>> GetGlyphToCharMap() const {
 				std::vector<std::set<char32_t>> result;
 				result.resize(65536);
 
 				for (size_t i = 0, i_ = *m_obj->Header.SubtableCount; i < i_; ++i) {
 					const auto& encRec = m_obj->EncodingRecords[i];
-					if (encRec.Platform == PlatformId::Unicode)
-						void();
-					else if (encRec.Platform == PlatformId::Windows && encRec.WindowsEncoding == WindowsPlatformEncodingId::UnicodeBmp)
-						void();
-					else if (encRec.Platform == PlatformId::Windows && encRec.WindowsEncoding == WindowsPlatformEncodingId::UnicodeFullRepertoire)
-						void();
-					else
-						continue;
-
-					Format::GetFormatView(std::span(m_bytes, m_length).subspan(*encRec.SubtableOffset))->GetGlyphToCharMap(result);
+					if (false
+						|| (encRec.Platform == PlatformId::Unicode)
+						|| (encRec.Platform == PlatformId::Windows && encRec.WindowsEncoding == WindowsPlatformEncodingId::UnicodeBmp)
+						|| (encRec.Platform == PlatformId::Windows && encRec.WindowsEncoding == WindowsPlatformEncodingId::UnicodeFullRepertoire)) {
+						Format::GetFormatView(std::span(m_bytes, m_length).subspan(*encRec.SubtableOffset))->GetGlyphToCharMap(result);
+					}
 				}
 
 				return result;
@@ -1690,7 +1686,7 @@ namespace xivres::util::TrueType {
 				View(const View&) = default;
 				View& operator=(View&&) = default;
 				View& operator=(const View&) = default;
-				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 				View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
@@ -1778,7 +1774,7 @@ namespace xivres::util::TrueType {
 				View(const View&) = default;
 				View& operator=(View&&) = default;
 				View& operator=(const View&) = default;
-				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 				View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
@@ -1876,7 +1872,7 @@ namespace xivres::util::TrueType {
 				View(const View&) = default;
 				View& operator=(View&&) = default;
 				View& operator=(const View&) = default;
-				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+				View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 				View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
@@ -1961,7 +1957,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -1986,7 +1982,7 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::map<std::pair<char32_t, char32_t>, int> Parse(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
+			[[nodiscard]] std::map<std::pair<char32_t, char32_t>, int> Parse(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
 				std::map<std::pair<char32_t, char32_t>, int> result;
 
 				switch (*m_obj->V0.Header.Version) {
@@ -2072,7 +2068,7 @@ namespace xivres::util::TrueType {
 						View(const View&) = default;
 						View& operator=(View&&) = default;
 						View& operator=(const View&) = default;
-						View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+						View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 						View(const void* pData, size_t length, ValueFormatFlags format1, ValueFormatFlags format2) : View(std::span(reinterpret_cast<const char*>(pData), length), format1, format2) {}
 						template<typename T>
 						View(std::span<T> data, ValueFormatFlags format1, ValueFormatFlags format2) : View() {
@@ -2082,7 +2078,7 @@ namespace xivres::util::TrueType {
 							const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
 
 							const auto bit = (format2.Value << 16) | format1.Value;
-							const auto valueCountPerPairValueRecord = static_cast<size_t>(1 + std::popcount<uint32_t>(bit));
+							const auto valueCountPerPairValueRecord = static_cast<size_t>(1) + std::popcount<uint32_t>(bit);
 
 							if (data.size_bytes() < static_cast<size_t>(2) + 2 * valueCountPerPairValueRecord * (*obj->Count))
 								return;
@@ -2107,15 +2103,15 @@ namespace xivres::util::TrueType {
 							return m_obj;
 						}
 
-						const BE<uint16_t>* GetPairValueRecord(size_t index) const {
+						[[nodiscard]] const BE<uint16_t>* GetPairValueRecord(size_t index) const {
 							return &m_obj->Records[m_valueCountPerPairValueRecord * index];
 						}
 
-						uint16_t GetSecondGlyph(size_t index) const {
+						[[nodiscard]] uint16_t GetSecondGlyph(size_t index) const {
 							return **GetPairValueRecord(index);
 						}
 
-						uint16_t GetValueRecord1(size_t index, ValueFormatFlags desiredRecord) const {
+						[[nodiscard]] uint16_t GetValueRecord1(size_t index, ValueFormatFlags desiredRecord) const {
 							if (!(m_format1.Value & desiredRecord.Value))
 								return 0;
 							auto bit = m_bit;
@@ -2127,7 +2123,7 @@ namespace xivres::util::TrueType {
 							return *pRecord;
 						}
 
-						uint16_t GetValueRecord2(size_t index, ValueFormatFlags desiredRecord) const {
+						[[nodiscard]] uint16_t GetValueRecord2(size_t index, ValueFormatFlags desiredRecord) const {
 							if (!(m_format2.Value & desiredRecord.Value))
 								return 0;
 							auto bit = m_bit;
@@ -2160,7 +2156,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -2204,16 +2200,16 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					std::span<const BE<uint16_t>> PairSetOffsetSpan() const {
+					[[nodiscard]] std::span<const BE<uint16_t>> PairSetOffsetSpan() const {
 						return { m_obj->PairSetOffsets, m_obj->Header.PairSetCount };
 					}
 
-					PairSet::View PairSetView(size_t index) const {
+					[[nodiscard]] PairSet::View PairSetView(size_t index) const {
 						const auto offset = static_cast<size_t>(*m_obj->PairSetOffsets[index]);
 						return { reinterpret_cast<const char*>(m_obj) + offset, m_length - offset, m_obj->Header.ValueFormat1, m_obj->Header.ValueFormat2 };
 					}
 
-					CoverageTable::View CoverageTableView() const {
+					[[nodiscard]] CoverageTable::View CoverageTableView() const {
 						const auto offset = static_cast<size_t>(*m_obj->Header.CoverageOffset);
 						return { reinterpret_cast<const char*>(m_obj) + offset, m_length - offset };
 					}
@@ -2257,7 +2253,7 @@ namespace xivres::util::TrueType {
 					View(const View&) = default;
 					View& operator=(View&&) = default;
 					View& operator=(const View&) = default;
-					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+					View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 					View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
@@ -2295,11 +2291,11 @@ namespace xivres::util::TrueType {
 						return m_obj;
 					}
 
-					const BE<uint16_t>* GetPairValueRecord(size_t class1, size_t class2) const {
+					[[nodiscard]] const BE<uint16_t>* GetPairValueRecord(size_t class1, size_t class2) const {
 						return &m_obj->Records[m_valueCountPerPairValueRecord * (class1 * *m_obj->Header.Class2Count + class2)];
 					}
 
-					uint16_t GetValueRecord1(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
+					[[nodiscard]] uint16_t GetValueRecord1(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
 						if (!((*m_obj->Header.ValueFormat1).Value & desiredRecord.Value))
 							return 0;
 						auto bit = m_bit;
@@ -2311,7 +2307,7 @@ namespace xivres::util::TrueType {
 						return **pRecord;
 					}
 
-					uint16_t GetValueRecord2(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
+					[[nodiscard]] uint16_t GetValueRecord2(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
 						if (!((*m_obj->Header.ValueFormat2).Value & desiredRecord.Value))
 							return 0;
 						auto bit = m_bit;
@@ -2323,11 +2319,11 @@ namespace xivres::util::TrueType {
 						return **pRecord;
 					}
 
-					ClassDefTable::View GetClassTableDefinition1() const {
+					[[nodiscard]] ClassDefTable::View GetClassTableDefinition1() const {
 						return { m_bytes + *m_obj->Header.ClassDef1Offset, m_length - *m_obj->Header.ClassDef1Offset };
 					}
 
-					ClassDefTable::View GetClassTableDefinition2() const {
+					[[nodiscard]] ClassDefTable::View GetClassTableDefinition2() const {
 						return { m_bytes + *m_obj->Header.ClassDef2Offset, m_length - *m_obj->Header.ClassDef2Offset };
 					}
 				};
@@ -2356,7 +2352,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -2389,12 +2385,12 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const BE<uint16_t>> LookupListOffsets() const {
-				const BE<uint16_t>* p = reinterpret_cast<const BE<uint16_t>*>(m_bytes + *m_obj->HeaderV1_0.LookupListOffset);
+			[[nodiscard]] std::span<const BE<uint16_t>> LookupListOffsets() const {
+				const auto p = reinterpret_cast<const BE<uint16_t>*>(m_bytes + *m_obj->HeaderV1_0.LookupListOffset);
 				return { p + 1, **p };
 			}
 
-			std::map<std::pair<char32_t, char32_t>, int> ExtractAdvanceX(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
+			[[nodiscard]] std::map<std::pair<char32_t, char32_t>, int> ExtractAdvanceX(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
 				std::map<std::pair<char32_t, char32_t>, int> result;
 
 				const auto lookupListOffset = *m_obj->HeaderV1_0.LookupListOffset;
@@ -2468,9 +2464,9 @@ namespace xivres::util::TrueType {
 									if (class2 >= v->Header.Class1Count)
 										continue;
 
-									const auto val = static_cast<int>(
-										static_cast<int16_t>(v.GetValueRecord1(class1, class2, { .AdvanceX = 1 }))
-										+ static_cast<int16_t>(v.GetValueRecord2(class1, class2, { .PlacementX = 1 })));
+									const auto val = 0
+										+ static_cast<int16_t>(v.GetValueRecord1(class1, class2, { .AdvanceX = 1 }))
+										+ static_cast<int16_t>(v.GetValueRecord2(class1, class2, { .PlacementX = 1 }));
 									if (!val)
 										continue;
 
@@ -2486,7 +2482,7 @@ namespace xivres::util::TrueType {
 								}
 							}
 						}
-					};
+					}
 				}
 
 				return result;
@@ -2517,7 +2513,7 @@ namespace xivres::util::TrueType {
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length, size_t offsetInCollection = 0) : View(std::span(reinterpret_cast<const char*>(pData), length), offsetInCollection) {}
 			template<typename T>
 			View(std::span<T> data, size_t offsetInCollection = 0) : View() {
@@ -2552,11 +2548,11 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			std::span<const DirectoryTableEntry> DirectoryTableSpan() const {
+			[[nodiscard]] std::span<const DirectoryTableEntry> DirectoryTableSpan() const {
 				return { m_obj->DirectoryTable, *m_obj->OffsetTable.TableCount };
 			}
 
-			std::span<const char> GetDirectoryTable(const TagStruct& tag) const {
+			[[nodiscard]] std::span<const char> GetDirectoryTable(const TagStruct& tag) const {
 				for (const auto& table : DirectoryTableSpan())
 					if (table.Tag == tag)
 						return { m_bytes + *table.Offset - m_offsetInCollection, *table.Length };
@@ -2564,7 +2560,7 @@ namespace xivres::util::TrueType {
 			}
 
 			template<typename Table>
-			Table::View TryGetTable() const {
+			typename Table::View TryGetTable() const {
 				const auto s = GetDirectoryTable(Table::DirectoryTableTag);
 				if (s.empty())
 					return {};
@@ -2601,18 +2597,17 @@ namespace xivres::util::TrueType {
 				const char* m_bytes;
 			};
 			size_t m_length;
-			size_t m_offsetInCollection;
 
 		public:
-			View() : m_obj(nullptr), m_length(0), m_offsetInCollection(0) {}
+			View() : m_obj(nullptr), m_length(0) {}
 			View(std::nullptr_t) : View() {}
-			View(decltype(m_obj) pObject, size_t length, size_t offsetInCollection = 0)
-				: m_obj(pObject), m_length(length), m_offsetInCollection(offsetInCollection) {}
+			View(decltype(m_obj) pObject, size_t length)
+				: m_obj(pObject), m_length(length) {}
 			View(View&&) = default;
 			View(const View&) = default;
 			View& operator=(View&&) = default;
 			View& operator=(const View&) = default;
-			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; }
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
 			View(const void* pData, size_t length) : View(std::span(reinterpret_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
@@ -2662,11 +2657,11 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			size_t GetFontCount() const {
+			[[nodiscard]] size_t GetFontCount() const {
 				return *m_obj->FileHeader.FontCount;
 			}
 
-			SfntFile::View GetFont(size_t index) const {
+			[[nodiscard]] SfntFile::View GetFont(size_t index) const {
 				if (index >= m_obj->FileHeader.FontCount)
 					return {};
 

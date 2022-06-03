@@ -1,5 +1,5 @@
-#ifndef _XIVRES_TEXTURE_H_
-#define _XIVRES_TEXTURE_H_
+#ifndef XIVRES_TEXTURE_H_
+#define XIVRES_TEXTURE_H_
 
 #include "util.byte_order.h"
 

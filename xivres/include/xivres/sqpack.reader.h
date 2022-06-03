@@ -1,5 +1,5 @@
-#ifndef _XIVRES_SQPACKREADER_H_
-#define _XIVRES_SQPACKREADER_H_
+#ifndef XIVRES_SQPACKREADER_H_
+#define XIVRES_SQPACKREADER_H_
 
 #include <map>
 #include <mutex>

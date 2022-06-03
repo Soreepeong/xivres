@@ -1,5 +1,5 @@
-#ifndef _XIVRES_EQDP_H_
-#define _XIVRES_EQDP_H_
+#ifndef XIVRES_EQDP_H_
+#define XIVRES_EQDP_H_
 
 #include <cstdint>
 #include <span>

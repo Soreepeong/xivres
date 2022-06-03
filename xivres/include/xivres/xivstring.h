@@ -1,5 +1,5 @@
-﻿#ifndef _XIVRES_SESTRING_H_
-#define _XIVRES_SESTRING_H_
+﻿#ifndef XIVRES_SESTRING_H_
+#define XIVRES_SESTRING_H_
 
 #include <cstdint>
 #include <format>

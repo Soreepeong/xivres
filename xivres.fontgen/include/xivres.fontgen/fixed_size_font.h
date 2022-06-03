@@ -1,14 +1,12 @@
-#ifndef _XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
-#define _XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
+#ifndef XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
+#define XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
 
-#include <array>
 #include <set>
 #include <vector>
 
 #include "xivres/fontdata.h"
 #include "xivres/texture.mipmap_stream.h"
 #include "xivres/util.pixel_formats.h"
-#include "xivres/util.unicode.h"
 
 namespace xivres::fontgen {
 	struct glyph_metrics {
@@ -99,44 +97,57 @@ namespace xivres::fontgen {
 
 	class fixed_size_font {
 	public:
-		virtual std::string family_name() const = 0;
+		fixed_size_font() = default;
+		fixed_size_font(fixed_size_font&&) = default;
+		fixed_size_font(const fixed_size_font&) = default;
+		fixed_size_font& operator=(fixed_size_font&&) = default;
+		fixed_size_font& operator=(const fixed_size_font&) = default;
+		virtual ~fixed_size_font() = default;
 
-		virtual std::string subfamily_name() const = 0;
+		[[nodiscard]] virtual std::string family_name() const = 0;
 
-		virtual float font_size() const = 0;
+		[[nodiscard]] virtual std::string subfamily_name() const = 0;
 
-		virtual int ascent() const = 0;
+		[[nodiscard]] virtual float font_size() const = 0;
 
-		virtual int line_height() const = 0;
+		[[nodiscard]] virtual int ascent() const = 0;
 
-		virtual const std::set<char32_t>& all_codepoints() const = 0;
+		[[nodiscard]] virtual int line_height() const = 0;
 
-		virtual bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const = 0;
+		[[nodiscard]] virtual const std::set<char32_t>& all_codepoints() const = 0;
 
-		virtual const void* get_base_font_glyph_uniqid(char32_t c) const = 0;
+		[[nodiscard]] virtual bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const = 0;
 
-		virtual char32_t uniqid_to_glyph(const void*) const = 0;
+		[[nodiscard]] virtual const void* get_base_font_glyph_uniqid(char32_t c) const = 0;
 
-		virtual const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const = 0;
+		[[nodiscard]] virtual char32_t uniqid_to_glyph(const void*) const = 0;
 
-		virtual int get_adjusted_advance_width(char32_t left, char32_t right) const = 0;
+		[[nodiscard]] virtual const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const = 0;
+
+		[[nodiscard]] virtual int get_adjusted_advance_width(char32_t left, char32_t right) const = 0;
 
 		virtual bool draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const = 0;
 
 		virtual bool draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const = 0;
 
-		virtual std::shared_ptr<fixed_size_font> get_threadsafe_view() const = 0;
+		[[nodiscard]] virtual std::shared_ptr<fixed_size_font> get_threadsafe_view() const = 0;
 
-		virtual const fixed_size_font* get_base_font(char32_t codepoint) const = 0;
+		[[nodiscard]] virtual const fixed_size_font* get_base_font(char32_t codepoint) const = 0;
 	};
 
 	class default_abstract_fixed_size_font : public fixed_size_font {
 	public:
-		const void* get_base_font_glyph_uniqid(char32_t c) const override;
+		default_abstract_fixed_size_font() = default;
+		default_abstract_fixed_size_font(default_abstract_fixed_size_font&&) = default;
+		default_abstract_fixed_size_font(const default_abstract_fixed_size_font&) = default;
+		default_abstract_fixed_size_font& operator=(default_abstract_fixed_size_font&&) = default;
+		default_abstract_fixed_size_font& operator=(const default_abstract_fixed_size_font&) = default;
 
-		char32_t uniqid_to_glyph(const void* pc) const override;
+		[[nodiscard]] const void* get_base_font_glyph_uniqid(char32_t c) const override;
 
-		int get_adjusted_advance_width(char32_t left, char32_t right) const override;
+		[[nodiscard]] char32_t uniqid_to_glyph(const void* pc) const override;
+
+		[[nodiscard]] int get_adjusted_advance_width(char32_t left, char32_t right) const override;
 	};
 
 	class empty_fixed_size_font : public fixed_size_font {
@@ -159,35 +170,35 @@ namespace xivres::fontgen {
 		empty_fixed_size_font& operator=(empty_fixed_size_font&&) noexcept;
 		empty_fixed_size_font& operator=(const empty_fixed_size_font&);
 
-		std::string family_name() const override;
+		[[nodiscard]] std::string family_name() const override;
 
-		std::string subfamily_name() const override;
+		[[nodiscard]] std::string subfamily_name() const override;
 
-		float font_size() const override;
+		[[nodiscard]] float font_size() const override;
 
-		int ascent() const override;
+		[[nodiscard]] int ascent() const override;
 
-		int line_height() const override;
+		[[nodiscard]] int line_height() const override;
 
-		const std::set<char32_t>& all_codepoints() const override;
+		[[nodiscard]] const std::set<char32_t>& all_codepoints() const override;
 
-		bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const override;
+		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const override;
 
-		const void* get_base_font_glyph_uniqid(char32_t c) const override;
+		[[nodiscard]] const void* get_base_font_glyph_uniqid(char32_t c) const override;
 
-		char32_t uniqid_to_glyph(const void* pc) const override;
+		[[nodiscard]] char32_t uniqid_to_glyph(const void* pc) const override;
 
-		const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const override;
+		[[nodiscard]] const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const override;
 
-		int get_adjusted_advance_width(char32_t left, char32_t right) const override;
+		[[nodiscard]] int get_adjusted_advance_width(char32_t left, char32_t right) const override;
 
 		bool draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const override;
 
 		bool draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const override;
 
-		std::shared_ptr<fixed_size_font> get_threadsafe_view() const override;
+		[[nodiscard]] std::shared_ptr<fixed_size_font> get_threadsafe_view() const override;
 
-		const fixed_size_font* get_base_font(char32_t codepoint) const override;
+		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 	};
 }
 

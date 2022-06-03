@@ -1,5 +1,5 @@
-#ifndef _XIVRES_INTERNAL_BYTEORDER_H_
-#define _XIVRES_INTERNAL_BYTEORDER_H_
+#ifndef XIVRES_INTERNAL_BYTEORDER_H_
+#define XIVRES_INTERNAL_BYTEORDER_H_
 
 #include <algorithm>
 #include <type_traits>

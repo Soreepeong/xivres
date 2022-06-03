@@ -121,7 +121,7 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 		}
 	}
 
-	for (auto it = m_kerningPairs->begin(); it != m_kerningPairs->end(); ) {
+	for (auto it = m_kerningPairs->begin(); it != m_kerningPairs->end();) {
 		if (m_info->Codepoints.contains(it->first.first) && m_info->Codepoints.contains(it->first.second) && it->second != 0)
 			++it;
 		else
@@ -186,7 +186,8 @@ std::string xivres::fontgen::wrapping_fixed_size_font::family_name() const {
 	return m_font->family_name();
 }
 
-xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(std::shared_ptr<const fixed_size_font> font, const wrap_modifiers& wrapModifiers) : m_font(std::move(font)) {
+xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(std::shared_ptr<const fixed_size_font> font, const wrap_modifiers& wrapModifiers)
+	: m_font(std::move(font)) {
 	auto info = std::make_shared<info_t>();
 	info->LetterSpacing = wrapModifiers.LetterSpacing;
 	info->HorizontalOffset = wrapModifiers.HorizontalOffset;
@@ -213,10 +214,10 @@ xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(std::shared_
 
 xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font() = default;
 
-xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(const wrapping_fixed_size_font & r) = default;
+xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(const wrapping_fixed_size_font& r) = default;
 
-xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(wrapping_fixed_size_font && r) noexcept = default;
+xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(wrapping_fixed_size_font&& r) noexcept = default;
 
-xivres::fontgen::wrapping_fixed_size_font& xivres::fontgen::wrapping_fixed_size_font::operator=(const wrapping_fixed_size_font & r) = default;
+xivres::fontgen::wrapping_fixed_size_font& xivres::fontgen::wrapping_fixed_size_font::operator=(const wrapping_fixed_size_font& r) = default;
 
-xivres::fontgen::wrapping_fixed_size_font& xivres::fontgen::wrapping_fixed_size_font::operator=(wrapping_fixed_size_font && r) noexcept = default;
+xivres::fontgen::wrapping_fixed_size_font& xivres::fontgen::wrapping_fixed_size_font::operator=(wrapping_fixed_size_font&& r) noexcept = default;

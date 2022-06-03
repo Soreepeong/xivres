@@ -1,5 +1,5 @@
-#ifndef _XIVRES_EXCEL_H_
-#define _XIVRES_EXCEL_H_
+#ifndef XIVRES_EXCEL_H_
+#define XIVRES_EXCEL_H_
 
 #include <map>
 #include <ranges>

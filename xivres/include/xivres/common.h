@@ -1,5 +1,5 @@
-#ifndef _XIVRES_COMMON_H_
-#define _XIVRES_COMMON_H_
+#ifndef XIVRES_COMMON_H_
+#define XIVRES_COMMON_H_
 
 #include <functional>
 #include <stdexcept>

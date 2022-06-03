@@ -1,11 +1,11 @@
 #include "../include/xivres.fontgen/text_measurer.h"
 
 std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::fontgen::text_measure_result::create_mipmap(const fixed_size_font& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad) const {
-	auto res = std::make_shared<xivres::texture::memory_mipmap_stream>(
+	auto res = std::make_shared<texture::memory_mipmap_stream>(
 		pad * 2 + Occupied.X2 - (std::min)(0, Occupied.X1),
 		pad * 2 + Occupied.Y2 - (std::min)(0, Occupied.Y1),
 		1,
-		xivres::texture::format::A8R8G8B8);
+		texture::format::A8R8G8B8);
 	std::ranges::fill(res->as_span<util::RGBA8888>(), bgColor);
 	draw_to(
 		*res,
@@ -17,7 +17,7 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::fontgen::text_mea
 	return res;
 }
 
-void xivres::fontgen::text_measure_result::draw_to(xivres::texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+void xivres::fontgen::text_measure_result::draw_to(texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
 	const auto buf = mipmapStream.as_span<util::RGBA8888>();
 	for (const auto& c : Characters) {
 		if (c.Metrics.is_effectively_empty())
