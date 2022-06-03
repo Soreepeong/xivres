@@ -24,7 +24,7 @@ std::streamsize xivres::standard_unpacker::read(std::streamoff offset, void* buf
 		from -= 1;
 
 	block_decoder info(buf, length, offset);
-	info.forward(m_offsets[from]);
+	info.skip(m_offsets[from]);
 	for (auto it = from; it < m_locators.size() && !info.complete(); ++it)
 		info.forward(m_offsets[it], *m_stream, m_headerSize + m_locators[it].Offset, m_locators[it].BlockSize);
 	return info.filled();

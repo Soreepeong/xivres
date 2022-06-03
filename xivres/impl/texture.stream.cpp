@@ -19,14 +19,12 @@ xivres::texture::stream::stream(const std::shared_ptr<xivres::stream>& strm)
 
 xivres::texture::stream::stream(format type, size_t width, size_t height, size_t depth, size_t mipmapCount, size_t repeatCount)
 	: m_header({
-		.Unknown1 = 0,
-		.HeaderSize = static_cast<uint16_t>(align(sizeof m_header)),
+		.Attribute = attribute::AlignedSize,
 		.Type = type,
 		.Width = util::range_check_cast<uint16_t>(width),
 		.Height = util::range_check_cast<uint16_t>(height),
 		.Depth = util::range_check_cast<uint16_t>(depth),
 		.MipmapCount = 0,
-		.Unknown2 = {}
 	})
 	, m_repeats(0)
 	, m_repeatedUnitSize(0) {
@@ -60,7 +58,6 @@ void xivres::texture::stream::resize(size_t mipmapCount, size_t repeatCount) {
 		throw std::invalid_argument("repeat count must be a positive integer");
 
 	m_header.MipmapCount = util::range_check_cast<uint16_t>(mipmapCount);
-	m_header.HeaderSize = static_cast<uint32_t>(align(sizeof m_header + std::span(m_mipmapOffsets).size_bytes()));
 
 	m_repeats.resize(repeatCount = util::range_check_cast<uint16_t>(repeatCount));
 	for (auto& mipmaps : m_repeats)
@@ -69,13 +66,16 @@ void xivres::texture::stream::resize(size_t mipmapCount, size_t repeatCount) {
 	m_mipmapOffsets.clear();
 	m_repeatedUnitSize = 0;
 	for (size_t i = 0; i < mipmapCount; ++i) {
-		m_mipmapOffsets.push_back(m_header.HeaderSize + m_repeatedUnitSize);
-		m_repeatedUnitSize += static_cast<uint32_t>(align(calc_raw_data_length(m_header, i)).Alloc);
+		m_mipmapOffsets.push_back(m_header.header_and_mipmap_offsets_size() + m_repeatedUnitSize);
+		if (m_header.has_attribute(attribute::AlignedSize))
+			m_repeatedUnitSize += static_cast<uint32_t>(align(calc_raw_data_length(m_header, i)).Alloc);
+		else
+			m_repeatedUnitSize += static_cast<uint32_t>(calc_raw_data_length(m_header, i));
 	}
 }
 
 std::streamsize xivres::texture::stream::size() const {
-	return align(sizeof m_header + std::span(m_mipmapOffsets).size_bytes()) + m_repeats.size() * m_repeatedUnitSize;
+	return m_header.header_and_mipmap_offsets_size() + m_repeats.size() * m_repeatedUnitSize;
 }
 
 std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
@@ -110,42 +110,45 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 	} else
 		relativeOffset -= static_cast<std::streamoff>(srcTyped.size_bytes());
 
-	const auto headerPadInfo = align(sizeof m_header + std::span(m_mipmapOffsets).size_bytes());
-	if (const auto padSize = static_cast<std::streamoff>(headerPadInfo.Pad);
-		relativeOffset < padSize) {
-		const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(padSize - relativeOffset));
-		std::fill_n(out.begin(), available, 0);
-		out = out.subspan(static_cast<size_t>(available));
-		relativeOffset = 0;
+	if (m_header.has_attribute(attribute::AlignedSize)) {
+		const auto headerPadInfo = align(sizeof m_header + std::span(m_mipmapOffsets).size_bytes());
+		if (const auto padSize = static_cast<std::streamoff>(headerPadInfo.Pad);
+			relativeOffset < padSize) {
+			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(padSize - relativeOffset));
+			std::fill_n(out.begin(), available, 0);
+			out = out.subspan(static_cast<size_t>(available));
+			relativeOffset = 0;
 
-		if (out.empty())
-			return length;
-	} else
-		relativeOffset -= padSize;
+			if (out.empty())
+				return length;
+		} else {
+			relativeOffset -= padSize;
+		}
+	}
 
 	if (m_repeats.empty())
 		return static_cast<std::streamsize>(length - out.size_bytes());
 
-	auto beginningRepeatIndex = static_cast<size_t>(relativeOffset / m_repeatedUnitSize);
+	const auto beginningRepeatIndex = static_cast<size_t>(relativeOffset / m_repeatedUnitSize);
 	relativeOffset %= m_repeatedUnitSize;
 
-	relativeOffset += headerPadInfo.Alloc;
+	relativeOffset += m_header.header_and_mipmap_offsets_size();
 
 	auto it = std::ranges::lower_bound(m_mipmapOffsets,
 		static_cast<uint32_t>(relativeOffset),
 		[&](uint32_t l, uint32_t r) {
-		return l < r;
-	});
+			return l < r;
+		});
 
 	if (it == m_mipmapOffsets.end() || *it > relativeOffset)
 		--it;
 
 	relativeOffset -= *it;
 
-	for (auto repeatI = beginningRepeatIndex; repeatI < m_repeats.size(); ++repeatI) {
-		for (auto mipmapI = it - m_mipmapOffsets.begin(); it != m_mipmapOffsets.end(); ++it, ++mipmapI) {
+	for (auto repeatIndex = beginningRepeatIndex; repeatIndex < m_repeats.size(); ++repeatIndex) {
+		for (auto mipmapIndex = it - m_mipmapOffsets.begin(); it != m_mipmapOffsets.end(); ++it, ++mipmapIndex) {
 			std::streamoff padSize;
-			if (const auto& mipmap = m_repeats[repeatI][mipmapI]) {
+			if (const auto& mipmap = m_repeats[repeatIndex][mipmapIndex]) {
 				const auto mipmapSize = mipmap->size();
 				padSize = align(mipmapSize).Pad;
 
@@ -162,7 +165,7 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 				}
 
 			} else {
-				padSize = align(calc_raw_data_length(m_header, mipmapI)).Alloc;
+				padSize = align(calc_raw_data_length(m_header, mipmapIndex)).Alloc;
 			}
 
 			if (relativeOffset < padSize) {

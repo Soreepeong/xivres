@@ -99,7 +99,7 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 	if (it == m_blocks.end() || (it != m_blocks.end() && it != m_blocks.begin() && it->RequestOffset > info.relative_offset()))
 		--it;
 
-	info.forward(it->RequestOffset);
+	info.skip(it->RequestOffset);
 	for (; it != m_blocks.end() && !info.complete(); ++it)
 		info.forward(it->RequestOffset, *m_stream, it->BlockOffset, it->PaddedChunkSize);
 	return info.filled();

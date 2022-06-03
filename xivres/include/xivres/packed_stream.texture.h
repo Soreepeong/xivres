@@ -11,8 +11,9 @@ namespace xivres {
 
 		std::vector<uint8_t> m_mergedHeader;
 		std::vector<packed::mipmap_block_locator> m_blockLocators;
-		std::vector<uint32_t> m_mipmapOffsetsWithRepeats;
+		std::vector<uint32_t> m_mipmapOffsets;
 		std::vector<uint32_t> m_mipmapSizes;
+		size_t m_repeatCount{};
 
 	public:
 		using passthrough_packer<packed::type::texture>::passthrough_packer;

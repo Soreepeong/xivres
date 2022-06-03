@@ -6,8 +6,15 @@
 #include "../include/xivres/stream.h"
 
 void xivres::stream::read_fully(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (read(offset, buf, length) != length)
-		throw std::runtime_error("Reached end of strm before reading all of the requested data.");
+	if (read(offset, buf, length) != length) {
+#ifdef _WINDOWS_
+		if (IsDebuggerPresent()) {
+			__debugbreak();
+			static_cast<void>(read(offset, buf, length));
+		}
+#endif
+		throw std::runtime_error("Reached end of stream before reading all of the requested data.");
+	}
 }
 
 std::unique_ptr<xivres::stream> xivres::default_base_stream::substream(std::streamoff offset, std::streamsize length) const {

@@ -525,7 +525,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	return res;
 }
 
-void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict /*= false*/) {
+void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict) {
 	header dataHeader{};
 	memcpy(dataHeader.Signature, header::Signature_Value, sizeof header::Signature_Value);
 	dataHeader.HeaderSize = sizeof header;

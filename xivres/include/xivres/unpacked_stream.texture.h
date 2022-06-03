@@ -7,10 +7,11 @@
 
 namespace xivres {
 	class texture_unpacker : public base_unpacker {
-		struct BlockInfo {
+		struct block_info_t {
 			uint32_t RequestOffset;
 			uint32_t BlockOffset;
 			uint32_t RemainingDecompressedSize;
+			uint32_t ZeroFillSize;
 			std::vector<uint16_t> RemainingBlockSizes;
 
 			bool operator<(uint32_t r) const {
@@ -21,7 +22,7 @@ namespace xivres {
 		std::mutex m_mtx;
 
 		std::vector<uint8_t> m_head;
-		std::vector<BlockInfo> m_blocks;
+		std::vector<block_info_t> m_blocks;
 
 	public:
 		texture_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm);

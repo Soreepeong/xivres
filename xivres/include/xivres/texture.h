@@ -1,9 +1,48 @@
 #ifndef XIVRES_TEXTURE_H_
 #define XIVRES_TEXTURE_H_
 
+#include "common.h"
 #include "util.byte_order.h"
 
+// https://github.com/NotAdam/Lumina/blob/master/src/Lumina/Data/Files/TexFile.cs
 namespace xivres::texture {
+	enum class attribute : uint32_t {
+		DiscardPerFrame = 0x1,
+		DiscardPerMap = 0x2,
+		Managed = 0x4,
+		UserManaged = 0x8,
+		CpuRead = 0x10,
+		LocationMain = 0x20,
+		NoGpuRead = 0x40,
+		AlignedSize = 0x80,
+		EdgeCulling = 0x100,
+		LocationOnion = 0x200,
+		ReadWrite = 0x400,
+		Immutable = 0x800,
+		TextureRenderTarget = 0x100000,
+		TextureDepthStencil = 0x200000,
+		TextureType1D = 0x400000,
+		TextureType2D = 0x800000,
+		TextureType3D = 0x1000000,
+		TextureTypeCube = 0x2000000,
+		TextureTypeMask = 0x3C00000,
+		TextureSwizzle = 0x4000000,
+		TextureNoTiled = 0x8000000,
+		TextureNoSwizzle = 0x80000000,
+	};
+
+	inline attribute operator| (attribute l, attribute r) {
+		return static_cast<attribute>(static_cast<uint32_t>(l) | static_cast<uint32_t>(r));
+	}
+
+	inline attribute operator& (attribute l, attribute r) {
+		return static_cast<attribute>(static_cast<uint32_t>(l) & static_cast<uint32_t>(r));
+	}
+
+	inline bool operator!(attribute lss) {
+		return static_cast<uint32_t>(lss) == 0;
+	}
+	
 	enum class format : uint32_t {
 		Unknown = 0,
 		L8 = 4400,
@@ -24,14 +63,24 @@ namespace xivres::texture {
 	};
 
 	struct header {
-		LE<uint16_t> Unknown1;
-		LE<uint16_t> HeaderSize;
+		LE<attribute> Attribute;
 		LE<format> Type;
 		LE<uint16_t> Width;
 		LE<uint16_t> Height;
 		LE<uint16_t> Depth;
 		LE<uint16_t> MipmapCount;
-		char Unknown2[0xC]{};
+		LE<uint32_t> LodOffsets[3];
+
+		[[nodiscard]] bool has_attribute(attribute a) const {
+			return !!(Attribute & a);
+		}
+
+		[[nodiscard]] uint32_t header_and_mipmap_offsets_size() const {
+			if (has_attribute(attribute::AlignedSize))
+				return static_cast<uint32_t>(align(sizeof header + MipmapCount * sizeof uint32_t));
+			else
+				return sizeof header + MipmapCount * sizeof uint32_t;
+		}
 	};
 
 	[[nodiscard]] size_t calc_raw_data_length(format type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);

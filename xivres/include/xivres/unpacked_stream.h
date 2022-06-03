@@ -21,11 +21,13 @@ namespace xivres {
 		public:
 			block_decoder(void* buf, std::streamsize length, std::streampos offset);
 
+			void skip(uint32_t lengthToSkip);
+
 			void forward(std::span<uint8_t> data);
 
-			void forward(uint32_t lengthToSkip);
+			void forward(uint32_t requestOffset, const stream& strm, uint32_t blockOffset, size_t knownBlockSize = ReadBufferMaxSize);
 
-			void forward(const uint32_t requestOffset, const stream& strm, const uint32_t blockOffset, const size_t knownBlockSize = ReadBufferMaxSize);
+			void forward_zerofill(size_t len);
 
 			[[nodiscard]] const auto& block_header() const { return *reinterpret_cast<const packed::block_header*>(m_buffer); }
 
