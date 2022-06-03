@@ -1,17 +1,18 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
+#include <fstream>
 #include <iostream>
 #include <Windows.h>
 #include <windowsx.h>
 
+#include "xivres/excel.h"
 #include "xivres/installation.h"
+#include "xivres/packed_stream.model.h"
 #include "xivres/packed_stream.standard.h"
 #include "xivres/packed_stream.texture.h"
-#include "xivres/packed_stream.model.h"
 #include "xivres/sound.h"
 #include "xivres/sqpack.generator.h"
-#include "xivres/texture.preview.h"
 #include "xivres/texture.stream.h"
 #include "xivres/unpacked_stream.h"
 #include "xivres/util.thread_pool.h"
@@ -177,6 +178,17 @@ static void test_ogg_decode_encode(const xivres::installation& gameReader) {
 	}
 }
 
+static void test_excel(const xivres::installation& gameReader) {
+	auto sheet = gameReader.get_excel("Addon").new_with_language(xivres::game_language::English);
+	for (auto i = 0; i < sheet.get_exh_reader().get_pages().size(); i++) {
+		for (const auto& row : sheet.get_exd_reader(i)) {
+			for (const auto& subrow : row) {
+				std::cout << std::format("{}: {}\n", row.row_id(), subrow[0].String.repr());
+			}
+		}
+	}
+}
+
 int main() {
 	SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 	system("chcp 65001 > NUL");
@@ -185,12 +197,8 @@ int main() {
 
 	// test_pack_unpack(gameReader);
 	// test_sqpack_generator(gameReader);
-	test_ogg_decode_encode(gameReader);
-
-	// const auto pathSpec = SqpackPathSpec("common/font/font1.tex");
-	// const auto pathSpec = SqpackPathSpec("common/graphics/texture/-caustics.tex");
-	// const auto pathSpec = SqpackPathSpec("common/graphics/texture/-omni_shadow_index_table.tex");
-	// internal::ShowTextureStream(TextureStream(decoded));
+	// test_ogg_decode_encode(gameReader);
+	test_excel(gameReader);
 
 	return 0;
 }

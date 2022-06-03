@@ -1,5 +1,5 @@
-#ifndef XIVRES_PACKEDFILESTREAM_H_
-#define XIVRES_PACKEDFILESTREAM_H_
+#ifndef XIVRES_PACKEDSTREAM_H_
+#define XIVRES_PACKEDSTREAM_H_
 
 #include <type_traits>
 
@@ -13,14 +13,14 @@ namespace xivres {
 	class unpacked_stream;
 
 	class packed_stream : public default_base_stream {
-		xivres::path_spec m_pathSpec;
+		path_spec m_pathSpec;
 
 	public:
 		packed_stream(path_spec pathSpec)
 			: m_pathSpec(std::move(pathSpec)) {
 		}
 
-		bool Updatepath_spec(const path_spec& r) {
+		bool update_path_spec(const path_spec& r) {
 			if (m_pathSpec.HasOriginal() || !r.HasOriginal() || m_pathSpec != r)
 				return false;
 
@@ -34,9 +34,9 @@ namespace xivres {
 
 		[[nodiscard]] virtual packed::type get_packed_type() const = 0;
 
-		unpacked_stream GetUnpackedStream(std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
+		unpacked_stream get_unpacked(std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
 
-		std::unique_ptr<unpacked_stream> GetUnpackedStreamPtr(std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
+		std::unique_ptr<unpacked_stream> make_unpacked_ptr(std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
 	};
 
 	class stream_as_packed_stream : public packed_stream {
@@ -68,6 +68,11 @@ namespace xivres {
 
 	class untyped_passthrough_packer {
 	public:
+		untyped_passthrough_packer() = default;
+		untyped_passthrough_packer(untyped_passthrough_packer&&) = default;
+		untyped_passthrough_packer(const untyped_passthrough_packer&) = default;
+		untyped_passthrough_packer& operator=(untyped_passthrough_packer&&) = default;
+		untyped_passthrough_packer& operator=(const untyped_passthrough_packer&) = default;
 		virtual ~untyped_passthrough_packer() = default;
 
 		[[nodiscard]] virtual packed::type get_packed_type() = 0;
@@ -122,7 +127,15 @@ namespace xivres {
 		}
 	};
 
-	class untyped_compressing_packer {};
+	class untyped_compressing_packer {
+	public:
+		untyped_compressing_packer() = default;
+		untyped_compressing_packer(untyped_compressing_packer&&) = default;
+		untyped_compressing_packer(const untyped_compressing_packer&) = default;
+		untyped_compressing_packer& operator=(untyped_compressing_packer&&) = default;
+		untyped_compressing_packer& operator=(const untyped_compressing_packer&) = default;
+		virtual ~untyped_compressing_packer() = default;
+	};
 
 	template<packed::type TPackedFileType>
 	class compressing_packer : public untyped_compressing_packer {
@@ -133,12 +146,12 @@ namespace xivres {
 		bool m_bCancel = false;
 
 	protected:
-		bool is_cancelled() const { return m_bCancel; }
+		[[nodiscard]] bool is_cancelled() const { return m_bCancel; }
 
 	public:
 		void cancel() { m_bCancel = true; }
 
-		virtual std::unique_ptr<stream> pack(const stream& rawStream, int compressionLevel) const = 0;
+		[[nodiscard]] virtual std::unique_ptr<stream> pack(const stream& rawStream, int compressionLevel) const = 0;
 	};
 
 	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<untyped_compressing_packer, TPacker>>>

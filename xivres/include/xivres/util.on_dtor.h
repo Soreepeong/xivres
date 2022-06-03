@@ -103,7 +103,7 @@ namespace xivres::util {
 			}
 
 			multi& operator+=(std::function<void()> f) {
-				m_list.emplace_back(f);
+				m_list.emplace_back(std::move(f));
 				return *this;
 			}
 

@@ -8,6 +8,7 @@
 #include <span>
 
 #include "xivres/util.byte_order.h"
+#include "xivres/util.unicode.h"
 
 #pragma pack(push, 2)
 namespace xivres::util::TrueType {

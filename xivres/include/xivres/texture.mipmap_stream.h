@@ -1,7 +1,5 @@
 #pragma once
 
-#include "util.dxt.h"
-
 #include "util.pixel_formats.h"
 #include "stream.h"
 #include "texture.h"
@@ -14,23 +12,23 @@ namespace xivres::texture {
 		const uint16_t Width;
 		const uint16_t Height;
 		const uint16_t Depth;
-		const texture::format Type;
+		const format Type;
 		const std::streamsize SupposedMipmapLength;
 
-		texture::mipmap_stream(size_t width, size_t height, size_t depths, texture::format type);
+		mipmap_stream(size_t width, size_t height, size_t depths, format type);
 
 		[[nodiscard]] std::streamsize size() const override;
 
-		std::shared_ptr<texture::stream> to_single_texture_stream();
+		[[nodiscard]] std::shared_ptr<texture::stream> to_single_texture_stream();
 	};
 
-	class wrapped_mipmap_stream : public texture::mipmap_stream {
+	class wrapped_mipmap_stream : public mipmap_stream {
 		std::shared_ptr<const stream> m_underlying;
 
 	public:
-		wrapped_mipmap_stream(texture::header header, size_t mipmapIndex, std::shared_ptr<const stream> underlying);
+		wrapped_mipmap_stream(header header, size_t mipmapIndex, std::shared_ptr<const stream> underlying);
 
-		wrapped_mipmap_stream(size_t width, size_t height, size_t depths, texture::format type, std::shared_ptr<const stream> underlying);
+		wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::shared_ptr<const stream> underlying);
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 	};
@@ -39,9 +37,9 @@ namespace xivres::texture {
 		std::vector<uint8_t> m_data;
 
 	public:
-		memory_mipmap_stream(size_t width, size_t height, size_t depths, texture::format type);
+		memory_mipmap_stream(size_t width, size_t height, size_t depths, format type);
 
-		memory_mipmap_stream(size_t width, size_t height, size_t depths, texture::format type, std::vector<uint8_t> data);
+		memory_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::vector<uint8_t> data);
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 
@@ -55,8 +53,8 @@ namespace xivres::texture {
 			return util::span_cast<const T>(m_data);
 		}
 
-		static std::shared_ptr<texture::memory_mipmap_stream> as_argb8888(const texture::mipmap_stream& strm);
+		[[nodiscard]] static std::shared_ptr<memory_mipmap_stream> as_argb8888(const mipmap_stream& strm);
 
-		static std::shared_ptr<const texture::mipmap_stream> as_argb8888_view(std::shared_ptr<const texture::mipmap_stream> strm);
+		[[nodiscard]] static std::shared_ptr<const mipmap_stream> as_argb8888_view(std::shared_ptr<const mipmap_stream> strm);
 	};
 }

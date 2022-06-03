@@ -1,10 +1,9 @@
 #ifndef XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
 #define XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
 
+#include <map>
 #include <set>
-#include <vector>
 
-#include "xivres/fontdata.h"
 #include "xivres/texture.mipmap_stream.h"
 #include "xivres/util.pixel_formats.h"
 

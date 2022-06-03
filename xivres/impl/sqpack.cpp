@@ -1,7 +1,9 @@
 #include "../include/xivres/sqpack.h"
 
-void xivres::sqpack::header::verify_or_throw(sqpack::file_type supposedType) const {
-	if (HeaderSize != sizeof sqpack::header)
+#include "../include/xivres/util.span_cast.h"
+
+void xivres::sqpack::header::verify_or_throw(file_type supposedType) const {
+	if (HeaderSize != sizeof header)
 		throw bad_data_error("sizeof Header != 0x400");
 	if (memcmp(Signature, Signature_Value, sizeof Signature) != 0)
 		throw bad_data_error("Invalid SqPack signature");
@@ -10,19 +12,19 @@ void xivres::sqpack::header::verify_or_throw(sqpack::file_type supposedType) con
 		throw bad_data_error("Padding_0x024 != 0");
 	if (!util::all_same_value(Padding_0x3D4))
 		throw bad_data_error("Padding_0x3D4 != 0");
-	if (supposedType != sqpack::file_type::Unspecified && supposedType != Type)
+	if (supposedType != file_type::Unspecified && supposedType != Type)
 		throw bad_data_error(std::format("Invalid sqpack::sqpack_type (expected {}, file is {})",
 			static_cast<uint32_t>(supposedType),
 			static_cast<uint32_t>(*Type)));
 }
 
 void xivres::sqpack::sqindex::path_hash_locator::verify_or_throw() const {
-	if (PairHashLocatorSize % sizeof(sqpack::sqindex::pair_hash_locator))
+	if (PairHashLocatorSize % sizeof(pair_hash_locator))
 		throw bad_data_error("FolderSegmentEntry.FileSegmentSize % sizeof FileSegmentEntry != 0");
 }
 
 void xivres::sqpack::sqindex::header::verify_or_throw(sqindex_type expectedIndexType) const {
-	if (HeaderSize != sizeof sqpack::sqindex::header)
+	if (HeaderSize != sizeof header)
 		throw bad_data_error("sizeof IndexHeader != 0x400");
 	if (expectedIndexType != sqindex_type::Unspecified && expectedIndexType != Type)
 		throw bad_data_error(std::format("Invalid sqpack::sqpack_type (expected {}, file is {})",
@@ -47,13 +49,13 @@ void xivres::sqpack::sqindex::header::verify_or_throw(sqindex_type expectedIndex
 	if (!util::all_same_value(PathHashLocatorSegment.Padding_0x020))
 		throw bad_data_error("PathHashLocatorSegment.Padding_0x020");
 
-	if (Type == sqindex_type::Index && HashLocatorSegment.Size % sizeof sqpack::sqindex::pair_hash_locator)
+	if (Type == sqindex_type::Index && HashLocatorSegment.Size % sizeof pair_hash_locator)
 		throw bad_data_error("HashLocatorSegment.size % sizeof FileSegmentEntry != 0");
-	else if (Type == sqindex_type::Index2 && HashLocatorSegment.Size % sizeof sqpack::sqindex::full_hash_locator)
+	else if (Type == sqindex_type::Index2 && HashLocatorSegment.Size % sizeof full_hash_locator)
 		throw bad_data_error("HashLocatorSegment.size % sizeof FileSegmentEntry2 != 0");
-	if (UnknownSegment3.Size % sizeof sqpack::sqindex::segment_3_entry)
+	if (UnknownSegment3.Size % sizeof segment_3_entry)
 		throw bad_data_error("UnknownSegment3.size % sizeof Segment3Entry != 0");
-	if (PathHashLocatorSegment.Size % sizeof sqpack::sqindex::path_hash_locator)
+	if (PathHashLocatorSegment.Size % sizeof path_hash_locator)
 		throw bad_data_error("PathHashLocatorSegment.size % sizeof FolderSegmentEntry != 0");
 
 	if (HashLocatorSegment.Count != 1)
@@ -65,7 +67,7 @@ void xivres::sqpack::sqindex::header::verify_or_throw(sqindex_type expectedIndex
 }
 
 void xivres::sqdata::header::verify_or_throw(uint32_t expectedSpanIndex) const {
-	if (HeaderSize != sizeof sqdata::header)
+	if (HeaderSize != sizeof header)
 		throw bad_data_error("sizeof IndexHeader != 0x400");
 	Sha1.verify(util::span_cast<char>(1, this).subspan(0, offsetof(xivres::sqdata::header, Sha1)), "IndexHeader SHA-1");
 	if (*Null1)

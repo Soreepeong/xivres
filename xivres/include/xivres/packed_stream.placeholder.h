@@ -19,7 +19,7 @@ namespace xivres {
 
 		[[nodiscard]] packed::type get_packed_type() const override;
 
-		static const placeholder_packed_stream& instance();
+		[[nodiscard]] static const placeholder_packed_stream& instance();
 	};
 }
 

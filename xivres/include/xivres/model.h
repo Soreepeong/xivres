@@ -1,4 +1,5 @@
-#pragma once
+#ifndef XIVRES_MODEL_H_
+#define XIVRES_MODEL_H_
 
 #include "util.byte_order.h"
 
@@ -21,3 +22,5 @@ namespace xivres::model {
 		LE<uint8_t> Padding;
 	};
 }
+
+#endif

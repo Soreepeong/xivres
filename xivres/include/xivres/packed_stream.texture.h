@@ -1,11 +1,7 @@
 #ifndef XIVRES_TEXTUREPACKEDFILESTREAM_H_
 #define XIVRES_TEXTUREPACKEDFILESTREAM_H_
 
-#include "util.span_cast.h"
-#include "util.zlib_wrapper.h"
-
 #include "packed_stream.h"
-#include "texture.h"
 
 namespace xivres {
 	class texture_passthrough_packer : public passthrough_packer<packed::type::texture> {
@@ -31,7 +27,7 @@ namespace xivres {
 
 	class texture_compressing_packer : public compressing_packer<packed::type::texture> {
 	public:
-		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
+		[[nodiscard]] std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};
 }
 

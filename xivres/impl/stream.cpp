@@ -57,15 +57,20 @@ struct xivres::file_stream::Data {
 		: m_path(std::move(path))
 		, m_hFile(CreateFileW(m_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr)) {
 		if (m_hFile == INVALID_HANDLE_VALUE)
-			throw std::system_error(std::error_code(GetLastError(), std::system_category()));
+			throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
 
 		m_hDummyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-		if (m_hDummyEvent == 0) {
-			auto err = std::system_error(std::error_code(GetLastError(), std::system_category()));
+		if (m_hDummyEvent == nullptr) {
+			auto err = std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
 			CloseHandle(m_hFile);
 			throw std::move(err);
 		}
 	}
+
+	Data(Data&&) = delete;
+	Data(const Data&) = delete;
+	Data& operator=(Data&&) = delete;
+	Data& operator=(const Data&) = delete;
 
 	~Data() {
 		CloseHandle(m_hDummyEvent);
@@ -79,7 +84,7 @@ struct xivres::file_stream::Data {
 	}
 
 	std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const {
-		const int64_t ChunkSize = 0x10000000L;
+		constexpr int64_t ChunkSize = 0x10000000L;
 		if (length > ChunkSize) {
 			size_t totalRead = 0;
 			for (std::streamoff i = 0; i < length; i += ChunkSize) {
@@ -89,7 +94,7 @@ struct xivres::file_stream::Data {
 				if (r != toRead)
 					break;
 			}
-			return totalRead;
+			return static_cast<std::streamsize>(totalRead);
 
 		} else {
 			DWORD readLength = 0;
@@ -100,7 +105,7 @@ struct xivres::file_stream::Data {
 			if (!ReadFile(m_hFile, buf, static_cast<DWORD>(length), &readLength, &ov)) {
 				const auto err = GetLastError();
 				if (err != ERROR_HANDLE_EOF)
-					throw std::system_error(std::error_code(err, std::system_category()));
+					throw std::system_error(std::error_code(static_cast<int>(err), std::system_category()));
 			}
 			return readLength;
 		}
@@ -162,12 +167,14 @@ struct xivres::file_stream::Data {
 
 #endif
 
-xivres::file_stream::file_stream(std::filesystem::path path) : m_data(std::make_unique<Data>(std::move(path))) {}
+xivres::file_stream::file_stream(std::filesystem::path path) : m_data(std::make_unique<Data>(std::move(path))) {
+}
+
 xivres::file_stream::~file_stream() = default;
 std::streamsize xivres::file_stream::size() const { return m_data->size(); }
 std::streamsize xivres::file_stream::read(std::streamoff offset, void* buf, std::streamsize length) const { return m_data->read(offset, buf, length); }
 
-xivres::memory_stream& xivres::memory_stream::operator=(const memory_stream & r) {
+xivres::memory_stream& xivres::memory_stream::operator=(const memory_stream& r) {
 	if (r.owns_data()) {
 		m_buffer = r.m_buffer;
 		m_view = std::span(m_buffer);
@@ -178,37 +185,39 @@ xivres::memory_stream& xivres::memory_stream::operator=(const memory_stream & r)
 	return *this;
 }
 
-xivres::memory_stream& xivres::memory_stream::operator=(memory_stream && r) noexcept {
+xivres::memory_stream& xivres::memory_stream::operator=(memory_stream&& r) noexcept {
 	m_buffer = std::move(r.m_buffer);
-	m_view = std::move(r.m_view);
+	m_view = r.m_view;
 	r.m_view = {};
 	return *this;
 }
 
-xivres::memory_stream& xivres::memory_stream::operator=(const std::vector<uint8_t>&buf) {
+xivres::memory_stream& xivres::memory_stream::operator=(const std::vector<uint8_t>& buf) {
 	m_buffer = buf;
 	m_view = std::span(m_buffer);
 	return *this;
 }
 
-xivres::memory_stream& xivres::memory_stream::operator=(std::vector<uint8_t> && buf) noexcept {
+xivres::memory_stream& xivres::memory_stream::operator=(std::vector<uint8_t>&& buf) noexcept {
 	m_buffer = std::move(buf);
 	m_view = std::span(m_buffer);
 	return *this;
 }
 
-xivres::memory_stream::memory_stream(std::span<const uint8_t> view) : m_view(view) {}
+xivres::memory_stream::memory_stream(std::span<const uint8_t> view) : m_view(view) {
+}
 
-xivres::memory_stream::memory_stream(memory_stream && r) noexcept
-	: m_buffer(std::move(r.m_buffer)), m_view(std::move(r.m_view)) {
+xivres::memory_stream::memory_stream(memory_stream&& r) noexcept
+	: m_buffer(std::move(r.m_buffer)), m_view(r.m_view) {
 	r.m_view = {};
 }
 
-xivres::memory_stream::memory_stream(const memory_stream & r)
+xivres::memory_stream::memory_stream(const memory_stream& r)
 	: m_buffer(r.m_buffer)
-	, m_view(r.owns_data() ? std::span(m_buffer) : r.m_view) {}
+	, m_view(r.owns_data() ? std::span(m_buffer) : r.m_view) {
+}
 
-xivres::memory_stream::memory_stream(const stream & r)
+xivres::memory_stream::memory_stream(const stream& r)
 	: m_buffer(static_cast<size_t>(r.size()))
 	, m_view(std::span(m_buffer)) {
 	r.read_fully(0, std::span(m_buffer));
@@ -216,17 +225,18 @@ xivres::memory_stream::memory_stream(const stream & r)
 
 xivres::memory_stream::memory_stream(std::vector<uint8_t> buffer)
 	: m_buffer(std::move(buffer))
-	, m_view(m_buffer) {}
+	, m_view(m_buffer) {
+}
 
 std::streamsize xivres::memory_stream::size() const {
-	return m_view.size();
+	return static_cast<std::streamsize>(m_view.size());
 }
 
 std::streamsize xivres::memory_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
 	if (offset >= static_cast<std::streamoff>(m_view.size()))
 		return 0;
 	if (offset + length > static_cast<std::streamoff>(m_view.size()))
-		length = m_view.size() - offset;
+		length = static_cast<std::streamsize>(m_view.size() - offset);
 	std::copy_n(&m_view[static_cast<size_t>(offset)], static_cast<size_t>(length), static_cast<char*>(buf));
 	return length;
 }

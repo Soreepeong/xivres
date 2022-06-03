@@ -5,12 +5,10 @@
 #include <format>
 #include <mutex>
 #include <ranges>
-#include <string>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
-
-#include "util.span_cast.h"
 
 namespace xivres {
 	class xivstring {
@@ -113,15 +111,24 @@ namespace xivres {
 
 		class xivexpr {
 		public:
-			virtual size_t size() const = 0;
+			xivexpr() = default;
+			xivexpr(xivexpr&&) = default;
+			xivexpr(const xivexpr&) = default;
+			xivexpr& operator=(xivexpr&&) = default;
+			xivexpr& operator=(const xivexpr&) = default;
+			virtual ~xivexpr() = default;
 
-			virtual size_t encode(std::span<char> s) const = 0;
+			[[nodiscard]] virtual size_t size() const = 0;
 
-			virtual xivexpr_type type() const = 0;
+			[[nodiscard]] virtual size_t encode(std::span<char> s) const = 0;
 
-			virtual std::unique_ptr<xivexpr> clone() const = 0;
+			[[nodiscard]] virtual xivexpr_type type() const = 0;
 
-			static std::unique_ptr<xivexpr> parse(std::string_view s);
+			[[nodiscard]] virtual std::unique_ptr<xivexpr> clone() const = 0;
+
+			[[nodiscard]] static std::unique_ptr<xivexpr> parse(std::string_view s);
+
+			[[nodiscard]] virtual std::string repr() const = 0;
 		};
 
 		class xivexpr_uint32;
@@ -143,6 +150,10 @@ namespace xivres {
 			xivpayload(xivpayload&& r) = default;
 			xivpayload& operator=(const xivpayload& r);
 			xivpayload& operator=(xivpayload&& r) = default;
+			~xivpayload() = default;
+
+			std::string repr() const;
+
 			size_t size() const { return escape().size(); }
 			void type(xivpayload_type t) { m_type = t; }
 			xivpayload_type type() const { return m_type; }
@@ -165,24 +176,27 @@ namespace xivres {
 
 	public:
 		xivstring();
-		xivstring(xivstring&&);
+		xivstring(xivstring&&) noexcept;
 		xivstring(const xivstring&);
 		xivstring(std::string s);
 		xivstring(std::string s, std::vector<xivpayload> payloads);
-		xivstring& operator=(xivstring&&);
+		xivstring& operator=(xivstring&&) noexcept;
 		xivstring& operator=(const xivstring&);
+		~xivstring() = default;
 
-		bool operator==(const xivstring& r) { return escaped() == r.escaped(); }
-		bool operator!=(const xivstring& r) { return escaped() != r.escaped(); }
-		bool operator<(const xivstring& r) { return escaped() < r.escaped(); }
-		bool operator<=(const xivstring& r) { return escaped() <= r.escaped(); }
-		bool operator>(const xivstring& r) { return escaped() > r.escaped(); }
-		bool operator>=(const xivstring& r) { return escaped() >= r.escaped(); }
+		bool operator==(const xivstring& r) const { return escaped() == r.escaped(); }
+		bool operator!=(const xivstring& r) const { return escaped() != r.escaped(); }
+		bool operator<(const xivstring& r) const { return escaped() < r.escaped(); }
+		bool operator<=(const xivstring& r) const { return escaped() <= r.escaped(); }
+		bool operator>(const xivstring& r) const { return escaped() > r.escaped(); }
+		bool operator>=(const xivstring& r) const { return escaped() >= r.escaped(); }
 
 		bool use_newline_payload() const;
 		void use_newline_payload(bool enable);
 
 		bool empty() const;
+
+		std::string repr() const;
 
 		[[nodiscard]] const std::string& parsed() const;
 		xivstring& parsed(std::string s, std::vector<xivpayload> payloads);
@@ -196,7 +210,7 @@ namespace xivres {
 	private:
 		const std::string& parse() const;
 		const std::string& escape() const;
-		void verify_component_validity_or_throw(const std::string& parsed, const std::vector<xivpayload>& components);
+		void verify_component_validity_or_throw(const std::string& parsed, const std::vector<xivpayload>& components) const;
 	};
 
 	class xivstring::xivexpr_uint32 : public xivexpr {
@@ -208,22 +222,24 @@ namespace xivres {
 		xivexpr_uint32(const xivexpr_uint32& r) = default;
 		xivexpr_uint32& operator =(xivexpr_uint32&& r) = default;
 		xivexpr_uint32& operator =(const xivexpr_uint32& r) = default;
+		~xivexpr_uint32() override = default;
 
 		xivexpr_uint32(std::string_view s);
 		xivexpr_uint32(const std::string& s) : xivexpr_uint32(std::string_view(s)) {}
 
-		xivexpr_type type() const override { return static_cast<xivexpr_type>(m_value & 0xFF); }
+		[[nodiscard]] xivexpr_type type() const override { return static_cast<xivexpr_type>(m_value & 0xFF); }
 		xivexpr_uint32(uint32_t value) : m_value(value) {}
 		xivexpr_uint32& operator =(uint32_t r) { m_value = r; return *this; }
 		operator uint32_t() const { return m_value; }
 		uint32_t& operator*() { return m_value; }
 		uint32_t operator*() const { return m_value; }
-		uint32_t value() const { return m_value; }
+		[[nodiscard]] uint32_t value() const { return m_value; }
 
-		size_t size() const override;
-		size_t encode(std::span<char> s) const override;
+		[[nodiscard]] size_t size() const override;
+		[[nodiscard]] size_t encode(std::span<char> s) const override;
 
-		std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::string repr() const override;
 	};
 
 	class xivstring::xivexpr_string : public xivexpr {
@@ -235,6 +251,7 @@ namespace xivres {
 		xivexpr_string(const xivexpr_string&) = default;
 		xivexpr_string& operator=(xivexpr_string&&) = default;
 		xivexpr_string& operator=(const xivexpr_string&) = default;
+		~xivexpr_string() override = default;
 
 		xivexpr_string(std::string_view s);
 		xivexpr_string(const std::string& s) : xivexpr_string(std::string_view(s)) {}
@@ -251,6 +268,7 @@ namespace xivres {
 		size_t encode(std::span<char> s) const override;
 
 		std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::string repr() const override;
 	};
 
 	class xivstring::xivexpr_param : public xivexpr {
@@ -263,17 +281,19 @@ namespace xivres {
 		xivexpr_param(const xivexpr_param&) = default;
 		xivexpr_param& operator=(xivexpr_param&&) = default;
 		xivexpr_param& operator=(const xivexpr_param&) = default;
+		~xivexpr_param() override = default;
 
 		xivexpr_param(std::string_view s);
 		xivexpr_param(const std::string& s) : xivexpr_param(std::string_view(s)) {}
 
-		xivexpr_type type() const override { return m_type; }
+		[[nodiscard]] xivexpr_type type() const override { return m_type; }
 		void type(xivexpr_type v) { m_type = v; }
 
-		size_t size() const override;
-		size_t encode(std::span<char> s) const override;
+		[[nodiscard]] size_t size() const override;
+		[[nodiscard]] size_t encode(std::span<char> s) const override;
 
-		std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::string repr() const override;
 	};
 
 	class xivstring::xivexpr_unary : public xivexpr {
@@ -287,20 +307,22 @@ namespace xivres {
 		xivexpr_unary(const xivexpr_unary&);
 		xivexpr_unary& operator=(xivexpr_unary&&) = default;
 		xivexpr_unary& operator=(const xivexpr_unary&);
+		~xivexpr_unary() override = default;
 
 		xivexpr_unary(std::string_view s);
 		xivexpr_unary(const std::string& s) : xivexpr_unary(std::string_view(s)) {}
 
-		xivexpr_type type() const override { return m_type; }
+		[[nodiscard]] xivexpr_type type() const override { return m_type; }
 		void type(xivexpr_type v) { m_type = v; }
 		template<typename T, typename = std::enable_if_t<std::is_base_of_v<xivexpr, T>>>
 		T* operand() const { return static_cast<T*>(m_operand.get()); }
 		void operand(std::unique_ptr<xivexpr> value) { m_operand = std::move(value); }
 
-		size_t size() const override;
-		size_t encode(std::span<char> s) const override;
+		[[nodiscard]] size_t size() const override;
+		[[nodiscard]] size_t encode(std::span<char> s) const override;
 
-		std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::string repr() const override;
 	};
 
 	class xivstring::xivexpr_binary : public xivexpr {
@@ -315,11 +337,12 @@ namespace xivres {
 		xivexpr_binary(const xivexpr_binary&);
 		xivexpr_binary& operator=(xivexpr_binary&&) = default;
 		xivexpr_binary& operator=(const xivexpr_binary&);
+		~xivexpr_binary() override = default;
 
 		xivexpr_binary(std::string_view s);
 		xivexpr_binary(const std::string& s) : xivexpr_binary(std::string_view(s)) {}
 
-		xivexpr_type type() const override { return m_type; }
+		[[nodiscard]] xivexpr_type type() const override { return m_type; }
 		void type(xivexpr_type v) { m_type = v; }
 		template<typename T, typename = std::enable_if_t<std::is_base_of_v<xivexpr, T>>>
 		T* operand1() const { return static_cast<T*>(m_operand1.get()); }
@@ -328,10 +351,11 @@ namespace xivres {
 		T* operand2() const { return static_cast<T*>(m_operand2.get()); }
 		void operand2(std::unique_ptr<xivexpr> value) { m_operand2 = std::move(value); }
 
-		size_t size() const override;
-		size_t encode(std::span<char> s) const override;
+		[[nodiscard]] size_t size() const override;
+		[[nodiscard]] size_t encode(std::span<char> s) const override;
 
-		std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::unique_ptr<xivexpr> clone() const override { return std::make_unique<std::remove_cvref_t<decltype(*this)>>(*this); }
+		[[nodiscard]] std::string repr() const override;
 	};
 }
 

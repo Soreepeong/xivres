@@ -5,11 +5,9 @@
 #include <span>
 #include <vector>
 
+#include "stream.h"
 #include "util.byte_order.h"
 #include "util.span_cast.h"
-
-#include "common.h"
-#include "stream.h"
 
 namespace xivres {
 	class equipment_and_gimmick_parameter_file {
@@ -26,19 +24,21 @@ namespace xivres {
 
 			size_t populatedIndex = 0;
 			for (size_t i = 0; i < 64; i++) {
-				if (block_bits() & (uint64_t{ 1 } << i))
+				if (block_bits() & (uint64_t{1} << i))
 					m_populatedIndices.push_back(populatedIndex++);
 				else
 					m_populatedIndices.push_back(SIZE_MAX);
 			}
 		}
 
-		equipment_and_gimmick_parameter_file(const stream& strm) : equipment_and_gimmick_parameter_file(strm.read_vector<uint64_t>(0)) {}
+		equipment_and_gimmick_parameter_file(const stream& strm) : equipment_and_gimmick_parameter_file(strm.read_vector<uint64_t>(0)) {
+		}
 
 		equipment_and_gimmick_parameter_file(const equipment_and_gimmick_parameter_file&) = default;
 		equipment_and_gimmick_parameter_file(equipment_and_gimmick_parameter_file&&) noexcept = default;
 		equipment_and_gimmick_parameter_file& operator=(const equipment_and_gimmick_parameter_file& file) = default;
 		equipment_and_gimmick_parameter_file& operator=(equipment_and_gimmick_parameter_file&& file) noexcept = default;
+		~equipment_and_gimmick_parameter_file() = default;
 
 		void clear() {
 			m_data.clear();
@@ -49,39 +49,39 @@ namespace xivres {
 			m_populatedIndices[0] = 0;
 		}
 
-		const std::vector<uint64_t>& data() const {
+		[[nodiscard]] const std::vector<uint64_t>& data() const {
 			return m_data;
 		}
 
-		std::vector<uint8_t> data_bytes() const {
+		[[nodiscard]] std::vector<uint8_t> data_bytes() const {
 			std::vector<uint8_t> res(std::span(m_data).size_bytes());
 			memcpy(&res[0], &m_data[0], res.size());
 			return res;
 		}
 
-		uint64_t& block_bits() {
+		[[nodiscard]] uint64_t& block_bits() {
 			return m_data[0];
 		}
 
-		const uint64_t& block_bits() const {
+		[[nodiscard]] const uint64_t& block_bits() const {
 			return m_data[0];
 		}
 
-		std::span<uint64_t> block(size_t index) {
+		[[nodiscard]] std::span<uint64_t> block(size_t index) {
 			const auto populatedIndex = m_populatedIndices.at(index);
 			if (populatedIndex == SIZE_MAX)
 				return {};
 			return std::span(m_data).subspan(CountPerBlock * populatedIndex, CountPerBlock);
 		}
 
-		std::span<const uint64_t> block(size_t index) const {
+		[[nodiscard]] std::span<const uint64_t> block(size_t index) const {
 			const auto populatedIndex = m_populatedIndices.at(index);
 			if (populatedIndex == SIZE_MAX)
 				return {};
 			return std::span(m_data).subspan(CountPerBlock * populatedIndex, CountPerBlock);
 		}
 
-		uint64_t& parameter(size_t primaryId) {
+		[[nodiscard]] uint64_t& parameter(size_t primaryId) {
 			const auto blockIndex = primaryId / CountPerBlock;
 			const auto subIndex = primaryId % CountPerBlock;
 			const auto block = this->block(blockIndex);
@@ -90,11 +90,11 @@ namespace xivres {
 			return block[subIndex];
 		}
 
-		uint64_t parameter(size_t primaryId) const {
+		[[nodiscard]] uint64_t parameter(size_t primaryId) const {
 			return get_parameter(primaryId);
 		}
 
-		uint64_t get_parameter(size_t primaryId) const {
+		[[nodiscard]] uint64_t get_parameter(size_t primaryId) const {
 			const auto blockIndex = primaryId / CountPerBlock;
 			const auto subIndex = primaryId % CountPerBlock;
 			const auto block = this->block(blockIndex);
@@ -103,15 +103,15 @@ namespace xivres {
 			return block[subIndex];
 		}
 
-		std::span<uint8_t> paramter_bytes(size_t primaryId) {
+		[[nodiscard]] std::span<uint8_t> paramter_bytes(size_t primaryId) {
 			return util::span_cast<uint8_t>(m_data, primaryId, 8);
 		}
 
-		std::span<const uint8_t> paramter_bytes(size_t primaryId) const {
+		[[nodiscard]] std::span<const uint8_t> paramter_bytes(size_t primaryId) const {
 			return util::span_cast<uint8_t>(m_data, primaryId, 8);
 		}
 
-		equipment_and_gimmick_parameter_file expand_or_collapse(bool expand) const {
+		[[nodiscard]] equipment_and_gimmick_parameter_file expand_or_collapse(bool expand) const {
 			std::vector<uint64_t> newData;
 			newData.reserve(CountPerBlock * 64);
 
@@ -145,7 +145,7 @@ namespace xivres {
 			}
 			newData[0] = populatedBits;
 
-			return { newData };
+			return {newData};
 		}
 	};
 

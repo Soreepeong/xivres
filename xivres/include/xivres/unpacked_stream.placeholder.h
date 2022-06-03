@@ -11,7 +11,7 @@ namespace xivres {
 		std::optional<stream_as_packed_stream> m_provider;
 
 	public:
-		placeholder_unpacker(const xivres::packed::file_header& header, std::shared_ptr<const xivres::packed_stream> strm, std::span<uint8_t> headerRewrite = {});
+		placeholder_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm, std::span<uint8_t> headerRewrite = {});
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};

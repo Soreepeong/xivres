@@ -13,10 +13,11 @@
 namespace xivres::util {
 	class cancelled_error : public std::runtime_error {
 	public:
-		cancelled_error() : std::runtime_error("Cancelled") {}
+		cancelled_error() : std::runtime_error("Cancelled") {
+		}
 	};
 
-	template<typename TIdentifier = void*, typename TResult = void*, typename = std::enable_if_t<std::is_move_assignable_v<TIdentifier>&& std::is_move_assignable_v<TResult>>>
+	template<typename TIdentifier = void*, typename TResult = void*, typename = std::enable_if_t<std::is_move_assignable_v<TIdentifier> && std::is_move_assignable_v<TResult>>>
 	class thread_pool {
 		struct task_type {
 			std::optional<TIdentifier> Identifier;
@@ -51,6 +52,11 @@ namespace xivres::util {
 			m_threadRunning.resize(m_nThreads);
 		}
 
+		thread_pool(thread_pool&&) = delete;
+		thread_pool(const thread_pool&) = delete;
+		thread_pool& operator=(thread_pool&&) = delete;
+		thread_pool& operator=(const thread_pool&) = delete;
+
 		~thread_pool() {
 			if (IsAnyWorkerThreadRunning()) {
 				if (!m_bErrorOccurred) {
@@ -73,7 +79,7 @@ namespace xivres::util {
 					th.join();
 		}
 
-		size_t GetThreadCount() const {
+		[[nodiscard]] size_t GetThreadCount() const {
 			return m_nThreads;
 		}
 
@@ -85,11 +91,11 @@ namespace xivres::util {
 			m_onNewThreadCallbacks.emplace_back(std::move(cb));
 		}
 
-		bool ErrorOccurred() const {
+		[[nodiscard]] bool ErrorOccurred() const {
 			return m_bErrorOccurred;
 		}
 
-		const std::string& GetFirstError() const {
+		[[nodiscard]] const std::string& GetFirstError() const {
 			return m_sFirstError;
 		}
 
@@ -103,12 +109,8 @@ namespace xivres::util {
 				throw PropagatedError(m_sFirstError);
 		}
 
-		bool IsAnyWorkerThreadRunning() const {
-			for (const auto& b : m_threadRunning)
-				if (b)
-					return true;
-
-			return false;
+		[[nodiscard]] bool IsAnyWorkerThreadRunning() const {
+			return std::ranges::any_of(m_threadRunning, [](bool x) { return x; });
 		}
 
 		void Submit(std::function<TResult(size_t)> fn) {
@@ -122,7 +124,10 @@ namespace xivres::util {
 		void Submit(std::function<void(size_t)> fn) {
 			return Submit(task_type{
 				std::nullopt,
-				[fn = std::move(fn), this](size_t nThreadIndex){ fn(nThreadIndex); return TResult(); },
+				[fn = std::move(fn), this](size_t nThreadIndex) {
+					fn(nThreadIndex);
+					return TResult();
+				},
 			});
 		}
 
@@ -136,7 +141,7 @@ namespace xivres::util {
 		void Submit(std::function<TResult()> fn) {
 			return Submit(task_type{
 				std::nullopt,
-				[fn = std::move(fn), this](size_t){ return fn(); },
+				[fn = std::move(fn), this](size_t) { return fn(); },
 			});
 		}
 
@@ -144,14 +149,17 @@ namespace xivres::util {
 		void Submit(std::function<void()> fn) {
 			return Submit(task_type{
 				std::nullopt,
-				[fn = std::move(fn), this](size_t){ fn(); return TResult(); },
+				[fn = std::move(fn), this](size_t) {
+					fn();
+					return TResult();
+				},
 			});
 		}
 
 		void Submit(TIdentifier identifier, std::function<TResult()> fn) {
 			return Submit(task_type{
 				std::move(identifier),
-				[fn = std::move(fn), this](size_t){ return fn(); },
+				[fn = std::move(fn), this](size_t) { return fn(); },
 			});
 		}
 

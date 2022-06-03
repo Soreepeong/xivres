@@ -31,17 +31,16 @@ namespace xivres {
 			, m_partId(EmptyId)
 			, m_pathHash(EmptyHashValue)
 			, m_nameHash(EmptyHashValue)
-			, m_fullPathHash(EmptyHashValue)
-			, m_text() {}
+			, m_fullPathHash(EmptyHashValue) {}
 
 		path_spec(path_spec&& r) noexcept
 			: m_empty(r.m_empty)
 			, m_categoryId(r.m_categoryId)
 			, m_expacId(r.m_expacId)
 			, m_partId(r.m_partId)
-			, m_fullPathHash(r.m_fullPathHash)
 			, m_pathHash(r.m_pathHash)
 			, m_nameHash(r.m_nameHash)
+			, m_fullPathHash(r.m_fullPathHash)
 			, m_text(std::move(r.m_text)) {
 			r.Clear();
 		}
@@ -51,9 +50,9 @@ namespace xivres {
 			, m_categoryId(r.m_categoryId)
 			, m_expacId(r.m_expacId)
 			, m_partId(r.m_partId)
-			, m_fullPathHash(r.m_fullPathHash)
 			, m_pathHash(r.m_pathHash)
 			, m_nameHash(r.m_nameHash)
+			, m_fullPathHash(r.m_fullPathHash)
 			, m_text(r.m_text) {}
 
 		path_spec(uint32_t pathHash, uint32_t nameHash, uint32_t fullPathHash, uint8_t categoryId, uint8_t expacId, uint8_t partId)
@@ -68,9 +67,6 @@ namespace xivres {
 		path_spec(const char* fullPath) : path_spec(std::string(fullPath)) {}
 
 		path_spec(std::string fullPath) : path_spec() {
-			const auto test = crc32_z(0, reinterpret_cast<const uint8_t*>(&fullPath[0]), fullPath.size());
-
-			auto pos = fullPath.find('/');
 			std::vector<std::span<char>> parts;
 			size_t previousOffset = 0, offset;
 			while ((offset = fullPath.find_first_of("/\\", previousOffset)) != std::string::npos) {

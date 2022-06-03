@@ -1,4 +1,5 @@
 #include "../include/xivres.fontgen/wrapping_fixed_size_font.h"
+#include "xivres/util.unicode.h"
 
 char32_t xivres::fontgen::wrapping_fixed_size_font::translate_codepoint(char32_t codepoint) const {
 	if (const auto it = m_info->MappedCodepoints.find(codepoint); it != m_info->MappedCodepoints.end())

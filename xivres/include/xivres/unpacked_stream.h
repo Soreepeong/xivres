@@ -33,10 +33,10 @@ namespace xivres {
 
 			[[nodiscard]] bool complete() const { return m_remaining.empty(); }
 
-			[[nodiscard]] std::streamsize filled() const { return m_target.size() - m_remaining.size(); }
+			[[nodiscard]] std::streamsize filled() const { return static_cast<std::streamsize>(m_target.size() - m_remaining.size()); }
 
 		private:
-			void ensure_relative_offset(const uint32_t requestOffset);
+			void ensure_relative_offset(uint32_t requestOffset);
 		};
 
 		const std::shared_ptr<const packed_stream> m_stream;
@@ -44,14 +44,18 @@ namespace xivres {
 	public:
 		base_unpacker(std::shared_ptr<const packed_stream> strm)
 			: m_stream(std::move(strm)) {}
+		base_unpacker(base_unpacker&&) = delete;
+		base_unpacker(const base_unpacker&) = delete;
+		base_unpacker& operator=(base_unpacker&&) = delete;
+		base_unpacker& operator=(const base_unpacker&) = delete;
 
 		virtual std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) = 0;
 
 		virtual ~base_unpacker() = default;
 
-		static std::unique_ptr<base_unpacker> make_unique(std::shared_ptr<const packed_stream> strm, std::span<uint8_t> obfuscatedHeaderRewrite = {});
+		[[nodiscard]] static std::unique_ptr<base_unpacker> make_unique(std::shared_ptr<const packed_stream> strm, std::span<uint8_t> obfuscatedHeaderRewrite = {});
 
-		static std::unique_ptr<base_unpacker> make_unique(const packed::file_header& header, std::shared_ptr<const packed_stream> strm, std::span<uint8_t> obfuscatedHeaderRewrite = {});
+		[[nodiscard]] static std::unique_ptr<base_unpacker> make_unique(const packed::file_header& header, std::shared_ptr<const packed_stream> strm, std::span<uint8_t> obfuscatedHeaderRewrite = {});
 	};
 
 	class unpacked_stream : public default_base_stream {
@@ -88,7 +92,6 @@ namespace xivres {
 			if (offset + length > fullSize)
 				length = fullSize - offset;
 
-			const auto decompressedSize = *m_entryHeader.DecompressedSize;
 			auto read = m_decoder->read(offset, buf, length);
 			if (read != length)
 				std::fill_n(static_cast<char*>(buf) + read, length - read, 0);

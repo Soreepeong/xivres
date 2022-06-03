@@ -1,6 +1,7 @@
-#include <stdexcept>
-
 #include "../include/xivres/util.unicode.h"
+
+#include <array>
+#include <stdexcept>
 
 char32_t xivres::util::unicode::u8uint32_to_u32(uint32_t n) {
 	if ((n & 0xFFFFFF80) == 0)
@@ -28,9 +29,7 @@ char32_t xivres::util::unicode::u8uint32_to_u32(uint32_t n) {
 }
 
 uint32_t xivres::util::unicode::u32_to_u8uint32(char32_t codepoint) {
-	if (codepoint < 0)
-		throw std::invalid_argument("Negative codepoints are not valid.");
-	else if (codepoint <= 0x7F) {
+	if (codepoint <= 0x7F) {
 		return codepoint;
 	} else if (codepoint <= 0x7FF) {
 		return ((0xC0 | ((codepoint >> 6))) << 8)
@@ -7455,7 +7454,7 @@ std::span<const xivres::util::unicode::blocks::block_definition> xivres::util::u
 	 * Replace from: `^([0-9a-f]+)\.\.([0-9a-f]+); (.*?)$`
 	 * Replace to: `{ 0x$1, 0x$2, "$3", LTR },`
 	 */
-	static const std::array<xivres::util::unicode::blocks::block_definition, 321> Blocks{ {
+	static const std::array<block_definition, 321> Blocks{ {
 		{ 0x0000, 0x007F, "Basic Latin", LTR | UsedWithCombining },
 		{ 0x0080, 0x00FF, "Latin-1 Supplement", LTR | UsedWithCombining },
 		{ 0x0100, 0x017F, "Latin Extended-A", LTR | UsedWithCombining },

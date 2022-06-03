@@ -5,10 +5,8 @@
 #include <span>
 #include <vector>
 
-#include "util.byte_order.h"
-
-#include "common.h"
 #include "stream.h"
+#include "util.byte_order.h"
 
 namespace xivres::image_change_data {
 	enum class image_change_data_type : uint16_t {
@@ -66,11 +64,13 @@ namespace xivres::image_change_data {
 			return *this;
 		}
 
-		const std::vector<uint8_t>& data() const {
+		~file() = default;
+
+		[[nodiscard]] const std::vector<uint8_t>& data() const {
 			return m_data;
 		}
 
-		size_t entry_count_per_set() const {
+		[[nodiscard]] size_t entry_count_per_set() const {
 			size_t entryCountPerSet = 0;
 			for (size_t i = 0; i < 16; i++) {
 				if (static_cast<uint16_t>(*header().Type) & (1 << i))
@@ -79,27 +79,27 @@ namespace xivres::image_change_data {
 			return entryCountPerSet;
 		}
 
-		image_change_data::header& header() {
+		[[nodiscard]] header& header() {
 			return *reinterpret_cast<image_change_data::header*>(m_data.data());
 		}
 
-		const image_change_data::header& header() const {
+		[[nodiscard]] const image_change_data::header& header() const {
 			return *reinterpret_cast<const image_change_data::header*>(m_data.data());
 		}
 
-		image_change_data::entry& entry(size_t index) {
+		[[nodiscard]] entry& entry(size_t index) {
 			return reinterpret_cast<image_change_data::entry*>(m_data.data() + sizeof image_change_data::header)[index];
 		}
 
-		const image_change_data::entry& entry(size_t index) const {
+		[[nodiscard]] const image_change_data::entry& entry(size_t index) const {
 			return reinterpret_cast<const image_change_data::entry*>(m_data.data() + sizeof image_change_data::header)[index];
 		}
 
-		std::span<image_change_data::entry> entries() {
+		[[nodiscard]] std::span<image_change_data::entry> entries() {
 			return { reinterpret_cast<image_change_data::entry*>(m_data.data() + sizeof image_change_data::header), (m_data.size() - sizeof image_change_data::header) / sizeof image_change_data::entry };
 		}
 
-		std::span<const image_change_data::entry> entries() const {
+		[[nodiscard]] std::span<const image_change_data::entry> entries() const {
 			return { reinterpret_cast<const image_change_data::entry*>(m_data.data() + sizeof image_change_data::header), (m_data.size() - sizeof image_change_data::header) / sizeof image_change_data::entry };
 		}
 

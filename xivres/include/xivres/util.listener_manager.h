@@ -29,7 +29,12 @@ namespace xivres::util {
 
 		public:
 			ListenerManagerImplBase_(std::function<void(const CallbackType&)> onNewCallback = nullptr)
-				: m_onNewCallback(onNewCallback) {}
+				: m_onNewCallback(std::move(onNewCallback)) {}
+
+			ListenerManagerImplBase_(ListenerManagerImplBase_&&) = delete;
+			ListenerManagerImplBase_(const ListenerManagerImplBase_&) = delete;
+			ListenerManagerImplBase_& operator=(ListenerManagerImplBase_&&) = delete;
+			ListenerManagerImplBase_& operator=(const ListenerManagerImplBase_&) = delete;
 
 			virtual ~ListenerManagerImplBase_() {
 				std::lock_guard lock(*m_lock);
@@ -37,7 +42,7 @@ namespace xivres::util {
 				*m_destructed = true;
 			}
 
-			bool Empty() const {
+			[[nodiscard]] bool empty() const {
 				return m_callbacks.empty();
 			}
 

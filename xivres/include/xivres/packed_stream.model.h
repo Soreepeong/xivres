@@ -1,8 +1,6 @@
 #ifndef XIVRES_MODELPACKEDFILESTREAM_H_
 #define XIVRES_MODELPACKEDFILESTREAM_H_
 
-#include "util.zlib_wrapper.h"
-
 #include "packed_stream.h"
 
 namespace xivres {
@@ -29,7 +27,7 @@ namespace xivres {
 
 	class model_compressing_packer : public compressing_packer<packed::type::model> {
 	public:
-		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
+		[[nodiscard]] std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};
 }
 

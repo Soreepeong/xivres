@@ -1,5 +1,7 @@
 #include "../include/xivres/installation.h"
 
+#include <ranges>
+
 xivres::installation::installation(std::filesystem::path gamePath)
 	: m_gamePath(std::move(gamePath)) {
 	for (const auto& iter : std::filesystem::recursive_directory_iterator(m_gamePath / "sqpack")) {
@@ -25,7 +27,7 @@ std::shared_ptr<xivres::unpacked_stream> xivres::installation::get_file(const pa
 	return std::make_shared<unpacked_stream>(get_sqpack(pathSpec).packed_at(pathSpec), obfuscatedHeaderRewrite);
 }
 
-const std::vector<uint32_t> xivres::installation::get_sqpack_ids() const {
+std::vector<uint32_t> xivres::installation::get_sqpack_ids() const {
 	std::vector<uint32_t> res;
 	res.reserve(m_readers.size());
 	for (const auto& key : m_readers | std::views::keys)
@@ -37,8 +39,8 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint8_t categoryI
 	return get_sqpack((categoryId << 16) | (expacId << 8) | partId);
 }
 
-const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& raw_path_spec) const {
-	return get_sqpack(raw_path_spec.PackNameValue());
+const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& pathSpec) const {
+	return get_sqpack(pathSpec.PackNameValue());
 }
 
 const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) const {

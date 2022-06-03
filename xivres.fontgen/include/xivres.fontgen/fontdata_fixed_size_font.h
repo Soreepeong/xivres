@@ -3,9 +3,9 @@
 
 #include <vector>
 
-#include "xivres/installation.h"
-
 #include "fixed_size_font.h"
+#include "xivres/fontdata.h"
+#include "xivres/installation.h"
 
 namespace xivres::fontgen {
 	enum class game_font_family {

@@ -1,15 +1,9 @@
 #ifndef XIVRES_SQPACKGENERATOR_H_
 #define XIVRES_SQPACKGENERATOR_H_
 
-#include "util.listener_manager.h"
-
-#include "packed_stream.standard.h"
-#include "packed_stream.placeholder.h"
-#include "packed_stream.hotswap.h"
-#include "packed_stream.model.h"
-#include "unpacked_stream.h"
 #include "sqpack.reader.h"
-#include "packed_stream.texture.h"
+#include "unpacked_stream.h"
+#include "util.listener_manager.h"
 
 namespace xivres::sqpack {
 	class generator {
@@ -20,7 +14,7 @@ namespace xivres::sqpack {
 	public:
 		struct entry_info {
 			uint32_t EntrySize{};
-			sqpack::sqindex::data_locator Locator{};
+			sqindex::data_locator Locator{};
 
 			std::shared_ptr<packed_stream> Provider;
 		};
@@ -84,8 +78,8 @@ namespace xivres::sqpack {
 		std::map<path_spec, std::unique_ptr<entry_info>, path_spec::AllHashComparator> m_hashOnlyEntries;
 		std::map<path_spec, std::unique_ptr<entry_info>, path_spec::FullPathComparator> m_fullEntries;
 
-		std::vector<sqpack::sqindex::segment_3_entry> m_sqpackIndexSegment3;
-		std::vector<sqpack::sqindex::segment_3_entry> m_sqpackIndex2Segment3;
+		std::vector<sqindex::segment_3_entry> m_sqpackIndexSegment3;
+		std::vector<sqindex::segment_3_entry> m_sqpackIndex2Segment3;
 
 	public:
 		util::listener_manager<generator, void, const std::string&> Log;
@@ -98,11 +92,11 @@ namespace xivres::sqpack {
 		add_result add_file(path_spec pathSpec, const std::filesystem::path& path, bool overwriteExisting = true);
 		void reserve_space(path_spec pathSpec, uint32_t size);
 
-		sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr);
+		[[nodiscard]] sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr);
 		void export_to_files(const std::filesystem::path& dir, bool strict = false);
 
 		[[nodiscard]] std::unique_ptr<default_base_stream> get(const path_spec& pathSpec) const;
-		std::vector<path_spec> all_path_spec() const;
+		[[nodiscard]] std::vector<path_spec> all_path_spec() const;
 	};
 }
 

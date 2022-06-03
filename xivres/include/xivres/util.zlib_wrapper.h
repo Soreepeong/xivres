@@ -5,7 +5,6 @@
 #include <format>
 #include <stdexcept>
 #include <span>
-#include <system_error>
 #include <vector>
 #include <zlib.h>
 
@@ -28,7 +27,10 @@ namespace xivres::util {
 
 	public:
 		zlib_inflater(int windowBits = 15, int defaultBufferSize = 16384);
-
+		zlib_inflater(zlib_inflater&&) = delete;
+		zlib_inflater(const zlib_inflater&) = delete;
+		zlib_inflater& operator=(zlib_inflater&&) = delete;
+		zlib_inflater& operator=(const zlib_inflater&) = delete;
 		~zlib_inflater();
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source);
@@ -61,16 +63,19 @@ namespace xivres::util {
 			int memLevel = 8,
 			int strategy = Z_DEFAULT_STRATEGY,
 			size_t defaultBufferSize = 16384);
-
+		zlib_deflater(zlib_deflater&&) = delete;
+		zlib_deflater(const zlib_deflater&) = delete;
+		zlib_deflater& operator=(zlib_deflater&&) = delete;
+		zlib_deflater& operator=(const zlib_deflater&) = delete;
 		~zlib_deflater();
 
 		std::span<uint8_t> deflate(std::span<const uint8_t> source);
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source);
 
-		const std::span<uint8_t>& result() const;
+		[[nodiscard]] const std::span<uint8_t>& result() const;
 
-		std::vector<uint8_t>& result();
+		[[nodiscard]] std::vector<uint8_t>& result();
 	};
 }
 

@@ -2,37 +2,38 @@
 #define XIVRES_STREAM_H_
 
 #include <algorithm>
-#include <fstream>
+#include <filesystem>
 #include <functional>
 #include <mutex>
-#include <filesystem>
 #include <span>
-#include <type_traits>
 
-#include "util.byte_order.h"
 #include "util.span_cast.h"
-#include "util.h"
 
 namespace xivres {
 	class partial_view_stream;
-	
+
 	template<typename T>
 	using linear_reader = std::function<std::span<T>(size_t len, bool throwOnIncompleteRead)>;
 
 	class stream {
 	public:
+		stream() = default;
+		stream(stream&&) = default;
+		stream(const stream&) = default;
+		stream& operator=(stream&&) = default;
+		stream& operator=(const stream&) = default;
 		virtual ~stream() = default;
 
 		[[nodiscard]] virtual std::streamsize size() const = 0;
 
 		[[nodiscard]] virtual std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const = 0;
 
-		virtual std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const = 0;
+		[[nodiscard]] virtual std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const = 0;
 
 		void read_fully(std::streamoff offset, void* buf, std::streamsize length) const;
 
 		template<typename T>
-		T read_fully(std::streamoff offset) const {
+		[[nodiscard]] T read_fully(std::streamoff offset) const {
 			T buf{};
 			read_fully(offset, &buf, sizeof T);
 			return buf;
@@ -44,7 +45,7 @@ namespace xivres {
 		}
 
 		template<typename T>
-		std::vector<T> read_vector(std::streamoff offset, size_t count, size_t maxCount = SIZE_MAX) const {
+		[[nodiscard]] std::vector<T> read_vector(std::streamoff offset, size_t count, size_t maxCount = SIZE_MAX) const {
 			if (count > maxCount)
 				throw std::runtime_error("trying to read too many");
 			std::vector<T> result(count);
@@ -53,13 +54,13 @@ namespace xivres {
 		}
 
 		template<typename T>
-		std::vector<T> read_vector(size_t maxCount = SIZE_MAX) const {
+		[[nodiscard]] std::vector<T> read_vector(size_t maxCount = SIZE_MAX) const {
 			return read_vector<T>(0, (std::min)(maxCount, static_cast<size_t>(size() / sizeof T)));
 		}
 
 		template<typename T>
-		linear_reader<T> as_linear_reader() const {
-			return[this, buf = std::vector<T>(), ptr = uint64_t(), to = size()](size_t len, bool throwOnIncompleteRead) mutable {
+		[[nodiscard]] linear_reader<T> as_linear_reader() const {
+			return [this, buf = std::vector<T>(), ptr = uint64_t(), to = size()](size_t len, bool throwOnIncompleteRead) mutable {
 				if (ptr == to)
 					return std::span<T>();
 				buf.resize(static_cast<size_t>(std::min<uint64_t>(len, to - ptr)));
@@ -75,10 +76,11 @@ namespace xivres {
 	class default_base_stream : public stream, public std::enable_shared_from_this<default_base_stream> {
 	public:
 		default_base_stream() = default;
-		default_base_stream(stream&&) = delete;
-		default_base_stream(const stream&) = delete;
-		stream& operator=(stream&&) = delete;
-		stream& operator=(const stream&) = delete;
+		default_base_stream(default_base_stream&&) = default;
+		default_base_stream(const default_base_stream&) = default;
+		default_base_stream& operator=(default_base_stream&&) = default;
+		default_base_stream& operator=(const default_base_stream&) = default;
+		~default_base_stream() override = default;
 
 		std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const override;
 	};
@@ -97,10 +99,14 @@ namespace xivres {
 		partial_view_stream(const stream& strm, std::streamoff offset = 0, std::streamsize length = (std::numeric_limits<std::streamsize>::max)());
 		partial_view_stream(const partial_view_stream&);
 		partial_view_stream(std::shared_ptr<const stream> strm, std::streamoff offset = 0, std::streamsize length = (std::numeric_limits<std::streamsize>::max)());
+		partial_view_stream(partial_view_stream&&) = delete;
+		partial_view_stream& operator=(partial_view_stream&&) = delete;
+		partial_view_stream& operator=(const partial_view_stream&) = delete;
+		~partial_view_stream() override = default;
 
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
-		std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const override;
+		[[nodiscard]] std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const override;
 	};
 
 	class file_stream : public default_base_stream {
@@ -109,6 +115,10 @@ namespace xivres {
 
 	public:
 		file_stream(std::filesystem::path path);
+		file_stream(file_stream&&) = delete;
+		file_stream(const file_stream&) = delete;
+		file_stream& operator=(file_stream&&) = delete;
+		file_stream& operator=(const file_stream&) = delete;
 		~file_stream() override;
 
 		[[nodiscard]] std::streamsize size() const override;
@@ -130,6 +140,7 @@ namespace xivres {
 		memory_stream& operator=(const std::vector<uint8_t>& buf);
 		memory_stream& operator=(memory_stream&& r) noexcept;
 		memory_stream& operator=(const memory_stream& r);
+		~memory_stream() override = default;
 
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;

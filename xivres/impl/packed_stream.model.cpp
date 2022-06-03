@@ -1,6 +1,10 @@
 #include "../include/xivres/packed_stream.model.h"
-#include "../include/xivres/util.thread_pool.h"
+
+#include <ranges>
+
 #include "../include/xivres/model.h"
+#include "../include/xivres/util.thread_pool.h"
+#include "../include/xivres/util.zlib_wrapper.h"
 
 xivres::model_passthrough_packer::model_passthrough_packer(std::shared_ptr<const stream> strm)
 	: passthrough_packer<packed::type::model>(std::move(strm)) {}
@@ -44,7 +48,7 @@ void xivres::model_passthrough_packer::ensure_initialized() {
 		const auto firstBlockIndex = static_cast<uint16_t>(m_blockOffsets.size());
 		alignedBlock.IterateChunked([&](auto, uint32_t offset, uint32_t size) {
 			m_blockOffsets.push_back(getNextBlockOffset());
-			m_blockDataSizes.push_back(size);
+			m_blockDataSizes.push_back(static_cast<uint16_t>(size));
 			m_paddedBlockSizes.push_back(static_cast<uint32_t>(align(sizeof packed::block_header + size)));
 			m_actualFileOffsets.push_back(offset);
 		}, baseFileOffset);
@@ -186,7 +190,7 @@ std::streamsize xivres::model_passthrough_packer::translate_read(std::streamoff 
 
 		if (relativeOffset < m_blockDataSizes[i]) {
 			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(m_blockDataSizes[i] - relativeOffset));
-			m_stream->read_fully(m_actualFileOffsets[i] + relativeOffset, &out[0], available);
+			m_stream->read_fully(static_cast<std::streamoff>(m_actualFileOffsets[i] + relativeOffset), &out[0], static_cast<std::streamsize>(available));
 			out = out.subspan(available);
 			relativeOffset = 0;
 
@@ -216,7 +220,7 @@ std::streamsize xivres::model_passthrough_packer::translate_read(std::streamoff 
 		}
 	}
 
-	return length - out.size_bytes();
+	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
 std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const stream& strm, int compressionLevel) const {
@@ -285,9 +289,9 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const str
 
 	size_t totalBlockCount = 0, entryBodyLength = 0;
 	for (const auto& set : blockDataList) {
-		for (const auto& block : set) {
+		for (const auto& blockData : set | std::views::values) {
 			totalBlockCount++;
-			entryBodyLength += align(sizeof packed::block_header + block.second.size());
+			entryBodyLength += align(sizeof packed::block_header + blockData.size());
 		}
 	}
 	const auto entryHeaderLength = static_cast<uint16_t>(align(0
@@ -338,7 +342,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const str
 				header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : packed::block_header::CompressedSizeNotCompressed;
 				header.DecompressedSize = static_cast<uint32_t>(length);
 
-				std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
+				std::ranges::copy(targetBuf, resultDataPtr + sizeof header);
 
 				const auto alloc = static_cast<uint16_t>(align(sizeof header + targetBuf.size()));
 

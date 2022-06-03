@@ -3,8 +3,6 @@
 
 #include "util.byte_order.h"
 
-#include "common.h"
-
 namespace xivres::texture {
 	enum class format : uint32_t {
 		Unknown = 0,
@@ -28,7 +26,7 @@ namespace xivres::texture {
 	struct header {
 		LE<uint16_t> Unknown1;
 		LE<uint16_t> HeaderSize;
-		LE<texture::format> Type;
+		LE<format> Type;
 		LE<uint16_t> Width;
 		LE<uint16_t> Height;
 		LE<uint16_t> Depth;
@@ -36,9 +34,9 @@ namespace xivres::texture {
 		char Unknown2[0xC]{};
 	};
 
-	size_t calc_raw_data_length(texture::format type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);
+	[[nodiscard]] size_t calc_raw_data_length(format type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);
 
-	size_t calc_raw_data_length(const texture::header& header, size_t mipmapIndex = 0);
+	[[nodiscard]] size_t calc_raw_data_length(const header& header, size_t mipmapIndex = 0);
 }
 
 #endif

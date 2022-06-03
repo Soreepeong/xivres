@@ -3,14 +3,11 @@
 
 #include <format>
 #include <numeric>
-
 #include <zlib.h>
 
 #include "common.h"
 #include "util.byte_order.h"
 #include "util.sha1.h"
-#include "util.span_cast.h"
-#include "util.h"
 
 namespace xivres::sqpack {
 	enum class file_type : uint32_t {
@@ -29,17 +26,18 @@ namespace xivres::sqpack {
 
 		char Signature[12]{};
 		LE<uint32_t> HeaderSize;
-		LE<uint32_t> Unknown1;  // 1
-		LE<sqpack::file_type> Type;
+		LE<uint32_t> Unknown1; // 1
+		LE<file_type> Type;
 		LE<uint32_t> YYYYMMDD;
 		LE<uint32_t> Time;
-		LE<uint32_t> Unknown2;  // Intl: 0xFFFFFFFF, KR/CN: 1
+		LE<uint32_t> Unknown2; // Intl: 0xFFFFFFFF, KR/CN: 1
 		char Padding_0x024[0x3c0 - 0x024]{};
 		sha1_value Sha1;
 		char Padding_0x3D4[0x2c]{};
 
-		void verify_or_throw(sqpack::file_type supposedType) const;
+		void verify_or_throw(file_type supposedType) const;
 	};
+
 	static_assert(offsetof(header, Sha1) == 0x3c0, "Bad sqpack::header definition");
 	static_assert(sizeof(header) == 1024);
 }
@@ -52,10 +50,12 @@ namespace xivres::sqpack::sqindex {
 		sha1_value Sha1;
 		char Padding_0x020[0x28]{};
 	};
+
 	static_assert(sizeof segment_descriptor == 0x48);
 
 	union data_locator {
 		uint32_t Value;
+
 		struct {
 			uint32_t IsSynonym : 1;
 			uint32_t DatFileIndex : 3;
@@ -63,16 +63,12 @@ namespace xivres::sqpack::sqindex {
 		};
 
 		static data_locator Synonym() {
-			return { 1 };
+			return {1};
 		}
 
-		data_locator(const data_locator& r)
-			: IsSynonym(r.IsSynonym)
-			, DatFileIndex(r.DatFileIndex)
-			, DatFileOffsetBy8(r.DatFileOffsetBy8) {}
-
 		data_locator(uint32_t value = 0)
-			: Value(value) {}
+			: Value(value) {
+		}
 
 		data_locator(uint32_t index, uint64_t offset)
 			: IsSynonym(0)
@@ -83,6 +79,12 @@ namespace xivres::sqpack::sqindex {
 			if (offset / 8 > UINT32_MAX)
 				throw std::invalid_argument("Offset is too big.");
 		}
+		
+		data_locator(data_locator&&) = default;
+		data_locator(const data_locator&) = default;
+		data_locator& operator=(data_locator&&) = default;
+		data_locator& operator=(const data_locator&) = default;
+		~data_locator() = default;
 
 		[[nodiscard]] uint64_t offset() const {
 			return 1ULL * DatFileOffsetBy8 * EntryAlignment;
@@ -114,7 +116,7 @@ namespace xivres::sqpack::sqindex {
 	struct pair_hash_locator {
 		LE<uint32_t> NameHash;
 		LE<uint32_t> PathHash;
-		sqpack::sqindex::data_locator Locator;
+		data_locator Locator;
 		LE<uint32_t> Padding;
 
 		bool operator<(const pair_hash_locator& r) const {
@@ -127,7 +129,7 @@ namespace xivres::sqpack::sqindex {
 
 	struct full_hash_locator {
 		LE<uint32_t> FullPathHash;
-		sqpack::sqindex::data_locator Locator;
+		data_locator Locator;
 
 		bool operator<(const full_hash_locator& r) const {
 			return FullPathHash < r.FullPathHash;
@@ -156,7 +158,7 @@ namespace xivres::sqpack::sqindex {
 		// TODO: following two can actually be in reverse order; find it out when the game data file actually contains a conflict in .index file
 		LE<uint32_t> NameHash;
 		LE<uint32_t> PathHash;
-		xivres::sqpack::sqindex::data_locator Locator;
+		data_locator Locator;
 		LE<uint32_t> ConflictIndex;
 		char FullPath[0xF0];
 	};
@@ -166,7 +168,7 @@ namespace xivres::sqpack::sqindex {
 
 		LE<uint32_t> FullPathHash;
 		LE<uint32_t> UnusedHash;
-		xivres::sqpack::sqindex::data_locator Locator;
+		data_locator Locator;
 		LE<uint32_t> ConflictIndex;
 		char FullPath[0xF0];
 	};
@@ -209,18 +211,20 @@ namespace xivres::sqpack::sqindex {
 
 		void verify_or_throw(sqindex_type expectedIndexType) const;
 	};
+
 	static_assert(sizeof(header) == 1024);
 }
 
 namespace xivres::sqdata {
 	struct header {
-		static constexpr uint32_t MaxFileSize_Value = 0x77359400;  // 2GB
-		static constexpr uint64_t MaxFileSize_MaxValue = 0x800000000ULL;  // 32GiB, maximum addressable via how LEDataLocator works
+		static constexpr uint32_t MaxFileSize_Value = 0x77359400; // 2GB
+		static constexpr uint64_t MaxFileSize_MaxValue = 0x800000000ULL; // 32GiB, maximum addressable via how LEDataLocator works
 		static constexpr uint32_t Unknown1_Value = 0x10;
 
 		LE<uint32_t> HeaderSize;
 		LE<uint32_t> Null1;
 		LE<uint32_t> Unknown1;
+
 		union DataSizeDivBy8Type {
 			LE<uint32_t> RawValue;
 
@@ -240,17 +244,18 @@ namespace xivres::sqdata {
 			[[nodiscard]] uint64_t value() const {
 				return 1ULL * RawValue * EntryAlignment;
 			}
-		} DataSize;  // From end of this header to EOF
-		LE<uint32_t> SpanIndex;  // 0x01 = .dat0, 0x02 = .dat1, 0x03 = .dat2, ...
+		} DataSize; // From end of this header to EOF
+		LE<uint32_t> SpanIndex; // 0x01 = .dat0, 0x02 = .dat1, 0x03 = .dat2, ...
 		LE<uint32_t> Null2;
 		LE<uint64_t> MaxFileSize;
-		sha1_value DataSha1;  // From end of this header to EOF
+		sha1_value DataSha1; // From end of this header to EOF
 		char Padding_0x034[0x3c0 - 0x034]{};
 		sha1_value Sha1;
 		char Padding_0x3D4[0x2c]{};
 
 		void verify_or_throw(uint32_t expectedSpanIndex) const;
 	};
+
 	static_assert(offsetof(header, Sha1) == 0x3c0, "Bad SqDataHeader definition");
 }
 
@@ -275,7 +280,7 @@ namespace xivres::packed {
 		static file_header new_empty(uint64_t decompressedSize = 0, uint64_t compressedSize = 0) {
 			file_header res{
 				.HeaderSize = static_cast<uint32_t>(align(sizeof file_header)),
-				.Type = packed::type::placeholder,
+				.Type = type::placeholder,
 				.DecompressedSize = static_cast<uint32_t>(decompressedSize),
 				.BlockCountOrVersion = static_cast<uint32_t>(compressedSize),
 			};
@@ -303,15 +308,15 @@ namespace xivres::packed {
 		LE<uint32_t> CompressedSize;
 		LE<uint32_t> DecompressedSize;
 
-		bool compressed() const {
+		[[nodiscard]] bool compressed() const {
 			return *CompressedSize != CompressedSizeNotCompressed;
 		}
 
-		uint32_t packed_data_size() const {
+		[[nodiscard]] uint32_t packed_data_size() const {
 			return *CompressedSize == CompressedSizeNotCompressed ? DecompressedSize : CompressedSize;
 		}
 
-		uint32_t total_block_size() const {
+		[[nodiscard]] uint32_t total_block_size() const {
 			return sizeof block_header + packed_data_size();
 		}
 	};
@@ -359,10 +364,11 @@ namespace xivres::packed {
 		LE<uint8_t> EnableEdgeGeometry;
 		LE<uint8_t> Padding;
 	};
+
 	static_assert(sizeof model_block_locator == 184);
 
 	static constexpr uint16_t MaxBlockDataSize = 16000;
-	static constexpr uint16_t MaxBlockValidSize = MaxBlockDataSize + sizeof packed::block_header;
+	static constexpr uint16_t MaxBlockValidSize = MaxBlockDataSize + sizeof block_header;
 	static constexpr uint16_t MaxBlockPadSize = (EntryAlignment - MaxBlockValidSize) % EntryAlignment;
 	static constexpr uint16_t MaxBlockSize = MaxBlockValidSize + MaxBlockPadSize;
 }

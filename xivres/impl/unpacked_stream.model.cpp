@@ -1,12 +1,13 @@
 #include "../include/xivres/unpacked_stream.model.h"
 #include "../include/xivres/model.h"
 
-xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm) : base_unpacker(std::move(strm)) {
+xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
+	: base_unpacker(std::move(strm)) {
 	const auto AsHeader = [this]() -> model::header& { return *reinterpret_cast<model::header*>(&m_head[0]); };
 
 	const auto underlyingSize = m_stream->size();
 	uint64_t readOffset = sizeof packed::file_header;
-	const auto locator = m_stream->read_fully<packed::model_block_locator>(readOffset);
+	const auto locator = m_stream->read_fully<packed::model_block_locator>(static_cast<std::streamoff>(readOffset));
 	const auto blockCount = static_cast<size_t>(locator.FirstBlockIndices.Index[2]) + locator.BlockCount.Index[2];
 
 	readOffset += sizeof locator;
@@ -17,7 +18,7 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 			.PaddedChunkSize = blockSize,
 			.GroupIndex = UINT16_MAX,
 			.GroupBlockIndex = 0,
-			});
+		});
 	}
 
 	m_head.resize(sizeof model::header);

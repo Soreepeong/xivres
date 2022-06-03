@@ -3,11 +3,13 @@
 xivres::placeholder_packed_stream::placeholder_packed_stream(xivres::path_spec pathSpec, std::shared_ptr<const stream> strm, uint32_t decompressedSize)
 	: packed_stream(std::move(pathSpec))
 	, m_stream(std::move(strm))
-	, m_header(packed::file_header::new_empty(decompressedSize == UINT32_MAX ? static_cast<uint32_t>(m_stream->size()) : decompressedSize, static_cast<size_t>(m_stream->size()))) {}
+	, m_header(packed::file_header::new_empty(decompressedSize == UINT32_MAX ? static_cast<uint32_t>(m_stream->size()) : decompressedSize, static_cast<size_t>(m_stream->size()))) {
+}
 
 xivres::placeholder_packed_stream::placeholder_packed_stream(xivres::path_spec pathSpec)
 	: packed_stream(std::move(pathSpec))
-	, m_header(packed::file_header::new_empty()) {}
+	, m_header(packed::file_header::new_empty()) {
+}
 
 std::streamsize xivres::placeholder_packed_stream::size() const {
 	return m_header.HeaderSize + (m_stream ? align(m_stream->size()).Alloc : 0);
@@ -45,7 +47,7 @@ std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, v
 	if (const auto dataSize = m_stream ? m_stream->size() : 0) {
 		if (relativeOffset < dataSize) {
 			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(dataSize - relativeOffset));
-			m_stream->read_fully(relativeOffset, &out[0], available);
+			m_stream->read_fully(relativeOffset, &out[0], static_cast<std::streamsize>(available));
 			out = out.subspan(available);
 			relativeOffset = 0;
 
@@ -59,14 +61,13 @@ std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, v
 			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(pad));
 			std::fill_n(out.begin(), available, 0);
 			out = out.subspan(available);
-			relativeOffset = 0;
+			// relativeOffset = 0;
 
 			if (out.empty()) return length;
-		} else
-			relativeOffset -= pad;
+		} // else relativeOffset -= pad;
 	}
 
-	return length - out.size_bytes();
+	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
 xivres::packed::type xivres::placeholder_packed_stream::get_packed_type() const {
@@ -74,6 +75,6 @@ xivres::packed::type xivres::placeholder_packed_stream::get_packed_type() const 
 }
 
 const xivres::placeholder_packed_stream& xivres::placeholder_packed_stream::instance() {
-	static const placeholder_packed_stream s_instance{ xivres::path_spec() };
+	static const placeholder_packed_stream s_instance{xivres::path_spec()};
 	return s_instance;
 }

@@ -2,6 +2,7 @@
 #define XIVRES_FONTGENERATOR_TEXTMEASURER_H_
 
 #include "fixed_size_font.h"
+#include "xivres/util.unicode.h"
 
 namespace xivres::fontgen {
 	struct text_measure_result {

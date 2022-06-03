@@ -2,10 +2,10 @@
 #define XIVRES_INTERNAL_MISC_H_
 
 #include <algorithm>
-#include <type_traits>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace xivres::util {

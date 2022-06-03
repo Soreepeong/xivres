@@ -1,13 +1,8 @@
 #ifndef XIVRES_Fontdata_H_
 #define XIVRES_Fontdata_H_
 
-#include <map>
-#include <stdexcept>
-
-#include "util.byte_order.h"
-
-#include "common.h"
 #include "stream.h"
+#include "util.byte_order.h"
 #include "util.unicode.h"
 
 namespace xivres::fontdata {
@@ -21,6 +16,7 @@ namespace xivres::fontdata {
 		LE<uint32_t> KerningHeaderOffset;
 		uint8_t Padding_0x10[0x10]{};
 	};
+
 	static_assert(sizeof header == 0x20);
 
 	struct glyph_table_header {
@@ -34,14 +30,15 @@ namespace xivres::fontdata {
 		uint8_t Padding_0x0C[4]{};
 		LE<uint16_t> TextureWidth;
 		LE<uint16_t> TextureHeight;
-		LE<float> Size{ 0.f };
+		LE<float> Size{0.f};
 		LE<uint32_t> LineHeight;
 		LE<uint32_t> Ascent;
 	};
+
 	static_assert(sizeof glyph_table_header == 0x20);
 
 	struct glyph_entry {
-		static constexpr size_t ChannelMap[4]{ 2, 1, 0, 3 };
+		static constexpr size_t ChannelMap[4]{2, 1, 0, 3};
 
 		LE<uint32_t> Utf8Value;
 		LE<uint16_t> ShiftJisValue;
@@ -63,11 +60,11 @@ namespace xivres::fontdata {
 			return newValue;
 		}
 
-		uint16_t texture_file_index() const {
+		[[nodiscard]] uint16_t texture_file_index() const {
 			return *TextureIndex >> 2;
 		}
 
-		uint16_t texture_plane_index() const {
+		[[nodiscard]] uint16_t texture_plane_index() const {
 			return *TextureIndex & 3;
 		}
 
@@ -79,6 +76,7 @@ namespace xivres::fontdata {
 			return *Utf8Value <=> r;
 		}
 	};
+
 	static_assert(sizeof glyph_entry == 0x10);
 
 	struct kerning_header {
@@ -90,6 +88,7 @@ namespace xivres::fontdata {
 		LE<uint32_t> EntryCount;
 		uint8_t Padding_0x08[8]{};
 	};
+
 	static_assert(sizeof kerning_header == 0x10);
 
 	struct kerning_entry {
@@ -125,6 +124,7 @@ namespace xivres::fontdata {
 			return *RightUtf8Value <=> *r.RightUtf8Value;
 		}
 	};
+
 	static_assert(sizeof kerning_entry == 0x10);
 
 	class stream : public default_base_stream {

@@ -72,7 +72,7 @@ void xivres::excel::type2gen::set_row(uint32_t id, game_language language, std::
 		target = std::move(row);
 }
 
-std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) const {
+std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, const std::map<uint32_t, std::vector<char>>& rows, game_language language) const {
 	exd::header exdHeader;
 	const auto exdHeaderSpan = span_cast<char>(1, &exdHeader);
 	memcpy(exdHeader.Signature, exd::header::Signature_Value, 4);
@@ -112,7 +112,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 	for (const auto id : Data | std::views::keys) {
 		if (pages.empty()) {
 			pages.emplace_back();
-		} else if (pages.back().second.size() == DivideUnit || DivideAtIds.find(id) != DivideAtIds.end()) {
+		} else if (pages.back().second.size() == DivideUnit || DivideAtIds.contains(id)) {
 			pages.back().first.RowCountWithSkip = pages.back().second.back() - pages.back().second.front() + 1;
 			pages.emplace_back();
 		}
@@ -137,10 +137,10 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 
 				auto sourceLanguage = language;
 				auto& rowSet = Data[id];
-				if (rowSet.find(sourceLanguage) == rowSet.end()) {
+				if (!rowSet.contains(sourceLanguage)) {
 					sourceLanguage = game_language::Unspecified;
 					for (auto lang : FillMissingLanguageFrom) {
-						if (rowSet.find(lang) == rowSet.end()) {
+						if (!rowSet.contains(lang)) {
 							sourceLanguage = lang;
 							break;
 						}
@@ -221,7 +221,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 			}
 			if (rows.empty())
 				continue;
-			result.emplace(flush(page.first.StartId, std::move(rows), language));
+			result.emplace(flush(page.first.StartId, rows, language));
 		}
 	}
 

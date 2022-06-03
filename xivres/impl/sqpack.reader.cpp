@@ -20,9 +20,9 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_1_t
 	return it->Locator;
 }
 
-xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool strictVerify) : sqindex_type<sqpack::sqindex::pair_hash_locator, sqpack::sqindex::pair_hash_with_text_locator>(strm, strictVerify) {
+xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool strictVerify) : sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(strm, strictVerify) {
 	if (strictVerify) {
-		if (index_header().PathHashLocatorSegment.Size % sizeof sqpack::sqindex::path_hash_locator)
+		if (index_header().PathHashLocatorSegment.Size % sizeof sqindex::path_hash_locator)
 			throw bad_data_error("PathHashLocators has an invalid size alignment");
 		index_header().PathHashLocatorSegment.Sha1.verify(pair_hash_locators(), "PathHashLocatorSegment has invalid data SHA-1");
 	}
@@ -36,7 +36,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_2_t
 }
 
 xivres::sqpack::reader::sqindex_2_type::sqindex_2_type(const stream& strm, bool strictVerify)
-	: sqindex_type<sqpack::sqindex::full_hash_locator, sqpack::sqindex::full_hash_with_text_locator>(strm, strictVerify) {
+	: sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>(strm, strictVerify) {
 
 }
 
@@ -46,7 +46,7 @@ xivres::sqpack::reader::sqdata_type::sqdata_type(std::shared_ptr<stream> strm, c
 	Stream->read_fully(0, &Header, sizeof Header + sizeof DataHeader);
 	if (strictVerify) {
 		if (datIndex == 0) {
-			Header.verify_or_throw(sqpack::file_type::SqData);
+			Header.verify_or_throw(file_type::SqData);
 			DataHeader.verify_or_throw(datIndex + 1);
 		}
 	}
@@ -60,13 +60,13 @@ xivres::sqpack::reader::sqdata_type::sqdata_type(std::shared_ptr<stream> strm, c
 	}
 }
 
-xivres::sqpack::reader::reader(const std::string& fileName, std::shared_ptr<stream> indexStream1, std::shared_ptr<stream> indexStream2, std::vector<std::shared_ptr<stream>> dataStreams, bool strictVerify)
-	: Index1(*indexStream1, strictVerify)
-	, Index2(*indexStream2, strictVerify)
+xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexStream1, const stream& indexStream2, std::vector<std::shared_ptr<stream>> dataStreams, bool strictVerify)
+	: Index1(indexStream1, strictVerify)
+	, Index2(indexStream2, strictVerify)
 	, CategoryId(static_cast<uint8_t>(std::strtol(fileName.substr(0, 2).c_str(), nullptr, 16)))
 	, ExpacId(static_cast<uint8_t>(std::strtol(fileName.substr(2, 2).c_str(), nullptr, 16)))
 	, PartId(static_cast<uint8_t>(std::strtol(fileName.substr(4, 2).c_str(), nullptr, 16))) {
-	std::vector<std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>> offsets1;
+	std::vector<std::pair<sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>> offsets1;
 	offsets1.reserve(
 		(std::max)(Index1.hash_locators().size() + Index1.text_locators().size(), Index2.hash_locators().size() + Index2.text_locators().size())
 		+ Index1.index_header().TextLocatorSegment.Count
@@ -77,7 +77,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, std::shared_ptr<stre
 	for (const auto& item : Index1.text_locators())
 		offsets1.emplace_back(item.Locator, std::make_tuple(item.PathHash, item.NameHash, item.FullPath));
 
-	std::vector<std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, const char*>>> offsets2;
+	std::vector<std::pair<sqindex::data_locator, std::tuple<uint32_t, const char*>>> offsets2;
 	for (const auto& item : Index2.hash_locators())
 		if (!item.Locator.IsSynonym)
 			offsets2.emplace_back(item.Locator, std::make_tuple(item.FullPathHash, static_cast<const char*>(nullptr)));
@@ -93,13 +93,13 @@ xivres::sqpack::reader::reader(const std::string& fileName, std::shared_ptr<stre
 			dataStreams[i],
 			i,
 			strictVerify,
-			});
-		offsets1.emplace_back(sqpack::sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, UINT32_MAX, static_cast<const char*>(nullptr)));
-		offsets2.emplace_back(sqpack::sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, static_cast<const char*>(nullptr)));
+		});
+		offsets1.emplace_back(sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, UINT32_MAX, static_cast<const char*>(nullptr)));
+		offsets2.emplace_back(sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, static_cast<const char*>(nullptr)));
 	}
 
 	struct Comparator {
-		bool operator()(const sqpack::sqindex::data_locator& l, const sqpack::sqindex::data_locator& r) const {
+		bool operator()(const sqindex::data_locator& l, const sqindex::data_locator& r) const {
 			if (l.DatFileIndex != r.DatFileIndex)
 				return l.DatFileIndex < r.DatFileIndex;
 			if (l.offset() != r.offset())
@@ -107,11 +107,11 @@ xivres::sqpack::reader::reader(const std::string& fileName, std::shared_ptr<stre
 			return false;
 		}
 
-		bool operator()(const std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>& l, const std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>& r) const {
+		bool operator()(const std::pair<sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>& l, const std::pair<sqindex::data_locator, std::tuple<uint32_t, uint32_t, const char*>>& r) const {
 			return (*this)(l.first, r.first);
 		}
 
-		bool operator()(const std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, const char*>>& l, const std::pair<sqpack::sqindex::data_locator, std::tuple<uint32_t, const char*>>& r) const {
+		bool operator()(const std::pair<sqindex::data_locator, std::tuple<uint32_t, const char*>>& l, const std::pair<sqindex::data_locator, std::tuple<uint32_t, const char*>>& r) const {
 			return (*this)(l.first, r.first);
 		}
 
@@ -133,14 +133,14 @@ xivres::sqpack::reader::reader(const std::string& fileName, std::shared_ptr<stre
 		}
 	}
 
-	xivres::path_spec pathSpec;
+	path_spec pathSpec;
 	for (size_t curr = 1, prev = 0; curr < offsets1.size(); ++curr, ++prev) {
 
 		// Skip dummy items to mark end of individual .dat file.
 		if (offsets1[prev].first.DatFileIndex != offsets1[curr].first.DatFileIndex)
 			continue;
 
-		Entries.emplace_back(entry_info{ .Locator = offsets1[prev].first, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset() });
+		Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
 		if (std::get<2>(offsets1[prev].second))
 			Entries.back().path_spec = path_spec(std::get<2>(offsets1[prev].second));
 		else if (std::get<1>(offsets2[prev].second))
@@ -168,14 +168,16 @@ xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::
 		dataStreams.emplace_back(std::make_shared<file_stream>(dataPath));
 	}
 
-	return sqpack::reader(indexFile.filename().string(),
-		std::make_shared<file_stream>(std::filesystem::path(indexFile).replace_extension(".index")),
-		std::make_shared<file_stream>(std::filesystem::path(indexFile).replace_extension(".index2")),
+	return {
+		indexFile.filename().string(),
+		file_stream(std::filesystem::path(indexFile).replace_extension(".index")),
+		file_stream(std::filesystem::path(indexFile).replace_extension(".index2")),
 		std::move(dataStreams),
-		strictVerify);
+		strictVerify
+	};
 }
 
-const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index1(const xivres::path_spec& pathSpec) const {
+const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index1(const path_spec& pathSpec) const {
 	try {
 		const auto& locator = Index1.data_locator(pathSpec.PathHash(), pathSpec.NameHash());
 		if (locator.IsSynonym)
@@ -185,10 +187,9 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 	} catch (const std::out_of_range& e) {
 		throw std::out_of_range(std::format("Failed to find {}: {}", pathSpec, e.what()));
 	}
-	throw std::out_of_range(std::format("Path spec is empty"));
 }
 
-const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index2(const xivres::path_spec& pathSpec) const {
+const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index2(const path_spec& pathSpec) const {
 	try {
 		const auto& locator = Index2.data_locator(pathSpec.FullPathHash());
 		if (locator.IsSynonym)
@@ -198,20 +199,19 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 	} catch (const std::out_of_range& e) {
 		throw std::out_of_range(std::format("Failed to find {}: {}", pathSpec, e.what()));
 	}
-	throw std::out_of_range(std::format("Path spec is empty"));
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const entry_info& info) const {
 	return std::make_unique<stream_as_packed_stream>(info.path_spec, std::make_shared<partial_view_stream>(Data.at(info.Locator.DatFileIndex).Stream, info.Locator.offset(), info.Allocation));
 }
 
-std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const xivres::path_spec& pathSpec) const {
+std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const path_spec& pathSpec) const {
 	struct Comparator {
-		bool operator()(const entry_info& l, const sqpack::sqindex::data_locator& r) const {
+		bool operator()(const entry_info& l, const sqindex::data_locator& r) const {
 			return l.Locator < r;
 		}
 
-		bool operator()(const sqpack::sqindex::data_locator& l, const entry_info& r) const {
+		bool operator()(const sqindex::data_locator& l, const entry_info& r) const {
 			return l < r.Locator;
 		}
 	};
@@ -225,6 +225,6 @@ std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const entry_
 	return std::make_shared<unpacked_stream>(packed_at(info), obfuscatedHeaderRewrite);
 }
 
-std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const xivres::path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {
+std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {
 	return std::make_shared<unpacked_stream>(packed_at(pathSpec), obfuscatedHeaderRewrite);
 }

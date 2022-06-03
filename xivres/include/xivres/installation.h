@@ -1,6 +1,8 @@
-#pragma once
+#ifndef XIVRES_INSTALLATION_H_
+#define XIVRES_INSTALLATION_H_
 
 #include <filesystem>
+#include <map>
 
 #include "sqpack.reader.h"
 
@@ -35,9 +37,9 @@ namespace xivres {
 
 		[[nodiscard]] std::shared_ptr<unpacked_stream> get_file(const path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
 
-		[[nodiscard]] const std::vector<uint32_t> get_sqpack_ids() const;
+		[[nodiscard]] std::vector<uint32_t> get_sqpack_ids() const;
 
-		[[nodiscard]] const sqpack::reader& get_sqpack(const path_spec& rawpath_spec) const;
+		[[nodiscard]] const sqpack::reader& get_sqpack(const path_spec& pathSpec) const;
 
 		[[nodiscard]] const sqpack::reader& get_sqpack(uint32_t packId) const;
 
@@ -45,10 +47,12 @@ namespace xivres {
 
 		[[nodiscard]] excel::reader get_excel(const std::string& name) const;
 
-		fontgen::game_fontdata_set get_fontdata_set(xivres::font_type gameFontType, std::span<const fontgen::game_fontdata_definition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const;
+		fontgen::game_fontdata_set get_fontdata_set(font_type gameFontType, std::span<const fontgen::game_fontdata_definition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const;
 
 		fontgen::game_fontdata_set get_fontdata_set(font_type fontType = font_type::font) const;
 
 		void preload_all_sqpacks() const;
 	};
 }
+
+#endif

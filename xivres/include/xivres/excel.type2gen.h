@@ -24,15 +24,15 @@ namespace xivres::excel {
 
 		void add_language(game_language language);
 
-		const std::vector<cell>& get_row(uint32_t id, game_language language) const;
+		[[nodiscard]] const std::vector<cell>& get_row(uint32_t id, game_language language) const;
 
 		void set_row(uint32_t id, game_language language, std::vector<cell> row, bool replace = true);
 
 	private:
-		std::pair<path_spec, std::vector<char>> flush(uint32_t startId, std::map<uint32_t, std::vector<char>> rows, game_language language) const;
+		[[nodiscard]] std::pair<path_spec, std::vector<char>> flush(uint32_t startId, const std::map<uint32_t, std::vector<char>>& rows, game_language language) const;
 
 	public:
-		std::map<path_spec, std::vector<char>, path_spec::FullPathComparator> compile();
+		[[nodiscard]] std::map<path_spec, std::vector<char>, path_spec::FullPathComparator> compile();
 	};
 }
 

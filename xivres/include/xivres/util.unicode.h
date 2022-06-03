@@ -1,11 +1,9 @@
 #ifndef XIVRES_UNICODE_H_
 #define XIVRES_UNICODE_H_
 
-#include <array>
 #include <cstdint>
 #include <span>
 #include <string>
-#include <type_traits>
 
 namespace xivres::util::unicode {
 	constexpr char32_t UReplacement = U'\uFFFD';
@@ -37,21 +35,21 @@ namespace xivres::util::unicode {
 	size_t encode(EncodingTag<wchar_t>, wchar_t* ptr, char32_t c, bool strict);
 
 	template<typename T>
-	inline size_t encode(T* ptr, char32_t c, bool strict = true) {
+	size_t encode(T* ptr, char32_t c, bool strict = true) {
 		return encode(EncodingTag<T>(), ptr, c, strict);
 	}
 
 	template<class TTo>
-	inline TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = true) {
-		const auto encLen = util::unicode::encode<TTo::value_type>(nullptr, c, strict);
+	TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = true) {
+		const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, c, strict);
 		const auto baseIndex = out.size();
 		out.resize(baseIndex + encLen);
-		util::unicode::encode(&out[baseIndex], c, strict);
+		unicode::encode(&out[baseIndex], c, strict);
 		return out;
 	}
 
 	template<class TTo>
-	inline TTo convert_from_codepoint(char32_t c, bool strict = true) {
+	TTo convert_from_codepoint(char32_t c, bool strict = true) {
 		TTo out{};
 		return convert_from_codepoint(out, c, strict);
 	}
@@ -66,33 +64,33 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo>
-	inline TTo represent_codepoint(char32_t c, bool strict = true) {
+	TTo represent_codepoint(char32_t c, bool strict = true) {
 		TTo out{};
 		return represent_codepoint(out, c, strict);
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>>
-	inline TTo& convert(TTo& out, const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
+	TTo& convert(TTo& out, const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
 		out.reserve(out.size() + in.size() * 4 / sizeof(in[0]) / sizeof(out[0]));
 
 		char32_t c{};
-		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && (decLen = util::unicode::decode(c, &in[decIdx], in.size() - decIdx, strict)); decIdx += decLen) {
+		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && ((decLen = unicode::decode(c, &in[decIdx], in.size() - decIdx, strict))); decIdx += decLen) {
 			const auto encIdx = out.size();
-			const auto encLen = util::unicode::encode<TTo::value_type>(nullptr, c, strict);
+			const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, c, strict);
 			out.resize(encIdx + encLen);
-			util::unicode::encode(&out[encIdx], c, strict);
+			unicode::encode(&out[encIdx], c, strict);
 		}
 
 		return out;
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>, class TFromAlloc = std::allocator<TFromElem>>
-	inline TTo& convert(TTo& out, const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
+	TTo& convert(TTo& out, const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
 		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), strict);
 	}
 
 	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	inline TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
+	TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
@@ -100,19 +98,19 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>>
-	inline TTo convert(const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
+	TTo convert(const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
 		TTo out{};
 		return convert(out, in, strict);
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>, class TFromAlloc = std::allocator<TFromElem>>
-	inline TTo convert(const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
+	TTo convert(const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
 		TTo out{};
 		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), strict);
 	}
 
 	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	inline TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
+	TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
@@ -153,15 +151,15 @@ namespace xivres::util::unicode {
 			UsedWithCombining = 1 << 22,
 		};
 
-		inline constexpr purpose_flags operator|(purpose_flags a, purpose_flags b) {
+		constexpr purpose_flags operator|(purpose_flags a, purpose_flags b) {
 			return static_cast<purpose_flags>(static_cast<uint64_t>(a) | static_cast<uint64_t>(b));
 		}
 
-		inline constexpr purpose_flags operator&(purpose_flags a, purpose_flags b) {
+		constexpr purpose_flags operator&(purpose_flags a, purpose_flags b) {
 			return static_cast<purpose_flags>(static_cast<uint64_t>(a) & static_cast<uint64_t>(b));
 		}
 
-		inline constexpr purpose_flags operator~(purpose_flags a) {
+		constexpr purpose_flags operator~(purpose_flags a) {
 			return static_cast<purpose_flags>(~static_cast<uint64_t>(a));
 		}
 

@@ -11,20 +11,19 @@ xivres::texture_unpacker::texture_unpacker(const packed::file_header& header, st
 	const auto& texHeader = *reinterpret_cast<const texture::header*>(&m_head[0]);
 	const auto mipmapOffsets = util::span_cast<uint32_t>(m_head, sizeof texHeader, texHeader.MipmapCount);
 
-	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (mipmapOffsets[1] - mipmapOffsets[0]) / static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, 0));
+	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (mipmapOffsets[1] - mipmapOffsets[0]) / static_cast<uint32_t>(calc_raw_data_length(texHeader, 0));
 
 	for (uint32_t i = 0; i < locators.size(); ++i) {
 		const auto& locator = locators[i];
 		const auto mipmapIndex = i / repeatCount;
 		const auto mipmapPlaneIndex = i % repeatCount;
-		const auto mipmapPlaneSize = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, mipmapIndex));
+		const auto mipmapPlaneSize = static_cast<uint32_t>(calc_raw_data_length(texHeader, mipmapIndex));
+
 		uint32_t baseRequestOffset = 0;
 		if (mipmapIndex < mipmapOffsets.size())
 			baseRequestOffset = mipmapOffsets[mipmapIndex] - mipmapOffsets[0] + mipmapPlaneSize * mipmapPlaneIndex;
 		else if (!m_blocks.empty())
 			baseRequestOffset = m_blocks.back().RequestOffset + m_blocks.back().RemainingDecompressedSize;
-		else
-			baseRequestOffset = 0;
 		m_blocks.emplace_back(BlockInfo{
 			.RequestOffset = baseRequestOffset,
 			.BlockOffset = header.HeaderSize + locator.CompressedOffset,
@@ -32,7 +31,6 @@ xivres::texture_unpacker::texture_unpacker(const packed::file_header& header, st
 			.RemainingBlockSizes = m_stream->read_vector<uint16_t>(readOffset, locator.BlockCount),
 			});
 		readOffset += std::span(m_blocks.back().RemainingBlockSizes).size_bytes();
-		baseRequestOffset += mipmapPlaneSize;
 	}
 }
 

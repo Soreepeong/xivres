@@ -1,9 +1,7 @@
 #ifndef XIVRES_INTERNAL_BitmapCopy_H_
 #define XIVRES_INTERNAL_BitmapCopy_H_
 
-#include <array>
 #include <cinttypes>
-#include <cmath>
 #include <span>
 #include <vector>
 
@@ -22,8 +20,8 @@ namespace xivres::util {
 		class to_rgba8888 {
 			std::span<const uint8_t> m_gammaTable;
 
-			util::RGBA8888 m_colorForeground = util::RGBA8888(0, 0, 0, 255);
-			util::RGBA8888 m_colorBackground = util::RGBA8888(0, 0, 0, 0);
+			RGBA8888 m_colorForeground = RGBA8888(0, 0, 0, 255);
+			RGBA8888 m_colorBackground = RGBA8888(0, 0, 0, 0);
 
 			const uint8_t* m_pSource = nullptr;
 			size_t m_nSourceWidth = 0;
@@ -31,7 +29,7 @@ namespace xivres::util {
 			size_t m_nSourceStride = 0;
 			bitmap_vertical_direction m_nSourceVerticalDirection = bitmap_vertical_direction::Undefined;
 
-			util::RGBA8888* m_pTarget = nullptr;
+			RGBA8888* m_pTarget = nullptr;
 			size_t m_nTargetWidth = 0;
 			size_t m_nTargetHeight = 0;
 			bitmap_vertical_direction m_nTargetVerticalDirection = bitmap_vertical_direction::Undefined;
@@ -39,29 +37,29 @@ namespace xivres::util {
 		public:
 			to_rgba8888& from(const void* pBuf, size_t width, size_t height, size_t stride, bitmap_vertical_direction verticalDirection);
 
-			to_rgba8888& to(util::RGBA8888* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection);
+			to_rgba8888& to(RGBA8888* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection);
 
 			to_rgba8888& gamma_table(std::span<const uint8_t> gammaTable);
 
-			to_rgba8888& fore_color(util::RGBA8888 color);
+			to_rgba8888& fore_color(RGBA8888 color);
 
-			to_rgba8888& back_color(util::RGBA8888 color);
+			to_rgba8888& back_color(RGBA8888 color);
 
 			void copy(int srcX1, int srcY1, int srcX2, int srcY2, int targetX1, int targetY1);
 
 		private:
-			void draw_line_to_rgb(util::RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount);
+			void draw_line_to_rgb(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
 
-			void draw_line_to_rgb_opaque(util::RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount);
+			void draw_line_to_rgb_opaque(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
 
 			template<bool ColorIsForeground>
-			void draw_line_to_rgb_binary_opacity(util::RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) {
+			void draw_line_to_rgb_binary_opacity(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
 				const auto color = ColorIsForeground ? m_colorForeground : m_colorBackground;
 				while (nPixelCount--) {
 					const auto opacityScaled = m_gammaTable[*pSource];
 					const auto opacity = 255 * (ColorIsForeground ? opacityScaled : 255 - opacityScaled) / 255;
 					if (opacity) {
-						const auto blendedDestColor = util::RGBA8888{
+						const auto blendedDestColor = RGBA8888{
 							(pTarget->R * pTarget->A + color.R * (255 - pTarget->A)) / 255,
 							(pTarget->G * pTarget->A + color.G * (255 - pTarget->A)) / 255,
 							(pTarget->B * pTarget->A + color.B * (255 - pTarget->A)) / 255,
@@ -116,12 +114,12 @@ namespace xivres::util {
 			void copy(int srcX1, int srcY1, int srcX2, int srcY2, int targetX1, int targetY1);
 
 		private:
-			void draw_line_to_l8(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth);
+			void draw_line_to_l8(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth) const;
 
-			void draw_line_to_l8_opaque(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth);
+			void draw_line_to_l8_opaque(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth) const;
 
 			template<bool ColorIsForeground>
-			void draw_line_to_l8_binary_opacity(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth) {
+			void draw_line_to_l8_binary_opacity(uint8_t* pTarget, const uint8_t* pSource, size_t regionWidth) const {
 				const auto color = ColorIsForeground ? m_colorForeground : m_colorBackground;
 				while (regionWidth--) {
 					const auto opacityScaled = m_gammaTable[*pSource];

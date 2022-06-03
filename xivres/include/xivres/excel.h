@@ -9,7 +9,6 @@
 
 #include "common.h"
 #include "path_spec.h"
-#include "sqpack.h"
 #include "stream.h"
 #include "xivstring.h"
 
@@ -68,7 +67,7 @@ namespace xivres::excel {
 			uint64_t uint64;
 		};
 
-		xivres::xivstring String;
+		xivstring String;
 	};
 }
 
@@ -113,7 +112,7 @@ namespace xivres::excel::exh {
 	};
 
 	struct header {
-		static constexpr char Signature_Value[4] = { 'E', 'X', 'H', 'F' };
+		static constexpr char Signature_Value[4] = {'E', 'X', 'H', 'F'};
 
 		static constexpr uint16_t Version_Value = 3;
 
@@ -131,23 +130,22 @@ namespace xivres::excel::exh {
 	};
 
 	class reader {
-	private:
 		std::string m_name;
-		exh::header m_header;
-		std::vector<exh::column> m_columns;
-		std::vector<exh::page> m_pages;
+		header m_header;
+		std::vector<column> m_columns;
+		std::vector<page> m_pages;
 		std::vector<game_language> m_languages;
 
 	public:
 		reader(std::string name, const stream& strm, bool strict = false);
-		const std::string& name() const { return m_name; }
-		const exh::header& header() const { return m_header; }
-		const std::vector<exh::column>& get_columns() const { return m_columns; }
-		const std::vector<exh::page>& get_pages() const { return m_pages; }
-		const std::vector<game_language>& get_languages() const { return m_languages; }
-		size_t get_owning_page_index(uint32_t rowId) const;
-		const exh::page& get_owning_page(uint32_t rowId) const { return m_pages[get_owning_page_index(rowId)]; }
-		[[nodiscard]] path_spec get_exd_path(const exh::page& page, game_language language) const;
+		[[nodiscard]] const std::string& name() const { return m_name; }
+		[[nodiscard]] const header& header() const { return m_header; }
+		[[nodiscard]] const std::vector<column>& get_columns() const { return m_columns; }
+		[[nodiscard]] const std::vector<page>& get_pages() const { return m_pages; }
+		[[nodiscard]] const std::vector<game_language>& get_languages() const { return m_languages; }
+		[[nodiscard]] size_t get_owning_page_index(uint32_t rowId) const;
+		[[nodiscard]] const page& get_owning_page(uint32_t rowId) const { return m_pages[get_owning_page_index(rowId)]; }
+		[[nodiscard]] path_spec get_exd_path(const page& page, game_language language) const;
 	};
 }
 
@@ -195,20 +193,17 @@ namespace xivres::excel::exd::row {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(throw_if_out_of_boundary(index)) {}
-
-			base_iterator(const iterator& r)
-				: m_parent(r.m_parent)
-				, m_index(r.m_index) {}
-
-			~base_iterator() = default;
-
-			iterator& operator=(const iterator& r) {
-				m_parent = r.m_parent;
-				m_index = r.m_index;
+				, m_index(throw_if_out_of_boundary(index)) {
 			}
 
-			iterator& operator++() { //prefix increment
+			base_iterator(iterator&&) = default;
+			base_iterator(const iterator&) = default;
+			base_iterator& operator=(iterator&&) = default;
+			base_iterator& operator=(const iterator&) = default;
+			~base_iterator() = default;
+
+			iterator& operator++() {
+				//prefix increment
 				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
@@ -217,15 +212,16 @@ namespace xivres::excel::exd::row {
 				return m_parent->resolve_cell(reversed ? m_parent->size() - 1 - m_index : m_index);
 			}
 
-			friend void swap(iterator& lhs, iterator& rhs) {
+			friend void swap(iterator& lhs, iterator& rhs) noexcept {
 				std::swap(lhs.m_parent, rhs.m_parent);
 				std::swap(lhs.m_index, rhs.m_index);
 			}
 
-			iterator operator++(int) { //postfix increment
+			iterator operator++(int) {
+				//postfix increment
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index + 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 			pointer operator->() const {
@@ -244,15 +240,17 @@ namespace xivres::excel::exd::row {
 				return m_parent->resolve_cell(reversed ? m_parent->size() - 1 - m_index : m_index);
 			}
 
-			iterator& operator--() { //prefix decrement
+			iterator& operator--() {
+				//prefix decrement
 				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
-			iterator operator--(int) { //postfix decrement
+			iterator operator--(int) {
+				//postfix decrement
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index - 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 			friend bool operator<(const iterator& l, const iterator& r) {
@@ -303,32 +301,32 @@ namespace xivres::excel::exd::row {
 			}
 
 		private:
-			size_t throw_if_out_of_boundary(size_t n) const {
+			[[nodiscard]] size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
-				if (n < 0)
+				if (n > (std::numeric_limits<size_t>::max)() / 2)
 					throw std::out_of_range("Reached beginning of iterator.");
 				return n;
 			}
 		};
 
-		using iterator = base_iterator<exd::row::reader, cell, false>;
-		using const_iterator = base_iterator<const exd::row::reader, const cell, false>;
-		using reverse_iterator = base_iterator<exd::row::reader, cell, true>;
-		using const_reverse_iterator = base_iterator<const exd::row::reader, const cell, true>;
+		using iterator = base_iterator<reader, cell, false>;
+		using const_iterator = base_iterator<const reader, const cell, false>;
+		using reverse_iterator = base_iterator<reader, cell, true>;
+		using const_reverse_iterator = base_iterator<const reader, const cell, true>;
 
-		iterator begin() { return iterator(this, 0); }
-		const_iterator begin() const { return const_iterator(this, 0); }
-		const_iterator cbegin() const { return const_iterator(this, 0); }
-		iterator end() { return iterator(this, Columns.size()); }
-		const_iterator end() const { return const_iterator(this, Columns.size()); }
-		const_iterator cend() const { return const_iterator(this, Columns.size()); }
-		reverse_iterator rbegin() { return reverse_iterator(this, 0); }
-		const_reverse_iterator rbegin() const { return const_reverse_iterator(this, 0); }
-		const_reverse_iterator crbegin() const { return const_reverse_iterator(this, 0); }
-		reverse_iterator rend() { return reverse_iterator(this, Columns.size()); }
-		const_iterator rend() const { const_reverse_iterator const_reverse_iterator(this, Columns.size()); }
-		const_reverse_iterator crend() const { return const_reverse_iterator(this, Columns.size()); }
+		[[nodiscard]] iterator begin() { return {this, 0}; }
+		[[nodiscard]] const_iterator begin() const { return {this, 0}; }
+		[[nodiscard]] const_iterator cbegin() const { return {this, 0}; }
+		[[nodiscard]] iterator end() { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
+		[[nodiscard]] const_iterator end() const { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
+		[[nodiscard]] const_iterator cend() const { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
+		[[nodiscard]] reverse_iterator rbegin() { return {this, 0}; }
+		[[nodiscard]] const_reverse_iterator rbegin() const { return {this, 0}; }
+		[[nodiscard]] const_reverse_iterator crbegin() const { return {this, 0}; }
+		[[nodiscard]] reverse_iterator rend() { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
+		[[nodiscard]] const_iterator rend() const { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
+		[[nodiscard]] const_reverse_iterator crend() const { return {this, static_cast<ptrdiff_t>(Columns.size())}; }
 
 	private:
 		cell& resolve_cell(size_t index) const;
@@ -336,17 +334,18 @@ namespace xivres::excel::exd::row {
 
 	class buffer {
 		uint32_t m_rowId;
-		exd::row::header m_rowHeader;
+		header m_rowHeader;
 		std::vector<char> m_buffer;
-		std::vector<exd::row::reader> m_rows;
+		std::vector<reader> m_rows;
 
 	public:
 		buffer();
 		buffer(uint32_t rowId, const exh::reader& exh, const stream& strm, std::streamoff offset);
-		[[nodiscard]] exd::row::reader& operator[](size_t index) { return m_rows.at(index); }
-		[[nodiscard]] const exd::row::reader& operator[](size_t index) const { return m_rows.at(index); }
-		[[nodiscard]] uint32_t RowId() const { return m_rowId; }
-		size_t size() const { return m_rows.size(); }
+		[[nodiscard]] reader& operator[](size_t index) { return m_rows.at(index); }
+		[[nodiscard]] const reader& operator[](size_t index) const { return m_rows.at(index); }
+		[[nodiscard]] uint32_t row_id() const { return m_rowId; }
+		[[nodiscard]] const header& header() const { return m_rowHeader; }
+		[[nodiscard]] size_t size() const { return m_rows.size(); }
 
 		template<typename TParent, typename T, bool reversed>
 		class base_iterator {
@@ -365,20 +364,17 @@ namespace xivres::excel::exd::row {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(throw_if_out_of_boundary(index)) {}
-
-			base_iterator(const iterator& r)
-				: m_parent(r.m_parent)
-				, m_index(r.m_index) {}
-
-			~base_iterator() = default;
-
-			iterator& operator=(const iterator& r) {
-				m_parent = r.m_parent;
-				m_index = r.m_index;
+				, m_index(throw_if_out_of_boundary(index)) {
 			}
 
-			iterator& operator++() { //prefix increment
+			base_iterator(iterator&&) = default;
+			base_iterator(const iterator&) = default;
+			base_iterator& operator=(iterator&&) = default;
+			base_iterator& operator=(const iterator&) = default;
+			~base_iterator() = default;
+
+			iterator& operator++() {
+				//prefix increment
 				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
@@ -387,15 +383,16 @@ namespace xivres::excel::exd::row {
 				return (*m_parent)[reversed ? m_parent->size() - 1 - m_index : m_index];
 			}
 
-			friend void swap(iterator& lhs, iterator& rhs) {
+			friend void swap(iterator& lhs, iterator& rhs) noexcept {
 				std::swap(lhs.m_parent, rhs.m_parent);
 				std::swap(lhs.m_index, rhs.m_index);
 			}
 
-			iterator operator++(int) { //postfix increment
+			iterator operator++(int) {
+				//postfix increment
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index + 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 			pointer operator->() const {
@@ -414,15 +411,17 @@ namespace xivres::excel::exd::row {
 				return (*m_parent)[reversed ? m_parent->size() - 1 - m_index : m_index];
 			}
 
-			iterator& operator--() { //prefix decrement
+			iterator& operator--() {
+				//prefix decrement
 				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
-			iterator operator--(int) { //postfix decrement
+			iterator operator--(int) {
+				//postfix decrement
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index - 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 			friend bool operator<(const iterator& l, const iterator& r) {
@@ -473,38 +472,38 @@ namespace xivres::excel::exd::row {
 			}
 
 		private:
-			size_t throw_if_out_of_boundary(size_t n) const {
+			[[nodiscard]] size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
-				if (n < 0)
+				if (n > (std::numeric_limits<size_t>::max)() / 2)
 					throw std::out_of_range("Reached beginning of iterator.");
 				return n;
 			}
 		};
 
-		using iterator = base_iterator<exd::row::buffer, exd::row::reader, false>;
-		using const_iterator = base_iterator<const exd::row::buffer, const exd::row::reader, false>;
-		using reverse_iterator = base_iterator<exd::row::buffer, exd::row::reader, true>;
-		using const_reverse_iterator = base_iterator<const exd::row::buffer, const exd::row::reader, true>;
+		using iterator = base_iterator<buffer, reader, false>;
+		using const_iterator = base_iterator<const buffer, const reader, false>;
+		using reverse_iterator = base_iterator<buffer, reader, true>;
+		using const_reverse_iterator = base_iterator<const buffer, const reader, true>;
 
-		iterator begin() { return iterator(this, 0); }
-		const_iterator begin() const { return const_iterator(this, 0); }
-		const_iterator cbegin() const { return const_iterator(this, 0); }
-		iterator end() { return iterator(this, m_rows.size()); }
-		const_iterator end() const { return const_iterator(this, m_rows.size()); }
-		const_iterator cend() const { return const_iterator(this, m_rows.size()); }
-		reverse_iterator rbegin() { return reverse_iterator(this, 0); }
-		const_reverse_iterator rbegin() const { return const_reverse_iterator(this, 0); }
-		const_reverse_iterator crbegin() const { return const_reverse_iterator(this, 0); }
-		reverse_iterator rend() { return reverse_iterator(this, m_rows.size()); }
-		const_reverse_iterator rend() const { return const_reverse_iterator(this, m_rows.size()); }
-		const_reverse_iterator crend() const { return const_reverse_iterator(this, m_rows.size()); }
+		[[nodiscard]] iterator begin() { return {this, 0}; }
+		[[nodiscard]] const_iterator begin() const { return {this, 0}; }
+		[[nodiscard]] const_iterator cbegin() const { return {this, 0}; }
+		[[nodiscard]] iterator end() { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
+		[[nodiscard]] const_iterator end() const { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
+		[[nodiscard]] const_iterator cend() const { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
+		[[nodiscard]] reverse_iterator rbegin() { return {this, 0}; }
+		[[nodiscard]] const_reverse_iterator rbegin() const { return {this, 0}; }
+		[[nodiscard]] const_reverse_iterator crbegin() const { return {this, 0}; }
+		[[nodiscard]] reverse_iterator rend() { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
+		[[nodiscard]] const_reverse_iterator rend() const { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
+		[[nodiscard]] const_reverse_iterator crend() const { return {this, static_cast<ptrdiff_t>(m_rows.size())}; }
 	};
 }
 
 namespace xivres::excel::exd {
 	struct header {
-		static constexpr char Signature_Value[4] = { 'E', 'X', 'D', 'F' };
+		static constexpr char Signature_Value[4] = {'E', 'X', 'D', 'F'};
 		static constexpr uint16_t Version_Value = 2;
 
 		char Signature[4]{};
@@ -519,18 +518,18 @@ namespace xivres::excel::exd {
 	public:
 		const std::shared_ptr<const stream> Stream;
 		const exh::reader& ExhReader;
-		const exd::header Header;
+		const header Header;
 
 	private:
 		std::vector<uint32_t> m_rowIds;
 		std::vector<uint32_t> m_offsets;
 
-		mutable std::vector<std::optional<exd::row::buffer>> m_rowBuffers;
+		mutable std::vector<std::optional<row::buffer>> m_rowBuffers;
 		mutable std::mutex m_populateMtx;
 
 	public:
 		reader(const exh::reader& exh, std::shared_ptr<const stream> strm);
-		[[nodiscard]] const exd::row::buffer& operator[](uint32_t rowId) const;
+		[[nodiscard]] const row::buffer& operator[](uint32_t rowId) const;
 		[[nodiscard]] const std::vector<uint32_t>& get_row_ids() const { return m_rowIds; }
 		size_t size() const { return m_rowIds.size(); }
 
@@ -551,20 +550,17 @@ namespace xivres::excel::exd {
 		public:
 			base_iterator(TParent* parent, difference_type index)
 				: m_parent(parent)
-				, m_index(throw_if_out_of_boundary(index)) {}
-
-			base_iterator(const iterator& r)
-				: m_parent(r.m_parent)
-				, m_index(r.m_index) {}
-
-			~base_iterator() = default;
-
-			iterator& operator=(const iterator& r) {
-				m_parent = r.m_parent;
-				m_index = r.m_index;
+				, m_index(throw_if_out_of_boundary(index)) {
 			}
 
-			iterator& operator++() { //prefix increment
+			base_iterator(iterator&&) = default;
+			base_iterator(const iterator&) = default;
+			base_iterator& operator=(iterator&&) = default;
+			base_iterator& operator=(const iterator&) = default;
+			~base_iterator() = default;
+
+			iterator& operator++() {
+				//prefix increment
 				m_index = throw_if_out_of_boundary(m_index + 1);
 				return *this;
 			}
@@ -573,15 +569,16 @@ namespace xivres::excel::exd {
 				return (*m_parent)[m_parent->m_rowIds[reversed ? m_parent->size() - 1 - m_index : m_index]];
 			}
 
-			friend void swap(iterator& lhs, iterator& rhs) {
+			friend void swap(iterator& lhs, iterator& rhs) noexcept {
 				std::swap(lhs.m_parent, rhs.m_parent);
 				std::swap(lhs.m_index, rhs.m_index);
 			}
 
-			iterator operator++(int) { //postfix increment
+			iterator operator++(int) {
+				//postfix increment
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index + 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 			pointer operator->() const {
@@ -600,38 +597,40 @@ namespace xivres::excel::exd {
 				return (*m_parent)[m_parent->m_rowIds[reversed ? m_parent->size() - 1 - m_index : m_index]];
 			}
 
-			iterator& operator--() { //prefix decrement
+			iterator& operator--() {
+				//prefix decrement
 				m_index = throw_if_out_of_boundary(m_index - 1);
 				return *this;
 			}
 
-			iterator operator--(int) { //postfix decrement
+			iterator operator--(int) {
+				//postfix decrement
 				const auto index = m_index;
 				m_index = throw_if_out_of_boundary(m_index - 1);
-				return { m_parent, index };
+				return {m_parent, index};
 			}
 
 		private:
-			size_t throw_if_out_of_boundary(size_t n) const {
+			[[nodiscard]] size_t throw_if_out_of_boundary(size_t n) const {
 				if (n > m_parent->size())
 					throw std::out_of_range("Reached end of iterator.");
-				if (n < 0)
+				if (n > (std::numeric_limits<size_t>::max)() / 2)
 					throw std::out_of_range("Reached beginning of iterator.");
 				return n;
 			}
 		};
 
-		using iterator = base_iterator<const reader, const exd::row::buffer, false>;
-		using reverse_iterator = base_iterator<const reader, const exd::row::buffer, true>;
+		using iterator = base_iterator<const reader, const row::buffer, false>;
+		using reverse_iterator = base_iterator<const reader, const row::buffer, true>;
 
-		iterator begin() const { return iterator(this, 0); }
-		iterator cbegin() const { return iterator(this, 0); }
-		iterator end() const { return iterator(this, m_rowIds.size()); }
-		iterator cend() const { return iterator(this, m_rowIds.size()); }
-		reverse_iterator rbegin() const { return reverse_iterator(this, 0); }
-		reverse_iterator crbegin() const { return reverse_iterator(this, 0); }
-		reverse_iterator rend() const { return reverse_iterator(this, m_rowIds.size()); }
-		reverse_iterator crend() const { return reverse_iterator(this, m_rowIds.size()); }
+		iterator begin() const { return {this, 0}; }
+		iterator cbegin() const { return {this, 0}; }
+		iterator end() const { return {this, static_cast<ptrdiff_t>(m_rowIds.size())}; }
+		iterator cend() const { return {this, static_cast<ptrdiff_t>(m_rowIds.size())}; }
+		reverse_iterator rbegin() const { return {this, 0}; }
+		reverse_iterator crbegin() const { return {this, 0}; }
+		reverse_iterator rend() const { return {this, static_cast<ptrdiff_t>(m_rowIds.size())}; }
+		reverse_iterator crend() const { return {this, static_cast<ptrdiff_t>(m_rowIds.size())}; }
 	};
 }
 
@@ -650,12 +649,14 @@ namespace xivres::excel {
 		reader(reader&& r) noexcept;
 		reader& operator=(const reader& r);
 		reader& operator=(reader&& r) noexcept;
+		~reader() = default;
+
 		void clear();
-		reader new_with_language(game_language language);
-		const xivres::game_language& get_language() const;
+		[[nodiscard]] reader new_with_language(game_language language);
+		[[nodiscard]] const game_language& get_language() const;
 		reader& set_language(game_language language);
-		const exh::reader& get_exh_reader() const;
-		const exd::reader& get_exd_reader(size_t pageIndex) const;
+		[[nodiscard]] const exh::reader& get_exh_reader() const;
+		[[nodiscard]] const exd::reader& get_exd_reader(size_t pageIndex) const;
 		[[nodiscard]] const exd::row::buffer& operator[](uint32_t rowId) const;
 	};
 }

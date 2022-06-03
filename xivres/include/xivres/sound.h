@@ -2,14 +2,10 @@
 #define XIVRES_SCD_H_
 
 #include <map>
-#include <ranges>
-#include <set>
 #include <vector>
 
-#include "util.byte_order.h"
-
-#include "common.h"
 #include "stream.h"
+#include "util.byte_order.h"
 
 namespace xivres::sound {
 	enum class endianness : uint8_t {
@@ -137,8 +133,8 @@ namespace xivres::sound {
 	class reader {
 		const std::shared_ptr<stream> m_stream;
 		const std::vector<uint8_t> m_headerBuffer;
-		const sound::header& m_header;
-		const sound::offsets& m_offsets;
+		const header& m_header;
+		const offsets& m_offsets;
 
 		const std::span<const uint32_t> m_offsetsTable1;
 		const std::span<const uint32_t> m_offsetsTable2;
@@ -237,14 +233,14 @@ namespace xivres::sound {
 				size_t loopStartBlockIndex,
 				size_t loopEndBlockIndex,
 				const linear_reader<uint8_t>& floatSamplesReader,
-				std::function<bool(size_t blockIndex)> progressCallback,
+				const std::function<bool(size_t blockIndex)>& progressCallback,
 				std::span<const uint32_t> markIndices,
 				float baseQuality = 1.f);
 
 			static sound_item make_from_ogg(const linear_reader<uint8_t>& reader);
 
 			static sound_item make_from_ogg(
-				std::vector<uint8_t> headerPages,
+				const std::vector<uint8_t>& headerPages,
 				std::vector<uint8_t> dataPages,
 				uint32_t channels,
 				uint32_t samplingRate,

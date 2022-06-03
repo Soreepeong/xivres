@@ -1,8 +1,6 @@
 #ifndef XIVRES_BINARYPACKEDFILESTREAM_H_
 #define XIVRES_BINARYPACKEDFILESTREAM_H_
 
-#include "util.zlib_wrapper.h"
-
 #include "packed_stream.h"
 
 namespace xivres {
@@ -22,7 +20,7 @@ namespace xivres {
 
 	class standard_compressing_packer : public compressing_packer<packed::type::standard> {
 	public:
-		std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
+		[[nodiscard]] std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
 	};
 }
 

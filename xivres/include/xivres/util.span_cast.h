@@ -1,7 +1,6 @@
 #ifndef XIVRES_INTERNAL_SPANCAST_H_
 #define XIVRES_INTERNAL_SPANCAST_H_
 
-#include <climits>
 #include <span>
 #include <stdexcept>
 #include <string>

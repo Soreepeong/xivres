@@ -1,5 +1,8 @@
 #include "../include/xivres/fontdata.h"
 
+#include "../include/xivres/common.h"
+#include "../include/xivres/util.h"
+
 xivres::fontdata::stream::stream() {
 	memcpy(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature);
 	memcpy(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature);
@@ -104,7 +107,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 		if (out.empty())
 			return length;
 	} else
-		relativeOffset -= srcTyped.size_bytes();
+		relativeOffset -= static_cast<std::streamoff>(srcTyped.size_bytes());
 
 	if (relativeOffset < sizeof m_knhd) {
 		const auto src = util::span_cast<char>(1, &m_knhd).subspan(static_cast<size_t>(relativeOffset));
@@ -129,7 +132,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 			return length;
 	}
 
-	return length - out.size_bytes();
+	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
 void xivres::fontdata::stream::add_kerning(const kerning_entry& entry, bool cumulative) {

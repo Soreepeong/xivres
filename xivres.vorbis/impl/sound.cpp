@@ -1,12 +1,13 @@
 #include "../include/xivres/sound.h"
-#include "../include/xivres/util.on_dtor.h"
 
 #include <deque>
 #include <format>
-
 #include <vorbis/codec.h>
 #include <vorbis/vorbisenc.h>
-#include "xivres/util.thread_pool.h"
+
+#include "../include/xivres/common.h"
+#include "../include/xivres/util.on_dtor.h"
+#include "../include/xivres/util.thread_pool.h"
 
 static constexpr auto ReadBufferSize = 64 * 1024;
 static constexpr auto FragmentedBufferSize = 256 * 1024;
@@ -69,15 +70,15 @@ xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item:
 
 		for (int i = 0, limit = 2; i < limit;) {
 			while (i < 2) {
-				if (int res = ogg_sync_pageout(&oy, &og); res == 1) {
+				if (const auto res = ogg_sync_pageout(&oy, &og); res == 1) {
 					ogg_stream_pagein(&os, &og);
 					while (i < limit) {
-						if (int res = ogg_stream_packetout(&os, &op); res < 0)
+						if (const auto res = ogg_stream_packetout(&os, &op); res < 0)
 							throw bad_data_error(std::format("ogg_stream_packetout error: {}", res));
 						else if (res == 0)
 							break;
 
-						if (int res = vorbis_synthesis_headerin(&vi, &vc, &op); res < 0)
+						if (const auto res = vorbis_synthesis_headerin(&vi, &vc, &op); res < 0)
 							throw bad_data_error(std::format("vorbis_synthesis_headerin error: {}", res));
 						i++;
 					}
@@ -98,16 +99,16 @@ xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item:
 				result.LoopEndBlockIndex = std::strtoul(*comments + 8, nullptr, 10);
 		}
 
-		if (int res = vorbis_synthesis_init(&vd, &vi); res != 0)
+		if (const auto res = vorbis_synthesis_init(&vd, &vi); res != 0)
 			throw bad_data_error(std::format("vorbis_synthesis_init error: {}", res));
 		const auto vdCleanup = util::on_dtor([&vd] { vorbis_dsp_clear(&vd); });
 
-		if (int res = vorbis_block_init(&vd, &vb); res != 0)
+		if (const auto res = vorbis_block_init(&vd, &vb); res != 0)
 			throw bad_data_error(std::format("vorbis_block_init error: {}", res));
 		const auto vbCleanup = util::on_dtor([&vb] { vorbis_block_clear(&vb); });
 
 		while (true) {
-			if (int res = ogg_sync_pageout(&oy, &og); res < 0)
+			if (const auto res = ogg_sync_pageout(&oy, &og); res < 0)
 				throw bad_data_error(std::format("ogg_sync_pageout error: {}", res));
 			else if (res == 0) {
 				if (!feedMore())
@@ -119,7 +120,7 @@ xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item:
 				throw bad_data_error(std::format("ogg_stream_pagein error: {}", res));
 
 			while (true) {
-				if (int res = ogg_stream_packetout(&os, &op); res < 0)
+				if (const auto res = ogg_stream_packetout(&os, &op); res < 0)
 					throw bad_data_error(std::format("ogg_stream_packetout error: {}", res));
 				else if (res == 0)
 					break;
@@ -145,9 +146,9 @@ xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item:
 				decoded.back().resize(decoded.back().size() + newDataSize);
 
 				const auto floatView = std::span(reinterpret_cast<float*>(decoded.back().data() + decoded.back().size() - newDataSize), decoded.back().size() / sizeof(float));
-				for (size_t i = 0; i < nSamples; i++) {
-					for (size_t j = 0; j < vi.channels; j++)
-						floatView[i * vi.channels + j] = ppSamples[j][i];
+				for (int i = 0; i < nSamples; i++) {
+					for (int j = 0; j < vi.channels; j++)
+						floatView[static_cast<size_t>(1) * i * vi.channels + j] = ppSamples[j][i];
 				}
 
 				if (const auto res = vorbis_synthesis_read(&vd, nSamples); res < 0)
@@ -172,7 +173,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 	size_t loopStartBlockIndex,
 	size_t loopEndBlockIndex,
 	const linear_reader<uint8_t>& floatSamplesReader,
-	std::function<bool(size_t)> progressCallback,
+	const std::function<bool(size_t)>& progressCallback,
 	std::span<const uint32_t> markIndices,
 	float baseQuality
 ) {
@@ -437,11 +438,11 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 		const auto read = reader(4096, false);
 		if (read.empty())
 			break;
-		if (const auto buffer = ogg_sync_buffer(&oy, static_cast<uint32_t>(read.size())))
+		if (const auto buffer = ogg_sync_buffer(&oy, static_cast<long>(read.size())))
 			memcpy(buffer, read.data(), read.size());
 		else
 			throw std::runtime_error("ogg_sync_buffer failed");
-		if (0 != ogg_sync_wrote(&oy, static_cast<uint32_t>(read.size())))
+		if (0 != ogg_sync_wrote(&oy, static_cast<long>(read.size())))
 			throw std::runtime_error("ogg_sync_wrote failed");
 
 		for (;; ++pageIndex) {
@@ -497,7 +498,6 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			}
 
 			if (ogg_page_eos(&og)) {
-				const auto sampleIndex = ogg_page_granulepos(&og);
 				if (loopEndSample && !loopEndOffset)
 					loopEndOffset = static_cast<uint32_t>(data.size());
 

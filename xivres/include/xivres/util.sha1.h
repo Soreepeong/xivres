@@ -23,7 +23,6 @@
 #define XIVRES_INTERNAL_TINYSHA1_H_
 
 #include <cstdint>
-#include <memory>
 #include <span>
 
 #include "common.h"
@@ -50,13 +49,19 @@ namespace xivres::util {
 			*this = s;
 		}
 
-		const hash_sha1& operator=(const hash_sha1& s) {
+		hash_sha1& operator=(const hash_sha1& s) {
+			if (this == &s)
+				return *this;
 			memcpy(m_digest, s.m_digest, 5 * sizeof(uint32_t));
 			memcpy(m_block, s.m_block, 64);
 			m_blockByteIndex = s.m_blockByteIndex;
 			m_byteCount = s.m_byteCount;
 			return *this;
 		}
+
+		hash_sha1(hash_sha1&&) = delete;
+		hash_sha1& operator=(hash_sha1&&) = delete;
+		~hash_sha1() = default;
 
 		hash_sha1& reset() {
 			m_digest[0] = 0x67452301;
@@ -80,8 +85,8 @@ namespace xivres::util {
 		}
 
 		hash_sha1& process_block(const void* const start, const void* const end) {
-			const uint8_t* begin = static_cast<const uint8_t*>(start);
-			const uint8_t* finish = static_cast<const uint8_t*>(end);
+			auto begin = static_cast<const uint8_t*>(start);
+			const auto finish = static_cast<const uint8_t*>(end);
 			while (begin != finish) {
 				process_byte(*begin);
 				begin++;
@@ -90,7 +95,7 @@ namespace xivres::util {
 		}
 
 		hash_sha1& process_bytes(const void* const data, size_t len) {
-			const uint8_t* block = static_cast<const uint8_t*>(data);
+			const auto block = static_cast<const uint8_t*>(data);
 			process_block(block, block + len);
 			return *this;
 		}
@@ -174,8 +179,8 @@ namespace xivres::util {
 			uint32_t e = m_digest[4];
 
 			for (std::size_t i = 0; i < 80; ++i) {
-				uint32_t f = 0;
-				uint32_t k = 0;
+				uint32_t f;
+				uint32_t k;
 
 				if (i < 20) {
 					f = (b & c) | (~b & d);
@@ -239,11 +244,11 @@ namespace xivres {
 			return memcmp(r.Value, Value, sizeof Value) >= 0;
 		}
 
-		bool operator==(const char(&r)[20]) const {
+		bool operator==(const char (&r)[20]) const {
 			return memcmp(r, Value, sizeof Value) == 0;
 		}
 
-		bool operator!=(const char(&r)[20]) const {
+		bool operator!=(const char (&r)[20]) const {
 			return memcmp(r, Value, sizeof Value) != 0;
 		}
 
@@ -263,7 +268,7 @@ namespace xivres {
 		}
 
 		template<typename ...Args>
-		void set_from_span(Args...args) {
+		void set_from_span(Args ...args) {
 			set_from(std::span(std::forward<Args>(args)...));
 		}
 
@@ -271,7 +276,7 @@ namespace xivres {
 			sha1_value t;
 			t.set_from_ptr(data, size);
 			if (*this != t) {
-				if (!size && util::all_same_value(Value))  // all zero values can be in place of SHA-1 value of empty value
+				if (!size && util::all_same_value(Value)) // all zero values can be in place of SHA-1 value of empty value
 					return;
 				throw bad_data_error(errorMessage);
 			}

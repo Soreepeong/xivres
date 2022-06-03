@@ -7,6 +7,7 @@
 
 #pragma warning(push)
 #pragma warning(disable: 26495)
+// ReSharper disable once CppPossiblyUninitializedMember
 xivres::base_unpacker::block_decoder::block_decoder(void* buf, std::streamsize length, std::streampos offset)
 	: m_target(static_cast<uint8_t*>(buf), static_cast<size_t>(length))
 	, m_remaining(m_target)
@@ -38,7 +39,7 @@ void xivres::base_unpacker::block_decoder::forward(const uint32_t requestOffset,
 	if (complete())
 		return;
 
-	const auto read = std::span(m_buffer, static_cast<size_t>(strm.read(blockOffset, m_buffer, knownBlockSize)));
+	const auto read = std::span(m_buffer, static_cast<size_t>(strm.read(blockOffset, m_buffer, static_cast<std::streamsize>(knownBlockSize))));
 
 	if (read.size() < sizeof block_header() || read.size() < block_header().total_block_size())
 		throw bad_data_error("Incomplete block read");

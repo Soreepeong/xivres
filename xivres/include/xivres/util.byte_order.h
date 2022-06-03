@@ -74,78 +74,78 @@ namespace xivres::util {
 			: Storage(FromNative(defaultValue)) {
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator=(T newValue) {
 			Storage = FromNative(newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator+= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator+=(T newValue) {
 			Storage = FromNative(ToNative(Storage) + newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator-= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator-=(T newValue) {
 			Storage = FromNative(ToNative(Storage) - newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator*= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator*=(T newValue) {
 			Storage = FromNative(ToNative(Storage) * newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator/= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator/=(T newValue) {
 			Storage = FromNative(ToNative(Storage) / newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator%= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator%=(T newValue) {
 			Storage = FromNative(ToNative(Storage) % newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator&= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator&=(T newValue) {
 			Storage = FromNative(ToNative(Storage) & newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator|= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator|=(T newValue) {
 			Storage = FromNative(ToNative(Storage) | newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator^= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator^=(T newValue) {
 			Storage = FromNative(ToNative(Storage) ^ newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator<<= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator<<=(T newValue) {
 			Storage = FromNative(ToNative(Storage) << newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator>>= (T newValue) {
+		byte_order_base<T, FromNative, ToNative>& operator>>=(T newValue) {
 			Storage = FromNative(ToNative(Storage) >> newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator++ () {
+		byte_order_base<T, FromNative, ToNative>& operator++() {
 			Storage = FromNative(ToNative(Storage) + 1);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator-- () {
+		byte_order_base<T, FromNative, ToNative>& operator--() {
 			Storage = FromNative(ToNative(Storage) - 1);
 			return *this;
 		}
 
-		T operator++ (int) {
+		T operator++(int) {
 			const auto v = ToNative(Storage);
 			Storage = FromNative(v + 1);
 			return v;
 		}
 
-		T operator-- (int) {
+		T operator--(int) {
 			const auto v = ToNative(Storage);
 			Storage = FromNative(v - 1);
 			return v;

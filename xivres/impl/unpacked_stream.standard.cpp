@@ -4,8 +4,8 @@
 
 xivres::standard_unpacker::standard_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
 	: base_unpacker(std::move(strm))
-	, m_headerSize(header.HeaderSize)
-	, m_locators(m_stream->read_vector<packed::standard_block_locator>(sizeof packed::file_header, header.BlockCountOrVersion)) {
+	, m_locators(m_stream->read_vector<packed::standard_block_locator>(sizeof packed::file_header, header.BlockCountOrVersion))
+	, m_headerSize(header.HeaderSize) {
 
 	// +1 is intentional, to indicate that lower_bound resulting in the last entry would 100% mean that the read has been requested past the file size.
 	m_offsets.resize(m_locators.size() + 1);

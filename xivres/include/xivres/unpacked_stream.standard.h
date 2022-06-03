@@ -1,11 +1,9 @@
 #ifndef XIVRES_BINARYPACKEDFILESTREAMDECODER_H_
 #define XIVRES_BINARYPACKEDFILESTREAMDECODER_H_
 
-#include <ranges>
-
 #include "packed_stream.h"
-#include "unpacked_stream.h"
 #include "sqpack.h"
+#include "unpacked_stream.h"
 
 namespace xivres {
 	class standard_unpacker : public base_unpacker {

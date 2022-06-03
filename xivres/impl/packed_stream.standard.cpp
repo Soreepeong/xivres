@@ -1,5 +1,9 @@
 #include "../include/xivres/packed_stream.standard.h"
+
+#include <ranges>
+
 #include "../include/xivres/util.thread_pool.h"
+#include "../include/xivres/util.zlib_wrapper.h"
 
 xivres::standard_passthrough_packer::standard_passthrough_packer(std::shared_ptr<const stream> strm)
 	: passthrough_packer(std::move(strm)) {
@@ -7,7 +11,7 @@ xivres::standard_passthrough_packer::standard_passthrough_packer(std::shared_ptr
 
 std::streamsize xivres::standard_passthrough_packer::size() {
 	ensure_initialized();
-	return reinterpret_cast<const packed::file_header*>(&m_header[0])->occupied_size();
+	return static_cast<std::streamsize>(reinterpret_cast<const packed::file_header*>(&m_header[0])->occupied_size());
 }
 
 void xivres::standard_passthrough_packer::ensure_initialized() {
@@ -87,7 +91,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 
 			if (relativeOffset < size) {
 				const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(size - relativeOffset));
-				m_stream->read_fully(offset + relativeOffset, &out[0], available);
+				m_stream->read_fully(static_cast<std::streamoff>(offset + relativeOffset), &out[0], static_cast<std::streamsize>(available));
 				out = out.subspan(available);
 				relativeOffset = 0;
 
@@ -109,7 +113,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 		}, 0, static_cast<uint32_t>(i));
 	}
 
-	return length - out.size_bytes();
+	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
 std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const stream& strm, int compressionLevel) const {
@@ -163,8 +167,8 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 		+ sizeof packed::standard_block_locator * blockAlignment.Count
 	));
 	size_t entryBodyLength = 0;
-	for (const auto& blockItem : blockDataList)
-		entryBodyLength += align(sizeof packed::block_header + blockItem.second.size());
+	for (const auto& blockData : blockDataList | std::views::values)
+		entryBodyLength += align(sizeof packed::block_header + blockData.size());
 
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
@@ -189,7 +193,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 		header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : packed::block_header::CompressedSizeNotCompressed;
 		header.DecompressedSize = length;
 
-		std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
+		std::ranges::copy(targetBuf, resultDataPtr + sizeof header);
 
 		locators[index].Offset = index == 0 ? 0 : locators[index - 1].BlockSize + locators[index - 1].Offset;
 		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof header + targetBuf.size()));

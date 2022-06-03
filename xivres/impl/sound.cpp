@@ -1,4 +1,8 @@
 #include "../include/xivres/sound.h"
+
+#include <ranges>
+
+#include "../include/xivres/common.h"
 #include "../include/xivres/util.span_cast.h"
 
 const uint8_t xivres::sound::sound_entry_ogg_header::Version3XorTable[256] = {
@@ -104,18 +108,18 @@ std::vector<uint8_t> xivres::sound::reader::sound_item::get_wav_file() const {
 		res.insert(res.end(), reinterpret_cast<const uint8_t*>(&v), reinterpret_cast<const uint8_t*>(&v) + sizeof v);
 	};
 	const auto totalLength = static_cast<uint32_t>(size_t()
-		+ 12  // "RIFF"####"WAVE"
+		+ 12 // "RIFF"####"WAVE"
 		+ 8 + headerSpan.size() // "fmt "####<header>
-		+ 8 + Data.size()  // "data"####<data>
-		);
+		+ 8 + Data.size() // "data"####<data>
+	);
 	res.reserve(totalLength);
-	insert(LE<uint32_t>(0x46464952U));  // "RIFF"
+	insert(LE<uint32_t>(0x46464952U)); // "RIFF"
 	insert(LE<uint32_t>(totalLength - 8));
-	insert(LE<uint32_t>(0x45564157U));  // "WAVE"
-	insert(LE<uint32_t>(0x20746D66U));  // "fmt "
+	insert(LE<uint32_t>(0x45564157U)); // "WAVE"
+	insert(LE<uint32_t>(0x20746D66U)); // "fmt "
 	insert(LE<uint32_t>(static_cast<uint32_t>(headerSpan.size())));
 	res.insert(res.end(), headerSpan.begin(), headerSpan.end());
-	insert(LE<uint32_t>(0x61746164U));  // "data"
+	insert(LE<uint32_t>(0x61746164U)); // "data"
 	insert(LE<uint32_t>(static_cast<uint32_t>(Data.size())));
 	res.insert(res.end(), Data.begin(), Data.end());
 	return res;
@@ -170,13 +174,13 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 		.Buffer = read_entry(m_soundEntryOffsets, m_endOfSoundEntries, static_cast<uint32_t>(entryIndex)),
 		.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]),
 	};
-	auto pos = sizeof * res.Header;
+	auto pos = sizeof *res.Header;
 	for (size_t i = 0; i < res.Header->AuxChunkCount; ++i) {
 		res.AuxChunks.emplace_back(reinterpret_cast<sound_entry_aux_chunk*>(&res.Buffer[pos]));
 		pos += res.AuxChunks.back()->ChunkSize;
 	}
-	res.ExtraData = std::span(res.Buffer).subspan(pos, res.Header->StreamOffset + sizeof * res.Header - pos);
-	res.Data = std::span(res.Buffer).subspan(sizeof * res.Header + res.Header->StreamOffset, res.Header->StreamSize);
+	res.ExtraData = std::span(res.Buffer).subspan(pos, res.Header->StreamOffset + sizeof *res.Header - pos);
+	res.Data = std::span(res.Buffer).subspan(sizeof *res.Header + res.Header->StreamOffset, res.Header->StreamSize);
 	return res;
 }
 
@@ -231,7 +235,15 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_empty(
 	};
 }
 
-xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_ogg(std::vector<uint8_t> headerPages, std::vector<uint8_t> dataPages, uint32_t channels, uint32_t samplingRate, uint32_t loopStartOffset, uint32_t loopEndOffset, std::span<uint32_t> seekTable) {
+xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_ogg(
+	const std::vector<uint8_t>& headerPages,
+	std::vector<uint8_t> dataPages,
+	uint32_t channels,
+	uint32_t samplingRate,
+	uint32_t loopStartOffset,
+	uint32_t loopEndOffset,
+	std::span<uint32_t> seekTable
+) {
 	std::vector<uint8_t> oggHeaderBytes;
 	oggHeaderBytes.reserve(sizeof sound_entry_ogg_header + std::span(seekTable).size_bytes() + headerPages.size());
 	oggHeaderBytes.resize(sizeof sound_entry_ogg_header);
@@ -286,7 +298,8 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 		};
 		const auto sectionHdr = *reinterpret_cast<const CodeAndLen*>(reader(sizeof CodeAndLen, true).data());
 		pos += sizeof sectionHdr;
-		if (sectionHdr.Code == 0x61746164U) {  // "data"
+		if (sectionHdr.Code == 0x61746164U) {
+			// "data"
 			auto r = reader(sectionHdr.Len, true);
 
 			auto res = sound_item{
@@ -384,22 +397,22 @@ std::vector<uint8_t> xivres::sound::writer::Export() const {
 		.FileSize = static_cast<uint32_t>(requiredSize),
 	};
 	memcpy(reinterpret_cast<header*>(&res[0])->SedbSignature,
-		header::SedbSignature_Value,
-		sizeof header::SedbSignature_Value);
+			header::SedbSignature_Value,
+			sizeof header::SedbSignature_Value);
 	memcpy(reinterpret_cast<header*>(&res[0])->SscfSignature,
-		header::SscfSignature_Value,
-		sizeof header::SscfSignature_Value);
+			header::SscfSignature_Value,
+			sizeof header::SscfSignature_Value);
 
 	*reinterpret_cast<offsets*>(&res[sizeof header]) = {
 		.Table1And4EntryCount = static_cast<uint16_t>(m_table1.size()),
 		.Table2EntryCount = static_cast<uint16_t>(m_table2.size()),
 		.SoundEntryCount = static_cast<uint16_t>(m_soundEntries.size()),
-		.Unknown_0x006 = 0,  // ?
+		.Unknown_0x006 = 0, // ?
 		.Table2Offset = static_cast<uint32_t>(table2OffsetsOffset),
 		.SoundEntryOffset = static_cast<uint32_t>(soundEntryOffsetsOffset),
 		.Table4Offset = static_cast<uint32_t>(table4OffsetsOffset),
 		.Table5Offset = static_cast<uint32_t>(table5OffsetsOffset),
-		.Unknown_0x01C = 0,  // ?
+		.Unknown_0x01C = 0, // ?
 	};
 
 	res.resize(requiredSize);

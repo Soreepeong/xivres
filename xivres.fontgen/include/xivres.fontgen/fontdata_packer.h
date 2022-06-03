@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "fixed_size_font.h"
-
+#include "xivres/fontdata.h"
 #include "xivres/util.thread_pool.h"
 
 namespace xivres::fontgen {

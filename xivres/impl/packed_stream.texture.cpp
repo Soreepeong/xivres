@@ -1,5 +1,10 @@
 #include "../include/xivres/packed_stream.texture.h"
+
+#include <ranges>
+
+#include "../include/xivres/texture.h"
 #include "../include/xivres/util.thread_pool.h"
+#include "../include/xivres/util.zlib_wrapper.h"
 
 std::streamsize xivres::texture_passthrough_packer::size() {
 	const auto blockCount = MaxMipmapCountPerTexture + align<uint64_t>(m_stream->size(), packed::MaxBlockDataSize).Count;
@@ -28,7 +33,7 @@ std::streamsize xivres::texture_passthrough_packer::size() {
 	size = align(size);
 
 	// PackedBlock blocksOfMaximumSize[blockCount];
-	size += blockCount * packed::MaxBlockSize;
+	size += static_cast<std::streamsize>(blockCount * packed::MaxBlockSize);
 
 	return size;
 }
@@ -65,19 +70,19 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 
 	m_mipmapSizes.resize(mipmapOffsets.size());
 	for (size_t i = 0; i < mipmapOffsets.size(); ++i)
-		m_mipmapSizes[i] = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i));
+		m_mipmapSizes[i] = static_cast<uint32_t>(calc_raw_data_length(texHeader, i));
 
 	// Actual data exists but the mipmap offset array after texture header does not bother to refer
 	// to the ones after the first set of mipmaps?
 	// For example: if there are mipmaps of 4x4, 2x2, 1x1, 4x4, 2x2, 1x2, 4x4, 2x2, and 1x1,
 	// then it will record mipmap offsets only up to the first occurrence of 1x1.
-	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (size_t{} + mipmapOffsets[1] - mipmapOffsets[0]) / texture::calc_raw_data_length(texHeader, 0);
+	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (size_t{} + mipmapOffsets[1] - mipmapOffsets[0]) / calc_raw_data_length(texHeader, 0);
 	m_mipmapOffsetsWithRepeats = { mipmapOffsets.begin(), mipmapOffsets.end() };
 	for (auto forceQuit = false; !forceQuit && (m_mipmapOffsetsWithRepeats.empty() || m_mipmapOffsetsWithRepeats.back() + m_mipmapSizes.back() * repeatCount < entryHeader.DecompressedSize);) {
 		for (uint16_t i = 0; i < mipmapCount; ++i) {
 
 			// <caused by TexTools export>
-			const auto size = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i));
+			const auto size = static_cast<uint32_t>(calc_raw_data_length(texHeader, i));
 			if (m_mipmapOffsetsWithRepeats.back() + m_mipmapSizes.back() + size > entryHeader.DecompressedSize) {
 				forceQuit = true;
 				break;
@@ -85,7 +90,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 			// </caused by TexTools export>
 
 			m_mipmapOffsetsWithRepeats.push_back(m_mipmapOffsetsWithRepeats.back() + m_mipmapSizes.back());
-			m_mipmapSizes.push_back(static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i)));
+			m_mipmapSizes.push_back(static_cast<uint32_t>(calc_raw_data_length(texHeader, i)));
 		}
 	}
 
@@ -102,14 +107,8 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 				.BlockCount = blockAlignment.Count,
 			};
 
-			blockAlignment.IterateChunked([&](uint32_t, const uint32_t offset, const uint32_t length) {
-				packed::block_header header{
-					.HeaderSize = sizeof packed::block_header,
-					.Version = 0,
-					.CompressedSize = packed::block_header::CompressedSizeNotCompressed,
-					.DecompressedSize = length,
-				};
-				const auto alignmentInfo = align(sizeof header + length);
+			blockAlignment.IterateChunked([&](uint32_t, uint32_t, uint32_t length) {
+				const auto alignmentInfo = align(sizeof packed::block_header + length);
 
 				m_size += alignmentInfo.Alloc;
 				subBlockSizes.push_back(static_cast<uint16_t>(alignmentInfo.Alloc));
@@ -123,7 +122,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 	}
 
 	entryHeader.BlockCountOrVersion = static_cast<uint32_t>(m_blockLocators.size());
-	entryHeader.HeaderSize = static_cast<uint32_t>(xivres::align(
+	entryHeader.HeaderSize = static_cast<uint32_t>(align(
 		sizeof entryHeader +
 		std::span(m_blockLocators).size_bytes() +
 		std::span(subBlockSizes).size_bytes()));
@@ -151,9 +150,6 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamoff offset, void* buf, std::streamsize length) {
 	if (!length)
 		return 0;
-
-	const auto& packedFileHeader = *reinterpret_cast<const packed::file_header*>(&m_mergedHeader[0]);
-	const auto& texHeader = *reinterpret_cast<const texture::header*>(&m_mergedHeader[packedFileHeader.HeaderSize]);
 
 	auto relativeOffset = static_cast<uint64_t>(offset);
 	auto out = std::span(static_cast<char*>(buf), static_cast<size_t>(length));
@@ -244,7 +240,7 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 		out = out.subspan(static_cast<size_t>(available));
 	}
 
-	return length - out.size_bytes();
+	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
 std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const stream& strm, int compressionLevel) const {
@@ -270,19 +266,19 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 
 	std::vector<uint32_t> mipmapSizes(mipmapOffsets.size());
 	for (size_t i = 0; i < mipmapOffsets.size(); ++i)
-		mipmapSizes[i] = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i));
+		mipmapSizes[i] = static_cast<uint32_t>(calc_raw_data_length(texHeader, i));
 
 	// Actual data exists but the mipmap offset array after texture header does not bother to refer
 	// to the ones after the first set of mipmaps?
 	// For example: if there are mipmaps of 4x4, 2x2, 1x1, 4x4, 2x2, 1x2, 4x4, 2x2, and 1x1,
 	// then it will record mipmap offsets only up to the first occurrence of 1x1.
-	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (size_t{} + mipmapOffsets[1] - mipmapOffsets[0]) / texture::calc_raw_data_length(texHeader, 0);
+	const auto repeatCount = mipmapOffsets.size() < 2 ? 1 : (size_t{} + mipmapOffsets[1] - mipmapOffsets[0]) / calc_raw_data_length(texHeader, 0);
 	std::vector<uint32_t> mipmapOffsetsWithRepeats(mipmapOffsets.begin(), mipmapOffsets.end());
 	for (auto forceQuit = false; !forceQuit && (mipmapOffsetsWithRepeats.empty() || mipmapOffsetsWithRepeats.back() + mipmapSizes.back() * repeatCount < rawStreamSize);) {
 		for (uint16_t i = 0; i < mipmapCount; ++i) {
 
 			// <caused by TexTools export>
-			const auto size = static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i));
+			const auto size = static_cast<uint32_t>(calc_raw_data_length(texHeader, i));
 			if (mipmapOffsetsWithRepeats.back() + mipmapSizes.back() + size > rawStreamSize) {
 				forceQuit = true;
 				break;
@@ -290,7 +286,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 			// </caused by TexTools export>
 
 			mipmapOffsetsWithRepeats.push_back(mipmapOffsetsWithRepeats.back() + mipmapSizes.back());
-			mipmapSizes.push_back(static_cast<uint32_t>(texture::calc_raw_data_length(texHeader, i)));
+			mipmapSizes.push_back(static_cast<uint32_t>(calc_raw_data_length(texHeader, i)));
 		}
 	}
 
@@ -429,8 +425,8 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 	size_t entryBodyLength = textureHeaderAndMipmapOffsets.size();
 	for (const auto& repeatedItem : blockDataList) {
 		for (const auto& mipmapItem : repeatedItem) {
-			for (const auto& blockItem : mipmapItem) {
-				entryBodyLength += align(sizeof packed::block_header + blockItem.second.size());
+			for (const auto& blockData : mipmapItem | std::views::values) {
+				entryBodyLength += align(sizeof packed::block_header + blockData.size());
 			}
 		}
 	}
@@ -448,7 +444,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 	const auto blockLocators = util::span_cast<packed::mipmap_block_locator>(result, sizeof entryHeader, blockLocatorCount);
 	const auto subBlockSizes = util::span_cast<uint16_t>(result, sizeof entryHeader + blockLocators.size_bytes(), subBlockCount);
 	auto resultDataPtr = result.begin() + entryHeaderLength;
-	resultDataPtr = std::copy(textureHeaderAndMipmapOffsets.begin(), textureHeaderAndMipmapOffsets.end(), resultDataPtr);
+	resultDataPtr = std::ranges::copy(textureHeaderAndMipmapOffsets, resultDataPtr).out;
 
 	auto blockOffsetCounter = static_cast<uint32_t>(std::span(textureHeaderAndMipmapOffsets).size_bytes());
 	for (size_t i = 0, subBlockCounter = 0, blockLocatorIndexCounter = 0; i < mipmapOffsetsWithRepeats.size(); ++i) {
@@ -482,7 +478,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 				header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : packed::block_header::CompressedSizeNotCompressed;
 				header.DecompressedSize = length;
 
-				std::copy(targetBuf.begin(), targetBuf.end(), resultDataPtr + sizeof header);
+				std::ranges::copy(targetBuf, resultDataPtr + sizeof header);
 
 				const auto& subBlockSize = subBlockSizes[subBlockCounter++] = static_cast<uint16_t>(align(sizeof header + targetBuf.size()));
 				blockOffsetCounter += subBlockSize;

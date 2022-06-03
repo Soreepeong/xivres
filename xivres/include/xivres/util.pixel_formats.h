@@ -157,10 +157,10 @@ namespace xivres::util {
 
 	struct RGBAF64 {
 		static constexpr size_t ChannelCount = 4;
-		static constexpr double MaxR = 1.f;
-		static constexpr double MaxG = 1.f;
-		static constexpr double MaxB = 1.f;
-		static constexpr double MaxA = 1.f;
+		static constexpr double MaxR = 1.;
+		static constexpr double MaxG = 1.;
+		static constexpr double MaxB = 1.;
+		static constexpr double MaxA = 1.;
 
 		double R;
 		double G;
@@ -171,28 +171,28 @@ namespace xivres::util {
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
 	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF16& v) {
 		this->SetFrom(
-			static_cast<uint32_t>(std::round(util::clamp(255.f * static_cast<float>(v.R), 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * static_cast<float>(v.G), 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * static_cast<float>(v.B), 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * static_cast<float>(v.A), 0.f, 255.f))));
+			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.R), 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.G), 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.B), 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.A), 0.f, 255.f))));
 	}
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
 	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF32& v) {
 		this->SetFrom(
-			static_cast<uint32_t>(std::round(util::clamp(255.f * v.R, 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * v.G, 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * v.B, 0.f, 255.f))),
-			static_cast<uint32_t>(std::round(util::clamp(255.f * v.A, 0.f, 255.f))));
+			static_cast<uint32_t>(std::round(clamp(255.f * v.R, 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * v.G, 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * v.B, 0.f, 255.f))),
+			static_cast<uint32_t>(std::round(clamp(255.f * v.A, 0.f, 255.f))));
 	}
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
 	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF64& v) {
 		this->SetFrom(
-			static_cast<uint32_t>(std::round(util::clamp(255. * v.R, 0., 255.))),
-			static_cast<uint32_t>(std::round(util::clamp(255. * v.G, 0., 255.))),
-			static_cast<uint32_t>(std::round(util::clamp(255. * v.B, 0., 255.))),
-			static_cast<uint32_t>(std::round(util::clamp(255. * v.A, 0., 255.))));
+			static_cast<uint32_t>(std::round(clamp(255. * v.R, 0., 255.))),
+			static_cast<uint32_t>(std::round(clamp(255. * v.G, 0., 255.))),
+			static_cast<uint32_t>(std::round(clamp(255. * v.B, 0., 255.))),
+			static_cast<uint32_t>(std::round(clamp(255. * v.A, 0., 255.))));
 	}
 
 	struct RGBA4444 : RGBANNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::RGBANNNN; };
