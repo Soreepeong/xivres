@@ -7,6 +7,7 @@
 #include "../include/xivres/util.zlib_wrapper.h"
 
 std::streamsize xivres::texture_passthrough_packer::size() {
+	ensure_initialized();
 	const auto blockCount = MaxMipmapCountPerTexture + align<uint64_t>(m_stream->size(), packed::MaxBlockDataSize).Count;
 
 	std::streamsize size = 0;
@@ -114,7 +115,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 		sizeof entryHeader +
 		std::span(m_blockLocators).size_bytes() +
 		std::span(subBlockSizes).size_bytes()));
-	entryHeader.set_space_units(m_size);
+	entryHeader.set_space_units(textureHeaderAndMipmapOffsets.size() + m_size);
 
 	m_mergedHeader.reserve(entryHeader.HeaderSize + m_blockLocators.front().CompressedOffset);
 	m_mergedHeader.insert(m_mergedHeader.end(),

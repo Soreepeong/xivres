@@ -82,9 +82,10 @@ xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry* xivres::sqpa
 	return &m_lastActiveEntry;
 }
 
-xivres::sqpack::generator::generator(std::string ex, std::string name, uint64_t maxFileSize /*= sqdata::header::MaxFileSize_MaxValue*/) : m_maxFileSize(maxFileSize)
-																																		, DatExpac(std::move(ex))
-																																		, DatName(std::move(name)) {
+xivres::sqpack::generator::generator(std::string ex, std::string name, uint64_t maxFileSize)
+	: m_maxFileSize(maxFileSize)
+	, DatExpac(std::move(ex))
+	, DatName(std::move(name)) {
 	if (maxFileSize > sqdata::header::MaxFileSize_MaxValue)
 		throw std::invalid_argument("MaxFileSize cannot be more than 32GiB.");
 }

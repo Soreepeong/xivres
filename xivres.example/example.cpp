@@ -19,7 +19,7 @@
 #include "xivres/util.thread_pool.h"
 #include "xivres/util.unicode.h"
 
-constexpr auto UseThreading = false;
+constexpr auto UseThreading = true;
 
 template<typename TPassthroughPacker, typename TCompressingPacker>
 static auto test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> packed, xivres::path_spec pathSpec) {
@@ -171,28 +171,35 @@ static void test_sqpack_generator(const xivres::installation& gameReader) {
 		if (p != 0x60000)
 			continue;
 		const auto wfn = [p, &gameReader]() {
+			const auto ps = xivres::path_spec("ui/uld/Title_Logo600.tex");
 			try {
 				const auto& packfile = gameReader.get_sqpack(p);
 				xivres::sqpack::generator generator(((p >> 8) & 0xff) ? std::format("ex{}", (p >> 8) & 0xff) : "ffxiv", std::format("{:0>6x}", p));
 				std::cout << std::format("Working on {:06x} ({} entries)", p, packfile.Entries.size()) << std::endl;
-				for (const auto& entry : packfile.Entries) {
+				for (size_t i = 0; i < packfile.Entries.size(); i++) {
+					if (i % 1000 == 0)
+						std::cout << std::format("Read: {:06x}: {}/{}", p, i, packfile.Entries.size()) << std::endl;
+					const auto& entry = packfile.Entries[i];
 					try {
 						auto packed = packfile.packed_at(entry);
 						switch (packed->get_packed_type()) {
 							case xivres::packed::type::standard:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.path_spec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
+								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
 								// if ((p >> 16) == 0xC)
-								// 	packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.path_spec, make_ogg_crispy(std::move(packed)));
+								// 	packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.PathSpec, make_ogg_crispy(std::move(packed)));
 								// else
-								packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
+								// packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
 								break;
 							case xivres::packed::type::model:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.path_spec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
-								packed = std::make_shared<xivres::passthrough_packed_stream<xivres::model_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
+								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
+								// packed = std::make_shared<xivres::passthrough_packed_stream<xivres::model_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
 								break;
 							case xivres::packed::type::texture:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.path_spec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
-								packed = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
+								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
+								if (entry.PathSpec == ps) {
+									__debugbreak();
+									packed = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
+								}
 								break;
 							default: break;
 						}
@@ -323,12 +330,34 @@ int main() {
 		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 		system("chcp 65001 > NUL");
 
+		// const auto ind2 = xivres::sqpack::reader::from_path(LR"(C:\ffxiv\game\sqpack\ffxiv\060000.win32.index)");
+		// const auto p3 = ind2.packed_at("ui/uld/Title_Logo600.tex"); // ->read_vector<char>();
+		// std::ofstream("Z:/test.p3.bin", std::ios::binary).write(p3.data(), p3.size());
+
 		// xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 		xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
-		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
-		// const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>("ui/uld/Title_Logo600.tex", gameReader.get_file("ui/uld/Title_Logo600.tex"));
-		// const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
+		/*
+		auto packed0 = gameReader.get_file_packed("ui/uld/Title_Logo600.tex");
+		auto decoded0 = std::make_shared<xivres::unpacked_stream>(packed0);
+		// preview(xivres::texture::stream(decoded0));
+		const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(decoded0->path_spec(), decoded0);
+		const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
+		const auto packed2 = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(decoded0->path_spec(), decoded0, 0);
+		const auto decoded2 = std::make_shared<xivres::unpacked_stream>(packed1);
+		if (memcmp(decoded1->read_vector<char>().data(), decoded2->read_vector<char>().data(), decoded1->size()) != 0)
+			__debugbreak();
+		auto p0 = packed0->read_vector<char>();
+		auto p1 = packed1->read_vector<char>();
+		auto p2 = packed2->read_vector<char>();
+		std::ofstream("Z:/test.p0.bin", std::ios::binary).write(p0.data(), p0.size());
+		std::ofstream("Z:/test.p1.bin", std::ios::binary).write(p1.data(), p1.size());
+		std::ofstream(LR"(C:\Users\SP\AppData\Roaming\XivAlexander\TexToolsMods\test\TTMPD.mpd)", std::ios::binary).write(p2.data(), p1.size());
+		std::ofstream(LR"(C:\Users\SP\AppData\Roaming\XivAlexander\TexToolsMods\test\TTMPL.mpl)") << std::format(
+			R"({{"DatFile": "060000", "FullPath": "{}", "ModOffset": {}, "ModSize": {}}})",
+			"ui/uld/Title_Logo600.tex", 0, p2.size());
+		//*/
+		// __debugbreak();
 		// std::vector<uint8_t> buf(decoded1->size());
 		// xivres::align<uint64_t>(decoded1->size(), 1024).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
 		// 	const auto bufSpan = std::span(buf).subspan(offset, size);
