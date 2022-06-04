@@ -19,7 +19,7 @@
 #include "xivres/util.thread_pool.h"
 #include "xivres/util.unicode.h"
 
-constexpr auto UseThreading = true;
+constexpr auto UseThreading = false;
 
 template<typename TPassthroughPacker, typename TCompressingPacker>
 static auto test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> packed, xivres::path_spec pathSpec) {
@@ -168,6 +168,8 @@ static void test_sqpack_generator(const xivres::installation& gameReader) {
 	auto sqpackIds = gameReader.get_sqpack_ids();
 	std::ranges::sort(sqpackIds, [&gameReader](const uint32_t l, const uint32_t r) { return gameReader.get_sqpack(l).TotalDataSize > gameReader.get_sqpack(r).TotalDataSize; });
 	for (const auto p : sqpackIds) {
+		if (p != 0x60000)
+			continue;
 		const auto wfn = [p, &gameReader]() {
 			try {
 				const auto& packfile = gameReader.get_sqpack(p);
@@ -324,17 +326,15 @@ int main() {
 		// xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 		xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
-
-		preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
-		const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>("ui/uld/Title_Logo600.tex", gameReader.get_file("ui/uld/Title_Logo600.tex"));
-		const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
-		std::vector<uint8_t> buf(decoded1->size());
-		xivres::align<uint64_t>(decoded1->size(), 1024).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
-			const auto bufSpan = std::span(buf).subspan(offset, size);
-			decoded1->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-		});
-		preview(xivres::texture::stream(std::make_shared<xivres::memory_stream>(buf)));
-		
+		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
+		// const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>("ui/uld/Title_Logo600.tex", gameReader.get_file("ui/uld/Title_Logo600.tex"));
+		// const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
+		// std::vector<uint8_t> buf(decoded1->size());
+		// xivres::align<uint64_t>(decoded1->size(), 1024).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
+		// 	const auto bufSpan = std::span(buf).subspan(offset, size);
+		// 	decoded1->read_fully(static_cast<std::streamoff>(offset), bufSpan);
+		// });
+		// preview(xivres::texture::stream(std::make_shared<xivres::memory_stream>(buf)));
 		// std::thread t1([&]() { preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")), L"Source");} );
 		// std::thread t2([&]() { preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")), L"Source");} );
 		// t1.join();
@@ -342,7 +342,7 @@ int main() {
 		
 		// test_range_read(gameReader);
 		// test_pack_unpack(gameReader);
-		// test_sqpack_generator(gameReader);
+		test_sqpack_generator(gameReader);
 		// test_ogg_decode_encode(gameReader);
 		// test_excel(gameReader);
 

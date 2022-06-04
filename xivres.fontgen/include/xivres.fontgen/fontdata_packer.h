@@ -7,7 +7,7 @@
 namespace xivres::fontgen {
 	class fontdata_packer {
 		size_t m_nThreads = std::thread::hardware_concurrency();
-		int m_nSideLength = 4096;
+		int m_nSideLength = 1024;
 		int m_nDiscardStep = 1;
 		std::vector<std::shared_ptr<fixed_size_font>> m_sourceFonts;
 

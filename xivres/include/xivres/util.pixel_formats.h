@@ -48,22 +48,22 @@ namespace xivres::util {
 	struct RGBAF64;
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
-	struct ARGBNNNNCommon {
+	struct RGBACommon {
 		static constexpr size_t ChannelCount = 4;
 		static constexpr T MaxR = (1 << RB) - 1;
 		static constexpr T MaxG = (1 << GB) - 1;
 		static constexpr T MaxB = (1 << BB) - 1;
 		static constexpr T MaxA = (1 << AB) - 1;
 
-		ARGBNNNNCommon() {
+		RGBACommon() {
 			memset(this, 0, sizeof(*this));
 		}
 
-		ARGBNNNNCommon(T value) {
+		RGBACommon(T value) {
 			memcpy(this, &value, sizeof(*this));
 		}
 
-		ARGBNNNNCommon(T r, T g, T b, T a = MaxA) {
+		RGBACommon(T r, T g, T b, T a = MaxA) {
 			SetFrom(r, g, b, a);
 		}
 
@@ -90,61 +90,85 @@ namespace xivres::util {
 	};
 
 	template<typename T, int RB, int GB, int BB, int AB>
-	struct RGBANNNN : ARGBNNNNCommon<RGBANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+	struct RGBANNNN : RGBACommon<RGBANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
 		using TRGBA = RGBANNNN<T, RB, GB, BB, AB>;
+		static constexpr size_t ComponentIndices[4]{0, 1, 2, 3};
 
 		T A : AB;  // actually opacity
 		T B : BB;
 		T G : GB;
 		T R : RB;
 
-		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
+		using TRGBACommon = RGBACommon<TRGBA, T, RB, GB, BB, AB>;
 		using TRGBACommon::ChannelCount;
 		using TRGBACommon::MaxR;
 		using TRGBACommon::MaxG;
 		using TRGBACommon::MaxB;
 		using TRGBACommon::MaxA;
-		using TRGBACommon::ARGBNNNNCommon;
+		using TRGBACommon::RGBACommon;
 		using TRGBACommon::SetFrom;
 		using TRGBACommon::SetFromF;
 	};
 
 	template<typename T, int RB, int GB, int BB, int AB>
-	struct BGRANNNN : ARGBNNNNCommon<BGRANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+	struct BGRANNNN : RGBACommon<BGRANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
 		using TRGBA = BGRANNNN<T, RB, GB, BB, AB>;
+		static constexpr size_t ComponentIndices[4]{2, 1, 0, 3};
 
 		T A : AB;  // actually opacity
 		T R : BB;
 		T G : GB;
 		T B : RB;
 
-		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
+		using TRGBACommon = RGBACommon<TRGBA, T, RB, GB, BB, AB>;
 		using TRGBACommon::ChannelCount;
 		using TRGBACommon::MaxR;
 		using TRGBACommon::MaxG;
 		using TRGBACommon::MaxB;
 		using TRGBACommon::MaxA;
-		using TRGBACommon::ARGBNNNNCommon;
+		using TRGBACommon::RGBACommon;
 		using TRGBACommon::SetFrom;
 		using TRGBACommon::SetFromF;
 	};
 
 	template<typename T, int RB, int GB, int BB, int AB>
-	struct ARGBNNNN : ARGBNNNNCommon<ARGBNNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+	struct ARGBNNNN : RGBACommon<ARGBNNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
 		using TRGBA = ARGBNNNN<T, RB, GB, BB, AB>;
+		static constexpr size_t ComponentIndices[4]{1, 2, 3, 0};
 
 		T B : BB;
 		T G : GB;
 		T R : RB;
 		T A : AB;  // actually opacity
 
-		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
+		using TRGBACommon = RGBACommon<TRGBA, T, RB, GB, BB, AB>;
 		using TRGBACommon::ChannelCount;
 		using TRGBACommon::MaxR;
 		using TRGBACommon::MaxG;
 		using TRGBACommon::MaxB;
 		using TRGBACommon::MaxA;
-		using TRGBACommon::ARGBNNNNCommon;
+		using TRGBACommon::RGBACommon;
+		using TRGBACommon::SetFrom;
+		using TRGBACommon::SetFromF;
+	};
+
+	template<typename T, int RB, int GB, int BB, int AB>
+	struct ABGRNNNN : RGBACommon<ABGRNNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+		using TRGBA = ABGRNNNN<T, RB, GB, BB, AB>;
+		static constexpr size_t ComponentIndices[4]{3, 2, 1, 0};
+
+		T B : BB;
+		T G : GB;
+		T R : RB;
+		T A : AB;  // actually opacity
+
+		using TRGBACommon = RGBACommon<TRGBA, T, RB, GB, BB, AB>;
+		using TRGBACommon::ChannelCount;
+		using TRGBACommon::MaxR;
+		using TRGBACommon::MaxG;
+		using TRGBACommon::MaxB;
+		using TRGBACommon::MaxA;
+		using TRGBACommon::RGBACommon;
 		using TRGBACommon::SetFrom;
 		using TRGBACommon::SetFromF;
 	};
@@ -189,7 +213,7 @@ namespace xivres::util {
 	};
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
-	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF16& v) {
+	void RGBACommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF16& v) {
 		this->SetFrom(
 			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.R), 0.f, 255.f))),
 			static_cast<uint32_t>(std::round(clamp(255.f * static_cast<float>(v.G), 0.f, 255.f))),
@@ -198,7 +222,7 @@ namespace xivres::util {
 	}
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
-	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF32& v) {
+	void RGBACommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF32& v) {
 		this->SetFrom(
 			static_cast<uint32_t>(std::round(clamp(255.f * v.R, 0.f, 255.f))),
 			static_cast<uint32_t>(std::round(clamp(255.f * v.G, 0.f, 255.f))),
@@ -207,7 +231,7 @@ namespace xivres::util {
 	}
 
 	template<typename TRGBA, typename T, int RB, int GB, int BB, int AB>
-	void ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF64& v) {
+	void RGBACommon<TRGBA, T, RB, GB, BB, AB>::SetFrom(const RGBAF64& v) {
 		this->SetFrom(
 			static_cast<uint32_t>(std::round(clamp(255. * v.R, 0., 255.))),
 			static_cast<uint32_t>(std::round(clamp(255. * v.G, 0., 255.))),
@@ -216,6 +240,9 @@ namespace xivres::util {
 	}
 
 	struct RGBA4444 : ARGBNNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::ARGBNNNN; };
+	// struct RGBA4444 : RGBANNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::RGBANNNN; };
+	// struct RGBA4444 : BGRANNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::BGRANNNN; };
+	// struct RGBA4444 : ABGRNNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::ABGRNNNN; };
 	static_assert(sizeof RGBA4444 == 2);
 	struct RGBA5551 : ARGBNNNN<uint16_t, 5, 5, 5, 1> { using TRGBA::ARGBNNNN; };
 	static_assert(sizeof RGBA5551 == 2);

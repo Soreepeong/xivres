@@ -19,7 +19,7 @@ xivres::texture::stream::stream(const std::shared_ptr<xivres::stream>& strm)
 
 xivres::texture::stream::stream(format type, size_t width, size_t height, size_t depth, size_t mipmapCount, size_t repeatCount)
 	: m_header({
-		.Attribute = attribute::AlignedSize,
+		.Attribute = attribute::TextureType2D,
 		.Type = type,
 		.Width = util::range_check_cast<uint16_t>(width),
 		.Height = util::range_check_cast<uint16_t>(height),
