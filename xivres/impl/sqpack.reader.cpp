@@ -95,7 +95,8 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 			strictVerify,
 		});
 		offsets1.emplace_back(sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, UINT32_MAX, static_cast<const char*>(nullptr)));
-		offsets2.emplace_back(sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, static_cast<const char*>(nullptr)));
+		offsets2.emplace_back(sqindex::data_locator(i, Data[i].Stream->size()), std::make_tuple(UINT32_MAX, static_cast<const char*>(nullptr))); 
+		TotalDataSize += Data[i].Stream->size();
 	}
 
 	struct Comparator {
@@ -142,11 +143,11 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 
 		Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
 		if (std::get<2>(offsets1[prev].second))
-			Entries.back().path_spec = path_spec(std::get<2>(offsets1[prev].second));
+			Entries.back().PathSpec = path_spec(std::get<2>(offsets1[prev].second));
 		else if (std::get<1>(offsets2[prev].second))
-			Entries.back().path_spec = path_spec(std::get<1>(offsets2[prev].second));
+			Entries.back().PathSpec = path_spec(std::get<1>(offsets2[prev].second));
 		else
-			Entries.back().path_spec = path_spec(
+			Entries.back().PathSpec = path_spec(
 				std::get<0>(offsets1[prev].second),
 				std::get<1>(offsets1[prev].second),
 				std::get<0>(offsets2[prev].second),
@@ -202,7 +203,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const entry_info& info) const {
-	return std::make_unique<stream_as_packed_stream>(info.path_spec, std::make_shared<partial_view_stream>(Data.at(info.Locator.DatFileIndex).Stream, info.Locator.offset(), info.Allocation));
+	return std::make_unique<stream_as_packed_stream>(info.PathSpec, std::make_shared<partial_view_stream>(Data.at(info.Locator.DatFileIndex).Stream, info.Locator.offset(), info.Allocation));
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const path_spec& pathSpec) const {

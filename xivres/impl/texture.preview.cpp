@@ -94,7 +94,7 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 			IntersectClipRect(hdc, clip.left, clip.top, clip.right, clip.bottom);
 			if (showmode == 0)
 				SetStretchBltMode(hdc, zoomFactor < 0 ? HALFTONE : COLORONCOLOR);
-			(hdc, renderOffset.x, renderOffset.y, nullptr);
+			SetBrushOrgEx(hdc, renderOffset.x, renderOffset.y, nullptr);
 			switch (showmode) {
 				case 0:
 				case 1:

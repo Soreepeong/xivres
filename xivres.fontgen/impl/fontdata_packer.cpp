@@ -380,19 +380,15 @@ void xivres::fontgen::fontdata_packer::prepare_threadsafe_source_fonts() {
 
 const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_source_font(size_t fontIndex, size_t threadIndex) {
 	auto& copy = m_threadSafeSourceFonts[fontIndex][threadIndex];
-	if (!copy) {
-		__debugbreak();
+	if (!copy)
 		copy = m_threadSafeSourceFonts[fontIndex][0]->get_threadsafe_view();
-	}
 	return *copy;
 }
 
 const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_base_font(const fixed_size_font* font, size_t threadIndex) {
 	auto& copy = m_threadSafeBaseFonts[font][threadIndex];
-	if (!copy) {
-		__debugbreak();
+	if (!copy)
 		copy = m_threadSafeBaseFonts[font][0]->get_threadsafe_view();
-	}
 	return *copy;
 }
 

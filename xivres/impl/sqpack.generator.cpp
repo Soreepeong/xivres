@@ -147,7 +147,7 @@ xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(cons
 		try {
 			add(result, reader.packed_at(entryInfo), overwriteExisting);
 		} catch (const std::exception& e) {
-			result.Error.emplace_back(entryInfo.path_spec, e.what());
+			result.Error.emplace_back(entryInfo.PathSpec, e.what());
 		}
 	}
 	return result;
@@ -559,7 +559,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 	std::vector<sqindex::data_locator> locators;
 
 	std::fstream dataFile;
-	std::vector<char> buf(1048576);
+	std::vector<char> buf(65536);
 	for (size_t i = 0; i < entries.size(); ++i) {
 		auto& entry = *entries[i];
 		const auto provider{std::move(entry.Provider)};
@@ -571,7 +571,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 				if (strict) {
 					util::hash_sha1 sha1;
 					dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
-					align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+					align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
 						dataFile.read(&buf[0], static_cast<size_t>(size));
 						if (!dataFile)
 							throw std::runtime_error("Failed to read from output data file.");
@@ -600,7 +600,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 		entry.Locator = {static_cast<uint32_t>(dataSubheaders.size() - 1), sizeof header + sizeof sqdata::header + dataSubheaders.back().DataSize};
 		dataFile.seekg(static_cast<std::streamoff>(entry.Locator.offset()), std::ios::beg);
-		align<uint64_t>(entrySize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+		align<uint64_t>(entrySize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
 			const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
 			provider->read_fully(static_cast<std::streamoff>(offset), bufSpan);
 			dataFile.write(&buf[0], static_cast<std::streamsize>(bufSpan.size()));
@@ -615,7 +615,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 		if (strict) {
 			util::hash_sha1 sha1;
 			dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
-			align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).IterateChunked([&](uint64_t index, uint64_t offset, uint64_t size) {
+			align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
 				dataFile.read(&buf[0], static_cast<size_t>(size));
 				if (!dataFile)
 					throw std::runtime_error("Failed to read from output data file.");

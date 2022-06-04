@@ -46,7 +46,7 @@ void xivres::model_passthrough_packer::ensure_initialized() {
 		const auto alignedBlock = align<uint32_t, uint16_t>(size, packed::MaxBlockDataSize);
 		const auto firstBlockOffset = size ? getNextBlockOffset() : 0;
 		const auto firstBlockIndex = static_cast<uint16_t>(m_blockOffsets.size());
-		alignedBlock.IterateChunked([&](auto, uint32_t offset, uint32_t size) {
+		alignedBlock.iterate_chunks([&](auto, uint32_t offset, uint32_t size) {
 			m_blockOffsets.push_back(getNextBlockOffset());
 			m_blockDataSizes.push_back(static_cast<uint16_t>(size));
 			m_paddedBlockSizes.push_back(static_cast<uint32_t>(align(sizeof packed::block_header + size)));
@@ -239,7 +239,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const str
 			auto& setBlockDataList = blockDataList[setIndex];
 			setBlockDataList.resize(alignedBlock.Count);
 
-			alignedBlock.IterateChunkedBreakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
+			alignedBlock.iterate_chunks_breakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
 				if (is_cancelled())
 					return false;
 
@@ -331,7 +331,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack(const str
 			const auto firstBlockOffset = size ? nextBlockOffset : 0;
 			const auto firstBlockIndex = static_cast<uint16_t>(totalBlockIndex);
 
-			alignedBlock.IterateChunked([&](size_t blockIndex, uint32_t offset, uint32_t length) {
+			alignedBlock.iterate_chunks([&](size_t blockIndex, uint32_t offset, uint32_t length) {
 				if (is_cancelled())
 					return false;
 				auto& [useCompressed, targetBuf] = blockDataList[setIndex][blockIndex];

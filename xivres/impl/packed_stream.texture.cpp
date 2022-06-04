@@ -95,7 +95,7 @@ void xivres::texture_passthrough_packer::ensure_initialized() {
 			loc.FirstBlockIndex = m_blockLocators.empty() ? 0 : m_blockLocators.back().FirstBlockIndex + m_blockLocators.back().BlockCount;
 			loc.BlockCount = blockAlignment.Count;
 
-			blockAlignment.IterateChunked([&](uint32_t, uint32_t, uint32_t length) {
+			blockAlignment.iterate_chunks([&](uint32_t, uint32_t, uint32_t length) {
 				const auto alignmentInfo = align(sizeof packed::block_header + length);
 
 				m_size += alignmentInfo.Alloc;
@@ -160,7 +160,8 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 
 		// 1. Find the first LOD block
 		relativeOffset += m_blockLocators[0].CompressedOffset;
-		auto it = std::ranges::lower_bound(m_blockLocators, packed::mipmap_block_locator{.CompressedOffset = static_cast<uint32_t>(relativeOffset)},
+		auto it = std::ranges::lower_bound(m_blockLocators,
+			packed::mipmap_block_locator{.CompressedOffset = static_cast<uint32_t>(relativeOffset)},
 			[&](const auto& l, const auto& r) { return l.CompressedOffset < r.CompressedOffset; });
 		if (it == m_blockLocators.end() || relativeOffset < it->CompressedOffset)
 			--it;
@@ -228,7 +229,8 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 				}
 			}
 		}
-	}
+	} else
+		relativeOffset -= m_size - m_mergedHeader.size();
 
 	// 3. Fill remainder with zero
 	if (const auto endPadSize = static_cast<uint64_t>(size() - m_size); relativeOffset < endPadSize) {
@@ -304,7 +306,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 					auto& blockDataVector = blockDataList[mipmapIndex][repeatIndex];
 					blockDataVector.resize(blockAlignment.Count);
 
-					blockAlignment.IterateChunkedBreakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+					blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
 						if (is_cancelled())
 							return false;
 
@@ -368,7 +370,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 		+ blockLocatorCount * sizeof packed::mipmap_block_locator
 		+ subBlockCount * sizeof uint16_t
 	));
-	
+
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
 	auto& entryHeader = *reinterpret_cast<packed::file_header*>(&result[0]);

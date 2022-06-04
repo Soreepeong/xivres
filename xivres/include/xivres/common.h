@@ -39,7 +39,7 @@ namespace xivres {
 			return Alloc;
 		}
 
-		void IterateChunkedBreakable(std::function<bool(CountT, T, T)> cb, T baseOffset = 0, CountT baseIndex = 0) const {
+		void iterate_chunks_breakable(std::function<bool(CountT, T, T)> cb, T baseOffset = 0, CountT baseIndex = 0) const {
 			if (Pad == 0) {
 				for (CountT i = baseIndex; i < Count; ++i)
 					if (!cb(i, baseOffset + i * By, By))
@@ -54,7 +54,7 @@ namespace xivres {
 			}
 		}
 
-		void IterateChunked(std::function<void(CountT, T, T)> cb, T baseOffset = 0, CountT baseIndex = 0) const {
+		void iterate_chunks(std::function<void(CountT, T, T)> cb, T baseOffset = 0, CountT baseIndex = 0) const {
 			if (Pad == 0) {
 				for (CountT i = baseIndex; i < Count; ++i)
 					cb(i, baseOffset + i * By, By);

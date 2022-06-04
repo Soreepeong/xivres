@@ -39,7 +39,7 @@ void xivres::standard_passthrough_packer::ensure_initialized() {
 	};
 	header.set_space_units((static_cast<size_t>(blockAlignment.Count) - 1) * packed::MaxBlockSize + sizeof packed::block_header + blockAlignment.Last);
 
-	blockAlignment.IterateChunked([&](uint32_t index, uint32_t offset, uint32_t size) {
+	blockAlignment.iterate_chunks([&](uint32_t index, uint32_t offset, uint32_t size) {
 		locators[index].Offset = index == 0 ? 0 : locators[index - 1].Offset + locators[index - 1].BlockSize;
 		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof packed::block_header + size));
 		locators[index].DecompressedDataSize = static_cast<uint16_t>(size);
@@ -71,7 +71,7 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 		const auto i = relativeOffset / packed::MaxBlockSize;
 		relativeOffset -= i * packed::MaxBlockSize;
 
-		blockAlignment.IterateChunkedBreakable([&](uint32_t, uint32_t offset, uint32_t size) {
+		blockAlignment.iterate_chunks_breakable([&](uint32_t, uint32_t offset, uint32_t size) {
 			if (relativeOffset < sizeof packed::block_header) {
 				const auto header = packed::block_header{
 					.HeaderSize = sizeof packed::block_header,
@@ -128,7 +128,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 		std::vector<std::vector<uint8_t>> readBuffers(threadPool.GetThreadCount());
 
 		try {
-			blockAlignment.IterateChunkedBreakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+			blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
 				if (is_cancelled())
 					return false;
 
@@ -182,7 +182,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 	const auto locators = util::span_cast<packed::standard_block_locator>(result, sizeof entryHeader, blockAlignment.Count);
 	auto resultDataPtr = result.begin() + entryHeaderLength;
 
-	blockAlignment.IterateChunkedBreakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+	blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
 		if (is_cancelled())
 			return false;
 		auto& [useCompressed, targetBuf] = blockDataList[index];

@@ -98,7 +98,7 @@ namespace xivres::util {
 		T G : GB;
 		T R : RB;
 
-		using TRGBACommon = ARGBNNNNCommon<RGBANNNN<T, RB, GB, BB, AB>, T,RB, GB, BB, AB>;
+		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
 		using TRGBACommon::ChannelCount;
 		using TRGBACommon::MaxR;
 		using TRGBACommon::MaxG;
@@ -110,7 +110,27 @@ namespace xivres::util {
 	};
 
 	template<typename T, int RB, int GB, int BB, int AB>
-	struct ARGBNNNN : ARGBNNNNCommon<RGBANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+	struct BGRANNNN : ARGBNNNNCommon<BGRANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
+		using TRGBA = BGRANNNN<T, RB, GB, BB, AB>;
+
+		T A : AB;  // actually opacity
+		T R : BB;
+		T G : GB;
+		T B : RB;
+
+		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
+		using TRGBACommon::ChannelCount;
+		using TRGBACommon::MaxR;
+		using TRGBACommon::MaxG;
+		using TRGBACommon::MaxB;
+		using TRGBACommon::MaxA;
+		using TRGBACommon::ARGBNNNNCommon;
+		using TRGBACommon::SetFrom;
+		using TRGBACommon::SetFromF;
+	};
+
+	template<typename T, int RB, int GB, int BB, int AB>
+	struct ARGBNNNN : ARGBNNNNCommon<ARGBNNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB> {
 		using TRGBA = ARGBNNNN<T, RB, GB, BB, AB>;
 
 		T B : BB;
@@ -118,7 +138,7 @@ namespace xivres::util {
 		T R : RB;
 		T A : AB;  // actually opacity
 
-		using TRGBACommon = ARGBNNNNCommon<RGBANNNN<T, RB, GB, BB, AB>, T, RB, GB, BB, AB>;
+		using TRGBACommon = ARGBNNNNCommon<TRGBA, T, RB, GB, BB, AB>;
 		using TRGBACommon::ChannelCount;
 		using TRGBACommon::MaxR;
 		using TRGBACommon::MaxG;
@@ -195,11 +215,11 @@ namespace xivres::util {
 			static_cast<uint32_t>(std::round(clamp(255. * v.A, 0., 255.))));
 	}
 
-	struct RGBA4444 : RGBANNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::RGBANNNN; };
+	struct RGBA4444 : ARGBNNNN<uint16_t, 4, 4, 4, 4> { using TRGBA::ARGBNNNN; };
 	static_assert(sizeof RGBA4444 == 2);
 	struct RGBA5551 : ARGBNNNN<uint16_t, 5, 5, 5, 1> { using TRGBA::ARGBNNNN; };
 	static_assert(sizeof RGBA5551 == 2);
-	struct RGBA8888 : RGBANNNN<uint32_t, 8, 8, 8, 8> { using TRGBA::RGBANNNN; };
+	struct RGBA8888 : ARGBNNNN<uint32_t, 8, 8, 8, 8> { using TRGBA::ARGBNNNN; };
 	static_assert(sizeof RGBA8888 == 4);
 }
 

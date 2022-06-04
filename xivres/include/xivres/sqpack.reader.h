@@ -102,7 +102,7 @@ namespace xivres::sqpack {
 
 		struct entry_info {
 			sqindex::data_locator Locator;
-			path_spec path_spec;
+			path_spec PathSpec;
 			uint64_t Allocation;
 		};
 
@@ -110,6 +110,8 @@ namespace xivres::sqpack {
 		sqindex_2_type Index2;
 		std::vector<sqdata_type> Data;
 		std::vector<entry_info> Entries;
+
+		size_t TotalDataSize{};
 
 		uint8_t CategoryId;
 		uint8_t ExpacId;
