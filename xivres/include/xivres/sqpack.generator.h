@@ -89,6 +89,7 @@ namespace xivres::sqpack {
 		void add(add_result& result, std::shared_ptr<packed_stream> provider, bool overwriteExisting);
 		add_result add(std::shared_ptr<packed_stream> provider, bool overwriteExisting = true);
 		add_result add_sqpack(const std::filesystem::path& indexPath, bool overwriteExisting = true, bool overwriteUnknownSegments = false);
+		add_result add_sqpack(const xivres::sqpack::reader& reader, bool overwriteExisting = true, bool overwriteUnknownSegments = false);
 		add_result add_file(path_spec pathSpec, const std::filesystem::path& path, bool overwriteExisting = true);
 		void reserve_space(path_spec pathSpec, uint32_t size);
 

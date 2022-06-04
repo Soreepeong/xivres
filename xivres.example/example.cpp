@@ -91,7 +91,7 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 				pool.Submit(&entry, cb);
 			else {
 				auto [pack_type, res] = cb();
-				std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", packId, i, packfile.Entries.size(), entry.PathSpec.PathHash(), entry.PathSpec.NameHash(), entry.PathSpec.FullPathHash());
+				std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", packId, i, packfile.Entries.size(), entry.PathSpec.path_hash(), entry.PathSpec.name_hash(), entry.PathSpec.full_path_hash());
 				switch (pack_type) {
 					case xivres::packed::type::model: std::cout << " Model   ";
 						break;
@@ -118,7 +118,7 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 				const auto& [pack_type, res] = resultPair->second;
 
 				if (!res.empty() || i % 500 == 0) {
-					std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", packId, i, packfile.Entries.size(), entry.PathSpec.PathHash(), entry.PathSpec.NameHash(), entry.PathSpec.FullPathHash());
+					std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", packId, i, packfile.Entries.size(), entry.PathSpec.path_hash(), entry.PathSpec.name_hash(), entry.PathSpec.full_path_hash());
 					switch (pack_type) {
 						case xivres::packed::type::model: std::cout << " Model   ";
 							break;
@@ -264,7 +264,7 @@ void test_range_read(const xivres::installation& gameReader) {
 	specs.emplace_back(0xb9ae4029, 0x2049ae1c, 0x01c3d0ca, 0x01, 0x00, 0x00);
 	specs.emplace_back(0xdbe71b5b, 0xbaa24aef, 0x4a506bf6, 0x02, 0x03, 0x01);
 	for (const auto& p : gameReader.get_sqpack(0x040000).Entries)
-		if (p.PathSpec.PathHash() != 0xffffffff)
+		if (p.PathSpec.path_hash() != 0xffffffff)
 			specs.emplace_back(p.PathSpec);
 
 	xivres::util::thread_pool pool;

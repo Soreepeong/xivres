@@ -127,6 +127,8 @@ namespace xivres::sqpack {
 
 		[[nodiscard]] const sqindex::data_locator& data_locator_from_index2(const path_spec& pathSpec) const;
 
+		[[nodiscard]] size_t find_entry_index(const path_spec& pathSpec) const;
+
 		[[nodiscard]] std::shared_ptr<packed_stream> packed_at(const entry_info& info) const;
 
 		[[nodiscard]] std::shared_ptr<packed_stream> packed_at(const path_spec& pathSpec) const;

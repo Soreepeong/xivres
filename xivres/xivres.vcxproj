@@ -226,6 +226,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>26812</DisableSpecificWarnings>
       <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -251,6 +252,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>26812</DisableSpecificWarnings>
       <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -278,6 +280,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>26812</DisableSpecificWarnings>
       <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -307,6 +310,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>26812</DisableSpecificWarnings>
       <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

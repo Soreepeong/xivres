@@ -59,7 +59,7 @@ namespace xivres::sqpack::sqindex {
 		struct {
 			uint32_t IsSynonym : 1;
 			uint32_t DatFileIndex : 3;
-			uint32_t DatFileOffsetBy8 : 28;
+			uint32_t DatFileUnitOffset : 28;
 		};
 
 		static data_locator Synonym() {
@@ -73,7 +73,7 @@ namespace xivres::sqpack::sqindex {
 		data_locator(uint32_t index, uint64_t offset)
 			: IsSynonym(0)
 			, DatFileIndex(index)
-			, DatFileOffsetBy8(static_cast<uint32_t>(offset / EntryAlignment)) {
+			, DatFileUnitOffset(static_cast<uint32_t>(offset / EntryAlignment)) {
 			if (offset % EntryAlignment)
 				throw std::invalid_argument("Offset must be a multiple of 128.");
 			if (offset / 8 > UINT32_MAX)
@@ -87,7 +87,7 @@ namespace xivres::sqpack::sqindex {
 		~data_locator() = default;
 
 		[[nodiscard]] uint64_t offset() const {
-			return 1ULL * DatFileOffsetBy8 * EntryAlignment;
+			return 1ULL * DatFileUnitOffset * EntryAlignment;
 		}
 
 		void offset(uint64_t value) {
@@ -95,7 +95,7 @@ namespace xivres::sqpack::sqindex {
 				throw std::invalid_argument("Offset must be a multiple of 128.");
 			if (value / 8 > UINT32_MAX)
 				throw std::invalid_argument("Offset is too big.");
-			DatFileOffsetBy8 = static_cast<uint32_t>(value / EntryAlignment);
+			DatFileUnitOffset = static_cast<uint32_t>(value / EntryAlignment);
 		}
 
 		bool operator<(const data_locator& r) const {

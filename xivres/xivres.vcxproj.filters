@@ -51,9 +51,6 @@
     <None Include="vcpkg.json">
       <Filter>Project Items</Filter>
     </None>
-    <None Include=".editorconfig">
-      <Filter>Project Items</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\xivres\common.h">

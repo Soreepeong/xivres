@@ -180,9 +180,9 @@ xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::
 
 const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index1(const path_spec& pathSpec) const {
 	try {
-		const auto& locator = Index1.data_locator(pathSpec.PathHash(), pathSpec.NameHash());
+		const auto& locator = Index1.data_locator(pathSpec.path_hash(), pathSpec.name_hash());
 		if (locator.IsSynonym)
-			return Index1.data_locator(pathSpec.Path().c_str());
+			return Index1.data_locator(pathSpec.path().c_str());
 		return locator;
 
 	} catch (const std::out_of_range& e) {
@@ -192,9 +192,9 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 
 const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index2(const path_spec& pathSpec) const {
 	try {
-		const auto& locator = Index2.data_locator(pathSpec.FullPathHash());
+		const auto& locator = Index2.data_locator(pathSpec.full_path_hash());
 		if (locator.IsSynonym)
-			return Index2.data_locator(pathSpec.Path().c_str());
+			return Index2.data_locator(pathSpec.path().c_str());
 		return locator;
 
 	} catch (const std::out_of_range& e) {
@@ -202,11 +202,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 	}
 }
 
-std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const entry_info& info) const {
-	return std::make_unique<stream_as_packed_stream>(info.PathSpec, std::make_shared<partial_view_stream>(Data.at(info.Locator.DatFileIndex).Stream, info.Locator.offset(), info.Allocation));
-}
-
-std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const path_spec& pathSpec) const {
+size_t xivres::sqpack::reader::find_entry_index(const path_spec& pathSpec) const {
 	struct Comparator {
 		bool operator()(const entry_info& l, const sqindex::data_locator& r) const {
 			return l.Locator < r;
@@ -219,7 +215,15 @@ std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const p
 
 	const auto& locator = data_locator_from_index1(pathSpec);
 	const auto entryInfo = std::lower_bound(Entries.begin(), Entries.end(), locator, Comparator());
-	return packed_at(*entryInfo);
+	return static_cast<size_t>(std::distance(Entries.begin(), entryInfo));
+}
+
+std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const entry_info& info) const {
+	return std::make_unique<stream_as_packed_stream>(info.PathSpec, std::make_shared<partial_view_stream>(Data.at(info.Locator.DatFileIndex).Stream, info.Locator.offset(), info.Allocation));
+}
+
+std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const path_spec& pathSpec) const {
+	return packed_at(Entries[find_entry_index(pathSpec)]);
 }
 
 std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const entry_info& info, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {

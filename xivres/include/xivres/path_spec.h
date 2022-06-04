@@ -21,7 +21,7 @@ namespace xivres {
 		uint32_t m_pathHash;
 		uint32_t m_nameHash;
 		uint32_t m_fullPathHash;
-		std::string m_text;
+		mutable std::string m_text;
 
 	public:
 		path_spec()
@@ -42,7 +42,7 @@ namespace xivres {
 			, m_nameHash(r.m_nameHash)
 			, m_fullPathHash(r.m_fullPathHash)
 			, m_text(std::move(r.m_text)) {
-			r.Clear();
+			r.clear();
 		}
 
 		path_spec(const path_spec& r)
@@ -183,7 +183,7 @@ namespace xivres {
 			m_pathHash = r.m_pathHash;
 			m_nameHash = r.m_nameHash;
 			m_text = std::move(r.m_text);
-			r.Clear();
+			r.clear();
 			return *this;
 		}
 
@@ -199,60 +199,65 @@ namespace xivres {
 			return *this;
 		}
 
-		void Clear() noexcept {
+		void clear() noexcept {
 			m_text.clear();
 			m_fullPathHash = m_pathHash = m_nameHash = EmptyHashValue;
 		}
 
-		[[nodiscard]] bool HasOriginal() const {
+		void update_text_if_same(const path_spec& r) const {
+			if (!has_original() && r.has_original() && *this == r)
+				this->m_text = r.m_text;
+		}
+
+		[[nodiscard]] bool has_original() const {
 			return !m_text.empty();
 		}
 
-		[[nodiscard]] bool Empty() const {
+		[[nodiscard]] bool empty() const {
 			return m_empty;
 		}
 
-		[[nodiscard]] uint8_t CategoryId() const {
+		[[nodiscard]] uint8_t category_id() const {
 			return m_categoryId;
 		}
 
-		[[nodiscard]] uint8_t ExpacId() const {
+		[[nodiscard]] uint8_t expac_id() const {
 			return m_expacId;
 		}
 
-		[[nodiscard]] uint8_t PartId() const {
+		[[nodiscard]] uint8_t part_id() const {
 			return m_partId;
 		}
 
-		[[nodiscard]] uint32_t PathHash() const {
+		[[nodiscard]] uint32_t path_hash() const {
 			return m_pathHash;
 		}
 
-		[[nodiscard]] uint32_t NameHash() const {
+		[[nodiscard]] uint32_t name_hash() const {
 			return m_nameHash;
 		}
 
-		[[nodiscard]] uint32_t FullPathHash() const {
+		[[nodiscard]] uint32_t full_path_hash() const {
 			return m_fullPathHash;
 		}
 
-		[[nodiscard]] const std::string& Path() const {
+		[[nodiscard]] const std::string& path() const {
 			return m_text;
 		}
 
-		[[nodiscard]] std::string PackExpacName() const {
+		[[nodiscard]] std::string exname() const {
 			if (m_expacId == 0)
 				return "ffxiv";
 			else
 				return std::format("ex{}", m_expacId);
 		}
 
-		[[nodiscard]] uint32_t PackNameValue() const {
+		[[nodiscard]] uint32_t packid() const {
 			return (m_categoryId << 16) | (m_expacId << 8) | m_partId;
 		}
 
-		[[nodiscard]] std::string PackName() const {
-			return std::format("{:0>6x}", PackNameValue());
+		[[nodiscard]] std::string packname() const {
+			return std::format("{:0>6x}", packid());
 		}
 
 		bool operator==(const path_spec& r) const {
@@ -270,6 +275,44 @@ namespace xivres {
 
 		bool operator!=(const path_spec& r) const {
 			return !this->operator==(r);
+		}
+
+		struct AllComparator {
+			static int Compare(const path_spec& l, const path_spec& r) {
+				if (l.m_empty && r.m_empty)
+					return 0;
+				if (l.m_empty && !r.m_empty)
+					return -1;
+				if (!l.m_empty && r.m_empty)
+					return 1;
+				if (!l.m_text.empty() && !r.m_text.empty())
+					return l.m_text < r.m_text ? -1 : (l.m_text == r.m_text ? 0 : 1);
+				if (l.m_text.empty() && !r.m_text.empty())
+					return -1;
+				if (!l.m_text.empty() && r.m_text.empty())
+					return 1;
+				if (l.m_fullPathHash < r.m_fullPathHash)
+					return -1;
+				if (l.m_fullPathHash > r.m_fullPathHash)
+					return 1;
+				if (l.m_pathHash < r.m_pathHash)
+					return -1;
+				if (l.m_pathHash > r.m_pathHash)
+					return 1;
+				if (l.m_nameHash < r.m_nameHash)
+					return -1;
+				if (l.m_nameHash > r.m_nameHash)
+					return 1;
+				return 0;
+			}
+
+			bool operator()(const path_spec& l, const path_spec& r) const {
+				return Compare(l, r) < 0;
+			}
+		};
+
+		bool operator <(const path_spec& r) const {
+			return AllComparator().Compare(*this, r) < 0;
 		}
 
 		struct AllHashComparator {
@@ -420,7 +463,7 @@ template<>
 struct std::formatter<xivres::path_spec, char> : std::formatter<std::basic_string<char>, char> {
 	template<class FormatContext>
 	auto format(const xivres::path_spec& t, FormatContext& fc) {
-		return std::formatter<std::basic_string<char>, char>::format(std::format("{}({:08x}/{:08x}, {:08x})", t.Path(), t.PathHash(), t.NameHash(), t.FullPathHash()), fc);
+		return std::formatter<std::basic_string<char>, char>::format(std::format("{}({:08x}/{:08x}, {:08x})", t.path(), t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
 	}
 };
 

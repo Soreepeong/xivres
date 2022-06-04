@@ -1,0 +1,9 @@
+{
+  "name": "xivres-redirect",
+  "version-string": "1.0.0.0",
+  "builtin-baseline": "a2d8a7cbb15cac91d6c59cd967ef9d85105832c3",
+  "dependencies": [
+    "minhook",
+    "zlib"
+  ]
+}

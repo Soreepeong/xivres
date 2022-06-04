@@ -175,6 +175,14 @@ namespace xivres::util {
 		operator const T& () const {
 			return m_value;
 		}
+
+		T& operator*() {
+			return m_value;
+		}
+
+		const T& operator*() const {
+			return m_value;
+		}
 	};
 }
 

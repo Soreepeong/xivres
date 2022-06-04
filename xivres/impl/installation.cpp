@@ -40,7 +40,7 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint8_t categoryI
 }
 
 const xivres::sqpack::reader& xivres::installation::get_sqpack(const path_spec& pathSpec) const {
-	return get_sqpack(pathSpec.PackNameValue());
+	return get_sqpack(pathSpec.packid());
 }
 
 const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) const {

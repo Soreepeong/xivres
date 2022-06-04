@@ -21,7 +21,7 @@ namespace xivres {
 		}
 
 		bool update_path_spec(const path_spec& r) {
-			if (m_pathSpec.HasOriginal() || !r.HasOriginal() || m_pathSpec != r)
+			if (m_pathSpec.has_original() || !r.has_original() || m_pathSpec != r)
 				return false;
 
 			m_pathSpec = r;
