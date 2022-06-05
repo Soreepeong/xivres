@@ -287,6 +287,7 @@ union sqpack_id_t {
 
 static std::shared_mutex s_handleMtx;
 static std::shared_mutex s_modAccessMtx;
+static std::vector<std::pair<std::filesystem::path, std::unique_ptr<xivres::installation>>> s_additionalGameRoots;
 static std::map<sqpack_id_t, std::map<uint64_t, std::deque<std::shared_ptr<xivres::hotswap_packed_stream>>>> s_allocations;
 static std::map<xivres::path_spec, std::shared_ptr<xivres::packed_stream>> s_availableReplacementStreams;
 static std::map<HANDLE, xivres::stream*> s_sqpackStreams;
@@ -390,9 +391,7 @@ static const xivres::installation& get_installation() {
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
 	const auto retAddr = static_cast<char**>(_AddressOfReturnAddress());
 	auto& pszPath = retAddr[0x11];
-	// OutputDebugStringA(std::format("cat=0x{:08x} res=0x{:08x} hash=0x{:08x} {}\n", categoryId, resourceType, resourceHash, pszPath).c_str());
 
-	std::shared_lock lock(s_modAccessMtx, std::defer_lock);
 	sqpack_id_t sqpkId(categoryId);
 
 	try {
@@ -409,17 +408,46 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 					break;
 			}
 		}
+
 		xivres::path_spec pathSpec(transformed);
 		if (transformed != pszPath) {
-			if (!s_availableReplacementStreams.contains(pathSpec) && get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)())
+			auto exists = false;
+			if (!exists) exists = s_availableReplacementStreams.contains(pathSpec);
+			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)();
+			for (const auto& additionalInstallation : s_additionalGameRoots | std::views::values) {
+				if (!exists) exists = additionalInstallation->get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)();
+			}
+
+			if (!exists)
 				pathSpec = pszPath;
 			else
-				strncpy_s(pszPath, MAX_PATH, transformed.c_str(), MAX_PATH);
+				OutputDebugStringA(std::format("cat=0x{:08x} res=0x{:08x} hash=0x{:08x} {}\n", categoryId, resourceType, resourceHash, pszPath).c_str());
 		}
 
-		lock.lock();
-		if (const auto it = s_availableReplacementStreams.find(pathSpec); it != s_availableReplacementStreams.end()) {
-			const auto& stream = it->second;
+		std::shared_lock lock(s_modAccessMtx);
+		std::shared_ptr<xivres::packed_stream> stream;
+
+		if (!stream) {
+			if (const auto it = s_availableReplacementStreams.find(pathSpec); it != s_availableReplacementStreams.end())
+				stream = it->second;
+		}
+
+		if (!stream) {
+			// Additionally merged sqpacks are considered only if the original sqpack does not contain the said files.
+			if (get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)()) {
+				for (const auto& additionalInstallation : s_additionalGameRoots | std::views::values) {
+					const auto& sqpk = additionalInstallation->get_sqpack(sqpkId.packid());
+					const auto index = sqpk.find_entry_index(pathSpec);
+					if (index == (std::numeric_limits<size_t>::max)())
+						continue;
+
+					stream = sqpk.packed_at(sqpk.Entries[index]);
+					break;
+				}
+			}
+		}
+
+		if (stream) {
 			const auto fileSize = static_cast<uint64_t>(stream->size());
 			for (auto& [space, slots] : s_allocations.at(sqpkId)) {
 				if (space < fileSize)
@@ -946,6 +974,44 @@ void update_path_replacements(const std::filesystem::path& ruleFile) {
 	}
 }
 
+void update_additional_roots(const std::filesystem::path& additionalRootsRuleFile) {
+	// s_additionalGameRoots
+	if (!exists(additionalRootsRuleFile)) {
+		s_additionalGameRoots.clear();
+		return;
+	}
+
+	nlohmann::json json;
+	std::ifstream(additionalRootsRuleFile) >> json;
+	if (!json.is_array())
+		throw std::runtime_error("Must be an array of strings");
+
+	std::set<std::filesystem::path> unvisited;
+	for (const auto& prevItem : s_additionalGameRoots | std::views::keys)
+		unvisited.emplace(prevItem);
+
+	std::map<std::filesystem::path, size_t> pathOrder;
+	for (size_t i = 0; i < json.size(); i++) {
+		auto root = std::filesystem::path(xivres::util::unicode::convert<std::wstring>(json.at(i).get<std::string>()));
+		if (!exists(root))
+			continue;
+		root = canonical(root);
+		unvisited.erase(root);
+		pathOrder.emplace(root, i);
+		s_additionalGameRoots.emplace_back(root, std::make_unique<xivres::installation>(root));
+		s_additionalGameRoots.back().second->preload_all_sqpacks();
+	}
+	for (const auto& item : unvisited) {
+		for (auto it = s_additionalGameRoots.begin(); it != s_additionalGameRoots.end(); ++it) {
+			if (it->first == item) {
+				s_additionalGameRoots.erase(it);
+				break;
+			}
+		}
+	}
+	std::ranges::sort(s_additionalGameRoots, [&pathOrder](const auto& l, const auto& r) { return pathOrder.at(l.first) < pathOrder.at(r.first); });
+}
+
 void continuous_update_mod_dirs(HANDLE hReady) {
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hChangeNotification(
 		CreateFile(get_game_dir().c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr), &CloseHandle);
@@ -953,6 +1019,7 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 	const auto ttmpDir = get_game_dir() / "ttmp";
 	const auto rawDir = get_game_dir() / "sqraw";
 	const auto pathReplacementRuleFile = get_game_dir() / "path_replacements.json";
+	const auto additionalRootsRuleFile = get_game_dir() / "additional_roots.json";
 
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hOplockEvent(CreateEventW(nullptr, TRUE, TRUE, nullptr), &CloseHandle);
 	std::vector<char> buf(65536);
@@ -1009,6 +1076,12 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 
 		const auto lock = std::lock_guard(s_modAccessMtx);
 		s_availableReplacementStreams.clear();
+
+		try {
+			update_additional_roots(additionalRootsRuleFile);
+		} catch (const std::exception& e) {
+			OutputDebugStringW(std::format(LR"(Error processing path replacement rules file: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+		}
 
 		try {
 			update_raw_dirs(rawDir);
