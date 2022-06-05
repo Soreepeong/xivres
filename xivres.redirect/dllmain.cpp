@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "utils.h"
 
 void preload_stuff();
 void do_stuff();
@@ -13,17 +14,24 @@ HRESULT WINAPI FORWARDER_DirectInput8Create(HINSTANCE hinst, DWORD dwVersion, RE
 }
 
 static void antidebug() {
-	DWORD old;
-	VirtualProtect(&IsDebuggerPresent, 4, PAGE_EXECUTE_READWRITE, &old);
-	*reinterpret_cast<int*>(&IsDebuggerPresent) = 0xc3c03148;
-	VirtualProtect(&IsDebuggerPresent, 4, old, &old);
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "IsDebuggerPresent", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = static_cast<decltype(&IsDebuggerPresent)>([]() { return FALSE; });
+	}
 
-	VirtualProtect(&OpenProcess, 4, PAGE_EXECUTE_READWRITE, &old);
-	*reinterpret_cast<int*>(&OpenProcess) = 0xc3c03148;
-	VirtualProtect(&OpenProcess, 4, old, &old);
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "OpenProcess", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = static_cast<decltype(&OpenProcess)>([](DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId) {
+			if (dwProcessId == GetCurrentProcessId()) {
+				if (dwDesiredAccess & PROCESS_VM_WRITE) {
+					SetLastError(ERROR_ACCESS_DENIED);
+					return HANDLE();
+				}
+			}
 
-	if (IsDebuggerPresent())
-		__debugbreak();
+			return ::OpenProcess(dwDesiredAccess, bInheritHandle, dwProcessId);
+		});
+	}
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
@@ -33,7 +41,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			DisableThreadLibraryCalls(hModule);
 			MH_Initialize();
 			antidebug();
-			std::thread([]() { preload_stuff(); }).detach();
+			preload_stuff();
 			return TRUE;
 		
 		case DLL_PROCESS_DETACH:

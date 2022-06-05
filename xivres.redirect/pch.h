@@ -9,6 +9,7 @@
 #include <fstream>
 #include <intrin.h>
 #include <map>
+#include <ranges>
 #include <set>
 #include <shared_mutex>
 #include <span>
@@ -18,6 +19,7 @@
 
 #include <dinput.h>
 #include <PathCch.h>
+#include <Psapi.h>
 #include <winioctl.h>
 
 #include <MinHook.h>

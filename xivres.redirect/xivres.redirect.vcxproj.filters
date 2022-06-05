@@ -9,9 +9,11 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="stuff.cpp" />
     <ClCompile Include="textools.cpp" />
+    <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="textools.h" />
+    <ClInclude Include="utils.h" />
   </ItemGroup>
 </Project>

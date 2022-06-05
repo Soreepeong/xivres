@@ -230,6 +230,7 @@
     </ClCompile>
     <ClCompile Include="stuff.cpp" />
     <ClCompile Include="textools.cpp" />
+    <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\xivres\xivres.vcxproj">
@@ -244,6 +245,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="textools.h" />
+    <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

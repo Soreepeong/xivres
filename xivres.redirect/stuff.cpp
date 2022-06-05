@@ -7,12 +7,14 @@
 #include <xivres/sqpack.generator.h>
 #include <xivres/sqpack.reader.h>
 #include <xivres/path_spec.h>
+#include <xivres/sound.h>
 #include <xivres/util.on_dtor.h>
 #include <xivres/util.thread_pool.h>
 #include <xivres/util.unicode.h>
 #include <xivres/xivstring.h>
 
 #include "textools.h"
+#include "utils.h"
 
 class oplocking_file_stream : public xivres::default_base_stream {
 	const std::filesystem::path m_path;
@@ -249,23 +251,6 @@ const char* DETOUR_resolve_string_indirection(const char* p);
 
 decltype(DETOUR_find_existing_resource_handle)* s_find_existing_resource_handle_original;
 decltype(DETOUR_resolve_string_indirection)* s_resolve_string_indirection_original;
-decltype(CreateFileW)* s_createfilew_original;
-decltype(SetFilePointerEx)* s_setfilepointerex_original;
-decltype(ReadFile)* s_readfile_original;
-decltype(CloseHandle)* s_closefile_original;
-
-static std::mutex s_recursivePreventionMutex;
-static std::set<DWORD> s_currentThreadIds;
-static xivres::util::wrap_value_with_context<bool> prevent_recursive_file_operation() {
-	std::lock_guard lock(s_recursivePreventionMutex);
-	if (!s_currentThreadIds.emplace(GetCurrentThreadId()).second)
-		return { true, []() {} };
-
-	return {
-		false,
-		[]() { std::lock_guard lock(s_recursivePreventionMutex); s_currentThreadIds.erase(GetCurrentThreadId()); }
-	};
-}
 
 union sqpack_id_t {
 	uint32_t FullId;
@@ -328,10 +313,8 @@ static const xivres::installation& get_installation() {
 	if (!s_installation) {
 		static std::mutex mtx;
 		const auto lock = std::lock_guard(mtx);
-		if (!s_installation) {
-			auto recursivePreventer = prevent_recursive_file_operation();
+		if (!s_installation)
 			s_installation.emplace(get_game_dir());
-		}
 	}
 	return *s_installation;
 }
@@ -365,9 +348,7 @@ static const xivres::installation& get_installation() {
 	if (ptr)
 		return ptr.get();
 
-	auto recursivePreventer = prevent_recursive_file_operation();
 	auto& reader = get_installation().get_sqpack(sqpkId.packid());
-	recursivePreventer.clear();
 
 	xivres::sqpack::generator gen(sqpkId.exname(), sqpkId.name());
 	gen.add_sqpack(reader, true, true);
@@ -389,6 +370,19 @@ static const xivres::installation& get_installation() {
 		}
 	}
 
+	if (sqpkId.CategoryId == 7) {
+		xivres::sound::reader scd(reader.at("sound/system/Sample_System.scd"));
+		xivres::sound::writer blank;
+		blank.set_table_1(scd.read_table_1());
+		blank.set_table_2(scd.read_table_2());
+		blank.set_table_4(scd.read_table_4());
+		blank.set_table_5(scd.read_table_5());
+		for (size_t i = 0; i < 256; ++i)
+			blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty());
+
+		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.Export())));
+	}
+
 	ptr = std::make_unique<xivres::sqpack::generator::sqpack_views>(gen.export_to_views(false));
 	return ptr.get();
 }
@@ -404,7 +398,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	try {
 		if (!get_sqpack_view(sqpkId))
 			return s_find_existing_resource_handle_original(p1, categoryId, resourceType, resourceHash);
-		
+
 		std::string transformed = pszPath;
 		auto changed = false;
 		for (const auto& rule : s_loadPathRegex) {
@@ -485,24 +479,20 @@ const char* DETOUR_resolve_string_indirection(const char* p) {
 
 	if (SeStringTester(p + 0x02))
 		return p + 0x02;
-	
+
 	return "<error>";
 }
 
 HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
 	if (dwDesiredAccess != GENERIC_READ || dwCreationDisposition != OPEN_EXISTING)
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-
-	const auto recursivePreventer = prevent_recursive_file_operation();
-	if (*recursivePreventer)
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto path = std::filesystem::path(lpFileName);
 	if (!exists(path.parent_path().parent_path().parent_path() / "ffxiv_dx11.exe"))
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	if (path.parent_path().parent_path().filename() != L"sqpack")
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	int sqpkType;
 	if (path.extension() == L".index")
@@ -512,7 +502,7 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 	else if (path.extension().wstring().starts_with(L".dat"))
 		sqpkType = wcstol(path.extension().wstring().substr(4).c_str(), nullptr, 10);
 	else
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto categoryId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(0, 2).c_str(), nullptr, 16));
 	const auto expacId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(2, 2).c_str(), nullptr, 16));
@@ -521,10 +511,10 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 
 	const auto pViews = get_sqpack_view(sqpkId);
 	if (!pViews)
-		return s_createfilew_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto indexPath = std::filesystem::path(path).replace_extension(".index");
-	const auto hFile = s_createfilew_original(indexPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+	const auto hFile = CreateFileW(indexPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hFile == INVALID_HANDLE_VALUE)
 		return hFile;
 
@@ -584,7 +574,7 @@ BOOL WINAPI DETOUR_SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove
 		}
 	}
 
-	return s_setfilepointerex_original(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod);
+	return SetFilePointerEx(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod);
 }
 
 BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
@@ -602,7 +592,7 @@ BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesT
 			return TRUE;
 		}
 	}
-	return s_readfile_original(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
+	return ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 }
 
 BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
@@ -612,46 +602,70 @@ BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
 		s_virtualFilePointers.erase(hObject);
 	}
 
-	return s_closefile_original(hObject);
+	return CloseHandle(hObject);
 }
 
-void* find_existing_resource_handle_finder() {
-	const auto pc = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
-	auto& dosHeader = *reinterpret_cast<IMAGE_DOS_HEADER*>(pc);
-	auto& ntHeader = *reinterpret_cast<IMAGE_NT_HEADERS64*>(pc + dosHeader.e_lfanew);
-	const auto range = std::span(pc, ntHeader.OptionalHeader.SizeOfImage);
-	const std::array<uint8_t, 3> lookfor1{ { 0x48, 0x8b, 0x4f } };
-	const std::array<uint8_t, 10> lookfor2{ { 0x4c, 0x8b, 0xcd, 0x4d, 0x8b, 0xc4, 0x49, 0x8b, 0xd5, 0xe8 } };
-	auto it = range.begin();
-	while (it != range.end()) {
-		it = std::search(it, range.end(), lookfor1.begin(), lookfor1.end());
-		if (0 == memcmp(&*it + lookfor1.size() + 1, lookfor2.data(), lookfor2.size())) {
-			it += lookfor1.size() + 1 + lookfor2.size();
-			it += *reinterpret_cast<int*>(&*it);
-			it += 4;
-			return &*it;
+static std::span<char> get_clean_exe_span() {
+	static std::vector<char> buf = []() {
+		std::shared_ptr<void> hFile(CreateFileW((get_game_dir() / "ffxiv_dx11.exe").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr), &CloseHandle);
+		std::vector<char> buf(GetFileSize(hFile.get(), nullptr));
+		if (DWORD rd; !ReadFile(hFile.get(), &buf[0], static_cast<DWORD>(buf.size()), &rd, nullptr) || rd != buf.size())
+			throw std::runtime_error(std::format("Failed to read file: {}", GetLastError()));
+		return buf;
+	}();
+	return { buf };
+}
+
+static std::pair<std::span<const char>, ptrdiff_t> get_clean_text_section() {
+	const auto buf = get_clean_exe_span();
+	const auto& dosHeader = *reinterpret_cast<IMAGE_DOS_HEADER*>(&buf[0]);
+	const auto& ntHeader64 = *reinterpret_cast<IMAGE_NT_HEADERS64*>(&buf[dosHeader.e_lfanew]);
+	const auto sectionHeaders = std::span(IMAGE_FIRST_SECTION(&ntHeader64), ntHeader64.FileHeader.NumberOfSections);
+	const auto realBase = reinterpret_cast<char*>(GetModuleHandleW(nullptr));
+	const auto imageBase = reinterpret_cast<char*>(ntHeader64.OptionalHeader.ImageBase);
+	const auto& rva2sec = [&](size_t rva) -> IMAGE_SECTION_HEADER& {
+		for (auto& sectionHeader2 : sectionHeaders) {
+			if (sectionHeader2.VirtualAddress <= rva && rva < sectionHeader2.VirtualAddress + sectionHeader2.Misc.VirtualSize)
+				return sectionHeader2;
 		}
-		it++;
+		throw std::runtime_error("rva");
+	};
+	const auto& va2rva = [&](void* va) {
+		return reinterpret_cast<char*>(va) - imageBase;
+	};
+	const auto& va2sec = [&](void* va) -> IMAGE_SECTION_HEADER& {
+		return rva2sec(reinterpret_cast<char*>(va) - imageBase);
+	};
+	for (const auto& sectionHeader : sectionHeaders) {
+		const auto section = std::span(&buf[sectionHeader.PointerToRawData], sectionHeader.SizeOfRawData);
+		if (strncmp(reinterpret_cast<const char*>(sectionHeader.Name), ".text", IMAGE_SIZEOF_SHORT_NAME) != 0)
+			continue;
+
+		return { section, sectionHeader.VirtualAddress - sectionHeader.PointerToRawData };
 	}
-	// 48 8b 4f ?? 4c 8b cd 4d 8b c4 49 8b d5 e8
-	ExitProcess(-100);
-	return 0;
+
+	throw std::runtime_error(".text section not found?");
 }
 
-std::vector<void*> find_rsv_indirection_resolvers() {
-	const auto pc = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
-	auto& dosHeader = *reinterpret_cast<IMAGE_DOS_HEADER*>(pc);
-	auto& ntHeader = *reinterpret_cast<IMAGE_NT_HEADERS64*>(pc + dosHeader.e_lfanew);
-	const auto range = std::span(pc, ntHeader.OptionalHeader.SizeOfImage);
-	const std::array<uint8_t, 10> lookfor{ { 0x8b, 0x01, 0x25, 0xff, 0xff, 0xff, 0x00, 0x48, 0x03, 0xc1} };
+static void* find_existing_resource_handle_finder() {
+	const auto [section, delta] = get_clean_text_section();
+	const auto res = utils::signature_finder()
+		.look_in(section)
+		.look_for_hex("48 8b 4f ?? 4c 8b cd 4d 8b c4 49 8b d5 e8")
+		.find_one();
+	auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
+		(res.data() + res.size() - get_clean_exe_span().data());
+	return p + *reinterpret_cast<int*>(p) + 4;
+}
+
+static std::vector<void*> find_rsv_indirection_resolvers() {
+	const auto [section, delta] = get_clean_text_section();
 	std::vector<void*> res;
-	auto it = range.begin();
-	while (it != range.end()) {
-		it = std::search(it, range.end(), lookfor.begin(), lookfor.end());
-		if (it == range.end())
-			break;
-		res.emplace_back(&*it);
-		it++;
+	for (const auto& match : utils::signature_finder()
+		.look_in(section)
+		.look_for_hex("8b 01 25 ff ff ff 00 48 03 c1")
+		.find(1, 100, false)) {
+		res.push_back(reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta + (match.Match.data() - get_clean_exe_span().data()));
 	}
 	return res;
 }
@@ -758,7 +772,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 					throw e;
 				json.pop_back();
 			}
-			
+
 			textools::ttmpl_t ttmpl;
 			if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
 				ttmpl = json[0].get<textools::ttmpl_t>();
@@ -932,7 +946,7 @@ void update_path_replacements(const std::filesystem::path& ruleFile) {
 	}
 }
 
-void continuous_update_mod_dirs() {
+void continuous_update_mod_dirs(HANDLE hReady) {
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hChangeNotification(
 		CreateFile(get_game_dir().c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr), &CloseHandle);
 
@@ -1013,50 +1027,76 @@ void continuous_update_mod_dirs() {
 		} catch (const std::exception& e) {
 			OutputDebugStringW(std::format(LR"(Error processing path replacement rules file: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
 		}
+
+		if (hReady) {
+			SetEvent(hReady);
+			hReady = nullptr;
+		}
 	}
 }
 
 void preload_stuff() {
-	xivres::util::thread_pool pool;
-	try {
-		auto packIds = get_installation().get_sqpack_ids();
-		std::ranges::sort(packIds, [](const auto l, const auto r) {
-			auto partIdL = l & 0xFF;
-			auto partIdR = r & 0xFF;
-			if (partIdL != partIdR)
-				return partIdL < partIdR;
+	std::thread([]() {
+		xivres::util::thread_pool pool;
+		try {
+			auto packIds = get_installation().get_sqpack_ids();
+			std::ranges::sort(packIds, [](const auto l, const auto r) {
+				auto partIdL = l & 0xFF;
+				auto partIdR = r & 0xFF;
+				if (partIdL != partIdR)
+					return partIdL < partIdR;
 
-			auto expacIdL = (l >> 8) & 0xFF;
-			auto expacIdR = (r >> 8) & 0xFF;
-			if (expacIdL != expacIdR)
-				return expacIdL < expacIdR;
+				auto expacIdL = (l >> 8) & 0xFF;
+				auto expacIdR = (r >> 8) & 0xFF;
+				if (expacIdL != expacIdR)
+					return expacIdL < expacIdR;
 
-			auto categoryIdL = l >> 16;
-			auto categoryIdR = r >> 16;
-			if (categoryIdL != categoryIdR)
-				return categoryIdL < categoryIdR;
-			return false;
-		});
-		for (const auto id : packIds) {
-			pool.Submit([id]() {
-				static_cast<void>(get_sqpack_view(sqpack_id_t::from_filename_int(id)));
+				auto categoryIdL = l >> 16;
+				auto categoryIdR = r >> 16;
+				if (categoryIdL != categoryIdR)
+					return categoryIdL < categoryIdR;
+				return false;
 			});
+			for (const auto id : packIds) {
+				pool.Submit([id]() {
+					static_cast<void>(get_sqpack_view(sqpack_id_t::from_filename_int(id)));
+				});
+			}
+			pool.SubmitDoneAndWait();
+		} catch (const std::exception&) {
+			pool.PropagateInnerErrorIfErrorOccurred();
 		}
-		pool.SubmitDoneAndWait();
-	} catch (const std::exception&) {
-		pool.PropagateInnerErrorIfErrorOccurred();
-	}
+	}).detach();
 }
 
 void do_stuff() {
 	MH_CreateHook(find_existing_resource_handle_finder(), &DETOUR_find_existing_resource_handle, (void**)&s_find_existing_resource_handle_original);
 	for (const auto p : find_rsv_indirection_resolvers())
 		MH_CreateHook(p, &DETOUR_resolve_string_indirection, (void**)&s_resolve_string_indirection_original);
-	MH_CreateHook(&CreateFileW, &DETOUR_CreateFileW, (void**)&s_createfilew_original);
-	MH_CreateHook(&SetFilePointerEx, &DETOUR_SetFilePointerEx, (void**)&s_setfilepointerex_original);
-	MH_CreateHook(&ReadFile, &DETOUR_ReadFile, (void**)&s_readfile_original);
-	MH_CreateHook(&CloseHandle, &DETOUR_CloseHandle, (void**)&s_closefile_original);
+
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CreateFileW", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = &DETOUR_CreateFileW;
+	}
+
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "SetFilePointerEx", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = &DETOUR_SetFilePointerEx;
+	}
+
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "ReadFile", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = &DETOUR_ReadFile;
+	}
+
+	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CloseHandle", 0, pfn)) {
+		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		*reinterpret_cast<void**>(pfn) = &DETOUR_CloseHandle;
+	}
+
 	MH_EnableHook(MH_ALL_HOOKS);
 
-	std::thread([]() {continuous_update_mod_dirs(); }).detach();
+	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hReadyEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr), &CloseHandle);
+	std::thread([&hReadyEvent]() {continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
+	WaitForSingleObject(hReadyEvent.get(), INFINITE);
 }
