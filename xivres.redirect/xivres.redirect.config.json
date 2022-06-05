@@ -1,6 +1,27 @@
 {
-	"logAllPaths": false,
 	"logReplacedPaths": false,
+	"logPathFilters": [
+		{
+			"pattern": ".*",
+			"include": false
+		},
+		{
+			"pattern": "^(music|exd|bg|bgcommon)/.*",
+			"include": false
+		},
+		{
+			"pattern": "^sound/(foot|system)/.*",
+			"include": false
+		},
+		{
+			"pattern": "^ui/(uld|icon)/.*",
+			"include": false
+		},
+		{
+			"pattern": ".*",
+			"include": true
+		}
+	],
 	"additionalRoots": [
 		{
 			"path": "C:\\Program Files (x86)\\FINAL FANTASY XIV - KOREA\\game",
@@ -27,21 +48,21 @@
 		}
 	],
 	"pathReplacements": [
-		[
-			"^sound/voice/(vo_battle|vo_cm|vo_emote)/.*$",
-			"sound/empty256.scd"
-		],
-		[
-			"^((?:cut|sound/voice/vo_line)/.*?[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
-			"$1ko"
-		],
-		[
-			"^(sound/.*)",
-			"$1"
-		],
-		[
-			"^((?!cut|sound/voice/vo_line).*[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
-			"$1ko"
-		]
+		{
+			"from": "^sound/voice/(vo_battle|vo_cm|vo_emote)/.*$",
+			"to": "sound/empty256.scd"
+		},
+		{
+			"from": "^((?:cut|sound/voice/vo_line)/.*?[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"to": "$1ko"
+		},
+		{
+			"from": "^(sound/.*)",
+			"to": "$1"
+		},
+		{
+			"from": "^((?!cut|sound/voice/vo_line).*[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"to": "$1ko"
+		}
 	]
 }
