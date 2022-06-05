@@ -31,7 +31,7 @@ namespace xivres {
 			}
 		}
 
-		equipment_and_gimmick_parameter_file(const stream& strm) : equipment_and_gimmick_parameter_file(strm.read_vector<uint64_t>(0)) {
+		equipment_and_gimmick_parameter_file(const stream& strm) : equipment_and_gimmick_parameter_file(strm.read_vector<uint64_t>()) {
 		}
 
 		equipment_and_gimmick_parameter_file(const equipment_and_gimmick_parameter_file&) = default;

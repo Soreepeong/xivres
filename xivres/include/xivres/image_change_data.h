@@ -37,7 +37,7 @@ namespace xivres::image_change_data {
 		}
 
 		file(const stream& strm)
-			: m_data(strm.read_vector<uint8_t>(0)) {
+			: m_data(strm.read_vector<uint8_t>()) {
 			if (m_data.size() < sizeof image_change_data::header) {
 				m_data.clear();
 				m_data.resize(sizeof image_change_data::header);

@@ -8,8 +8,10 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="stuff.cpp" />
+    <ClCompile Include="textools.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="textools.h" />
   </ItemGroup>
 </Project>

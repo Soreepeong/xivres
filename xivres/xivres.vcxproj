@@ -69,6 +69,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="impl\packed_stream.standard.cpp" />
+    <ClCompile Include="impl\path_spec.cpp" />
     <ClCompile Include="impl\unpacked_stream.standard.cpp" />
     <ClCompile Include="impl\common.cpp" />
     <ClCompile Include="impl\unpacked_stream.placeholder.cpp" />

@@ -32,7 +32,7 @@ namespace xivres {
 		}
 
 		equipment_deformer_parameter_file(const stream& strm)
-			: m_data(strm.read_vector<uint8_t>(0)) {
+			: m_data(strm.read_vector<uint8_t>()) {
 		}
 
 		equipment_deformer_parameter_file(equipment_deformer_parameter_file&& file) noexcept

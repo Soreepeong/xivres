@@ -1,4 +1,5 @@
 #include "../include/xivres/installation.h"
+#include "../include/xivres/util.thread_pool.h"
 
 #include <ranges>
 
@@ -16,6 +17,7 @@ xivres::installation::installation(std::filesystem::path gamePath)
 
 		const auto packFileId = std::strtol(&packFileName[0], nullptr, 16);
 		m_readers.emplace(packFileId, std::optional<sqpack::reader>());
+		static_cast<void>(m_populateMtx[packFileId]);
 	}
 }
 
@@ -48,7 +50,7 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) 
 	if (item)
 		return *item;
 
-	const auto lock = std::lock_guard(m_populateMtx);
+	const auto lock = std::lock_guard(m_populateMtx.at(packId));
 	if (item)
 		return *item;
 
@@ -60,7 +62,12 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) 
 }
 
 void xivres::installation::preload_all_sqpacks() const {
-	const auto lock = std::lock_guard(m_populateMtx);
-	for (const auto& key : m_readers | std::views::keys)
-		void(get_sqpack(key));
+	xivres::util::thread_pool pool;
+	try {
+		for (const auto& key : m_readers | std::views::keys)
+			pool.Submit([this, key]() { void(get_sqpack(key)); });
+		pool.SubmitDoneAndWait();
+	} catch (const std::exception&) {
+		pool.PropagateInnerErrorIfErrorOccurred();
+	}
 }

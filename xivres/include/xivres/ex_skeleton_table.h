@@ -53,7 +53,7 @@ namespace xivres {
 		}
 
 		ex_skeleton_table_file(const stream& strm)
-			: m_data(strm.read_vector<uint8_t>(0)) {
+			: m_data(strm.read_vector<uint8_t>()) {
 		}
 
 		ex_skeleton_table_file(const std::map<descriptor_t, uint16_t>& pairs)

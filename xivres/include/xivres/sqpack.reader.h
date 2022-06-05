@@ -34,11 +34,17 @@ namespace xivres::sqpack {
 				return util::span_cast<sqindex::segment_3_entry>(Data, index_header().UnknownSegment3.Offset, index_header().UnknownSegment3.Size, 1);
 			}
 
-			const sqindex::data_locator& data_locator(const char* fullPath) const {
+			const sqindex::data_locator* find_data_locator(const char* fullPath) const {
 				const auto it = std::lower_bound(text_locators().begin(), text_locators().end(), fullPath, path_spec::LocatorComparator());
 				if (it == text_locators().end() || _strcmpi(it->FullPath, fullPath) != 0)
-					throw std::out_of_range(std::format("Entry {} not found", fullPath));
-				return it->Locator;
+					return nullptr;
+				return &it->Locator;
+			}
+
+			const sqindex::data_locator& data_locator(const char* fullPath) const {
+				if (const auto res = find_data_locator(fullPath))
+					return *res;
+				throw std::out_of_range(std::format("Entry {} not found", fullPath));
 			}
 
 		protected:
@@ -67,9 +73,14 @@ namespace xivres::sqpack {
 		public:
 			[[nodiscard]] std::span<const sqindex::path_hash_locator> pair_hash_locators() const;
 
+			[[nodiscard]] std::span<const sqindex::pair_hash_locator> find_pair_hash_locators_for_path(uint32_t pathHash) const;
+
 			[[nodiscard]] std::span<const sqindex::pair_hash_locator> pair_hash_locators_for_path(uint32_t pathHash) const;
 
+			using sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>::find_data_locator;
 			using sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>::data_locator;
+			
+			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t pathHash, uint32_t nameHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t pathHash, uint32_t nameHash) const;
 
 		protected:
@@ -80,7 +91,10 @@ namespace xivres::sqpack {
 
 		class sqindex_2_type : public sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator> {
 		public:
+			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::find_data_locator;
 			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::data_locator;
+			
+			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t fullPathHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t fullPathHash) const;
 
 		protected:
@@ -123,11 +137,17 @@ namespace xivres::sqpack {
 
 		[[nodiscard]] uint32_t pack_id() const { return (CategoryId << 16) | (ExpacId << 8) | PartId; }
 
+		[[nodiscard]] const sqindex::data_locator* find_data_locator_from_index1(const path_spec& pathSpec) const;
+
 		[[nodiscard]] const sqindex::data_locator& data_locator_from_index1(const path_spec& pathSpec) const;
+
+		[[nodiscard]] const sqindex::data_locator* find_data_locator_from_index2(const path_spec& pathSpec) const;
 
 		[[nodiscard]] const sqindex::data_locator& data_locator_from_index2(const path_spec& pathSpec) const;
 
 		[[nodiscard]] size_t find_entry_index(const path_spec& pathSpec) const;
+
+		[[nodiscard]] size_t get_entry_index(const path_spec& pathSpec) const;
 
 		[[nodiscard]] std::shared_ptr<packed_stream> packed_at(const entry_info& info) const;
 

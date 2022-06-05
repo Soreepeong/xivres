@@ -4,20 +4,38 @@ std::span<const xivres::sqpack::sqindex::path_hash_locator> xivres::sqpack::read
 	return util::span_cast<sqindex::path_hash_locator>(Data, index_header().PathHashLocatorSegment.Offset, index_header().PathHashLocatorSegment.Size, 1);
 }
 
-std::span<const xivres::sqpack::sqindex::pair_hash_locator> xivres::sqpack::reader::sqindex_1_type::pair_hash_locators_for_path(uint32_t pathHash) const {
+std::span<const xivres::sqpack::sqindex::pair_hash_locator> xivres::sqpack::reader::sqindex_1_type::find_pair_hash_locators_for_path(uint32_t pathHash) const {
 	const auto it = std::lower_bound(pair_hash_locators().begin(), pair_hash_locators().end(), pathHash, path_spec::LocatorComparator());
 	if (it == pair_hash_locators().end() || it->PathHash != pathHash)
-		throw std::out_of_range(std::format("PathHash {:08x} not found", pathHash));
+		return {};
 
 	return util::span_cast<sqindex::pair_hash_locator>(Data, it->PairHashLocatorOffset, it->PairHashLocatorSize, 1);
 }
 
-const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_1_type::data_locator(uint32_t pathHash, uint32_t nameHash) const {
-	const auto locators = pair_hash_locators_for_path(pathHash);
+std::span<const xivres::sqpack::sqindex::pair_hash_locator> xivres::sqpack::reader::sqindex_1_type::pair_hash_locators_for_path(uint32_t pathHash) const {
+	if (const auto res = find_pair_hash_locators_for_path(pathHash); !res.empty())
+		return res;
+
+	throw std::out_of_range(std::format("PathHash {:08x} not found", pathHash));
+}
+
+const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::sqindex_1_type::find_data_locator(uint32_t pathHash, uint32_t nameHash) const {
+	const auto locators = find_pair_hash_locators_for_path(pathHash);
+	if (locators.empty())
+		return nullptr;
+	
 	const auto it = std::lower_bound(locators.begin(), locators.end(), nameHash, path_spec::LocatorComparator());
 	if (it == locators.end() || it->NameHash != nameHash)
-		throw std::out_of_range(std::format("NameHash {:08x} in PathHash {:08x} not found", nameHash, pathHash));
-	return it->Locator;
+		return nullptr;
+
+	return &it->Locator;
+}
+
+const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_1_type::data_locator(uint32_t pathHash, uint32_t nameHash) const {
+	if (const auto res = find_data_locator(pathHash, nameHash))
+		return *res;
+	
+	throw std::out_of_range(std::format("NameHash {:08x} in PathHash {:08x} not found", nameHash, pathHash));
 }
 
 xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool strictVerify) : sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(strm, strictVerify) {
@@ -28,11 +46,18 @@ xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool 
 	}
 }
 
-const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_2_type::data_locator(uint32_t fullPathHash) const {
+const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::sqindex_2_type::find_data_locator(uint32_t fullPathHash) const {
 	const auto it = std::lower_bound(hash_locators().begin(), hash_locators().end(), fullPathHash, path_spec::LocatorComparator());
 	if (it == hash_locators().end() || it->FullPathHash != fullPathHash)
-		throw std::out_of_range(std::format("FullPathHash {:08x} not found", fullPathHash));
-	return it->Locator;
+		return nullptr;
+	return &it->Locator;
+}
+
+const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_2_type::data_locator(uint32_t fullPathHash) const {
+	if (const auto res = find_data_locator(fullPathHash))
+		return *res;
+
+	throw std::out_of_range(std::format("FullPathHash {:08x} not found", fullPathHash));
 }
 
 xivres::sqpack::reader::sqindex_2_type::sqindex_2_type(const stream& strm, bool strictVerify)
@@ -159,7 +184,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 	std::sort(Entries.begin(), Entries.end(), Comparator());
 }
 
-xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::path& indexFile, bool strictVerify /*= false*/) {
+xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::path& indexFile, bool strictVerify) {
 	std::vector<std::shared_ptr<stream>> dataStreams;
 	for (int i = 0; i < 8; ++i) {
 		auto dataPath = std::filesystem::path(indexFile);
@@ -178,28 +203,30 @@ xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::
 	};
 }
 
-const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index1(const path_spec& pathSpec) const {
-	try {
-		const auto& locator = Index1.data_locator(pathSpec.path_hash(), pathSpec.name_hash());
-		if (locator.IsSynonym)
-			return Index1.data_locator(pathSpec.path().c_str());
-		return locator;
+const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::find_data_locator_from_index1(const path_spec& pathSpec) const {
+	const auto locator = Index1.find_data_locator(pathSpec.path_hash(), pathSpec.name_hash());
+	if (locator && locator->IsSynonym)
+		return Index1.find_data_locator(pathSpec.path().c_str());
+	return locator;
+}
 
-	} catch (const std::out_of_range& e) {
-		throw std::out_of_range(std::format("Failed to find {}: {}", pathSpec, e.what()));
-	}
+const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index1(const path_spec& pathSpec) const {
+	if (const auto res = find_data_locator_from_index1(pathSpec))
+		return *res;
+	throw std::out_of_range("File does not exist");
+}
+
+const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::find_data_locator_from_index2(const path_spec& pathSpec) const {
+	const auto locator = Index2.find_data_locator(pathSpec.full_path_hash());
+	if (locator && locator->IsSynonym)
+		return Index2.find_data_locator(pathSpec.path().c_str());
+	return locator;
 }
 
 const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locator_from_index2(const path_spec& pathSpec) const {
-	try {
-		const auto& locator = Index2.data_locator(pathSpec.full_path_hash());
-		if (locator.IsSynonym)
-			return Index2.data_locator(pathSpec.path().c_str());
-		return locator;
-
-	} catch (const std::out_of_range& e) {
-		throw std::out_of_range(std::format("Failed to find {}: {}", pathSpec, e.what()));
-	}
+	if (const auto res = find_data_locator_from_index2(pathSpec))
+		return *res;
+	throw std::out_of_range("File does not exist");
 }
 
 size_t xivres::sqpack::reader::find_entry_index(const path_spec& pathSpec) const {
@@ -213,9 +240,19 @@ size_t xivres::sqpack::reader::find_entry_index(const path_spec& pathSpec) const
 		}
 	};
 
-	const auto& locator = data_locator_from_index1(pathSpec);
-	const auto entryInfo = std::lower_bound(Entries.begin(), Entries.end(), locator, Comparator());
+	const auto locator = find_data_locator_from_index1(pathSpec);
+	if (!locator)
+		return (std::numeric_limits<size_t>::max)();
+
+	const auto entryInfo = std::lower_bound(Entries.begin(), Entries.end(), *locator, Comparator());
 	return static_cast<size_t>(std::distance(Entries.begin(), entryInfo));
+}
+
+size_t xivres::sqpack::reader::get_entry_index(const path_spec& pathSpec) const {
+	const auto res = find_entry_index(pathSpec);
+	if (res == (std::numeric_limits<size_t>::max)())
+		throw std::out_of_range("File does not exist");
+	return res;
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const entry_info& info) const {
@@ -223,7 +260,7 @@ std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const e
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const path_spec& pathSpec) const {
-	return packed_at(Entries[find_entry_index(pathSpec)]);
+	return packed_at(Entries[get_entry_index(pathSpec)]);
 }
 
 std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const entry_info& info, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {

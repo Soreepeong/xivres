@@ -2,19 +2,25 @@
 #define WIN32_LEAN_AND_MEAN
 #define DIRECTINPUT_VERSION 0x0800
 
-#include <Windows.h>
+#include <array>
+#include <deque>
 #include <filesystem>
 #include <format>
-#include <array>
-#include <map>
-#include <minhook.h>
-#include <span>
-#include <deque>
-#include <set>
+#include <fstream>
 #include <intrin.h>
+#include <map>
+#include <set>
+#include <shared_mutex>
+#include <span>
+#include <thread>
+
+#include <Windows.h>
+
 #include <dinput.h>
 #include <PathCch.h>
 #include <winioctl.h>
-#include <stdio.h>
+
+#include <MinHook.h>
+#include <srell.hpp>
 
 extern HMODULE g_hModule;

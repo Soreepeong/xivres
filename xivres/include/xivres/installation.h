@@ -28,7 +28,7 @@ namespace xivres {
 	class installation {
 		const std::filesystem::path m_gamePath;
 		mutable std::map<uint32_t, std::optional<sqpack::reader>> m_readers;
-		mutable std::mutex m_populateMtx;
+		mutable std::map<uint32_t, std::mutex> m_populateMtx;
 
 	public:
 		installation(std::filesystem::path gamePath);
