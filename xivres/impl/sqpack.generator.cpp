@@ -54,7 +54,7 @@ void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::clear()
 		std::vector<uint8_t>().swap(m_bufferTemporary);
 }
 
-void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::set(const DataViewStream* view, const entry_info* entry) {
+void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::set(const data_view_stream* view, const entry_info* entry) {
 	m_view = view;
 	m_entry = entry;
 
@@ -71,7 +71,7 @@ void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::set(con
 	entry->Provider->read_fully(0, m_bufferActive);
 }
 
-xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry* xivres::sqpack::generator::sqpack_view_entry_cache::GetBuffer(const DataViewStream* view, const entry_info* entry) {
+xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry* xivres::sqpack::generator::sqpack_view_entry_cache::GetBuffer(const data_view_stream* view, const entry_info* entry) {
 	if (m_lastActiveEntry.is_same(view, entry))
 		return &m_lastActiveEntry;
 
@@ -197,7 +197,7 @@ void xivres::sqpack::generator::reserve_space(path_spec pathSpec, uint32_t size)
 }
 
 template<xivres::sqpack::sqindex::sqindex_type TSqIndex, typename TFileSegmentType, typename TTextSegmentType, bool UseFolders>
-static std::vector<uint8_t> ExportIndexFileData(
+static std::vector<uint8_t> export_index_file_data(
 	size_t dataFilesCount,
 	std::vector<TFileSegmentType> fileSegment,
 	const std::vector<TTextSegmentType>& conflictSegment,
@@ -285,7 +285,7 @@ static std::vector<uint8_t> ExportIndexFileData(
 	return data;
 }
 
-class xivres::sqpack::generator::DataViewStream : public default_base_stream {
+class xivres::sqpack::generator::data_view_stream : public default_base_stream {
 	const std::vector<uint8_t> m_header;
 	const std::span<entry_info*> m_entries;
 
@@ -305,7 +305,7 @@ class xivres::sqpack::generator::DataViewStream : public default_base_stream {
 	const std::shared_ptr<sqpack_view_entry_cache> m_buffer;
 
 public:
-	DataViewStream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<sqpack_view_entry_cache> buffer)
+	data_view_stream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<sqpack_view_entry_cache> buffer)
 		: m_header(Concat(header, subheader))
 		, m_entries(entries)
 		, m_buffer(std::move(buffer)) {
@@ -518,12 +518,12 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	if (strict)
 		dataHeader.Sha1.set_from_span(reinterpret_cast<char*>(&dataHeader), offsetof(sqpack::header, Sha1));
 
-	res.Index1 = std::make_shared<memory_stream>(ExportIndexFileData<sqindex::sqindex_type::Index, sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator, true>(
+	res.Index1 = std::make_shared<memory_stream>(export_index_file_data<sqindex::sqindex_type::Index, sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator, true>(
 		dataSubheaders.size(), std::move(fileEntries1), conflictEntries1, m_sqpackIndexSegment3, std::vector<sqindex::path_hash_locator>(), strict));
-	res.Index2 = std::make_shared<memory_stream>(ExportIndexFileData<sqindex::sqindex_type::Index, sqindex::full_hash_locator, sqindex::full_hash_with_text_locator, false>(
+	res.Index2 = std::make_shared<memory_stream>(export_index_file_data<sqindex::sqindex_type::Index, sqindex::full_hash_locator, sqindex::full_hash_with_text_locator, false>(
 		dataSubheaders.size(), std::move(fileEntries2), conflictEntries2, m_sqpackIndex2Segment3, std::vector<sqindex::path_hash_locator>(), strict));
 	for (size_t i = 0; i < dataSubheaders.size(); ++i)
-		res.Data.emplace_back(std::make_shared<DataViewStream>(dataHeader, dataSubheaders[i], std::span(res.Entries).subspan(dataEntryRanges[i].first, dataEntryRanges[i].second), dataBuffer));
+		res.Data.emplace_back(std::make_shared<data_view_stream>(dataHeader, dataSubheaders[i], std::span(res.Entries).subspan(dataEntryRanges[i].first, dataEntryRanges[i].second), dataBuffer));
 
 	return res;
 }
@@ -689,11 +689,11 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 		.ConflictIndex = sqindex::full_hash_with_text_locator::EndOfList,
 	});
 
-	auto indexData = ExportIndexFileData<sqindex::sqindex_type::Index, sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator, true>(
+	auto indexData = export_index_file_data<sqindex::sqindex_type::Index, sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator, true>(
 		dataSubheaders.size(), std::move(fileEntries1), conflictEntries1, m_sqpackIndexSegment3, std::vector<sqindex::path_hash_locator>(), strict);
 	std::ofstream(dir / std::format("{}.win32.index", DatName), std::ios::binary).write(reinterpret_cast<const char*>(&indexData[0]), indexData.size());
 
-	indexData = ExportIndexFileData<sqindex::sqindex_type::Index, sqindex::full_hash_locator, sqindex::full_hash_with_text_locator, false>(
+	indexData = export_index_file_data<sqindex::sqindex_type::Index, sqindex::full_hash_locator, sqindex::full_hash_with_text_locator, false>(
 		dataSubheaders.size(), std::move(fileEntries2), conflictEntries2, m_sqpackIndex2Segment3, std::vector<sqindex::path_hash_locator>(), strict);
 	std::ofstream(dir / std::format("{}.win32.index2", DatName), std::ios::binary).write(reinterpret_cast<const char*>(&indexData[0]), indexData.size());
 }

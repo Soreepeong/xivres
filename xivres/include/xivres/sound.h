@@ -1,6 +1,7 @@
 #ifndef XIVRES_SCD_H_
 #define XIVRES_SCD_H_
 
+#include <chrono>
 #include <map>
 #include <vector>
 
@@ -249,7 +250,7 @@ namespace xivres::sound {
 				std::span<uint32_t> seekTable
 			);
 
-			static sound_item make_empty();
+			static sound_item make_empty(std::optional<std::chrono::milliseconds> duration = std::nullopt);
 		};
 
 	private:

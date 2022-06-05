@@ -286,40 +286,197 @@ union sqpack_id_t {
 };
 
 struct xivres_redirect_config_t {
-	bool LogAllPaths = false;
-	bool LogReplacedPaths = false;
-};
-struct additional_game_root_t {
-	struct override_resource_t {
-		std::set<uint32_t> Types;
-		std::vector<srell::u8cregex> Paths;
+	class additional_game_root_t {
+		mutable std::unique_ptr<xivres::installation> m_pInstallation;
+		std::string m_sInstallationPath;
+
+	public:
+		class override_resource_t {
+			mutable std::vector<std::optional<srell::u8cregex>> m_pathRegexCompiled;
+
+			std::set<uint32_t> m_types;
+			std::vector<std::string> m_paths;
+
+		public:
+			friend void from_json(const nlohmann::json& j, override_resource_t& obj) {
+				obj.m_types.clear();
+				for (const auto& typeObj : j.at("types")) {
+					uint32_t resourceType = 0;
+					for (const auto c : typeObj.get<std::string>())
+						resourceType = (resourceType << 8) | static_cast<uint8_t>(c);
+					obj.m_types.insert(resourceType);
+				}
+
+				obj.m_paths.clear();
+				obj.m_pathRegexCompiled.clear();
+				for (const auto& pathObj : j.at("paths"))
+					obj.m_paths.emplace_back(pathObj.get<std::string>());
+				obj.m_pathRegexCompiled.resize(obj.m_paths.size());
+			}
+
+			const srell::u8cregex& regex(size_t pathIndex) const {
+				auto& slot = m_pathRegexCompiled.at(pathIndex);
+				if (!slot)
+					slot.emplace(m_paths.at(pathIndex), srell::regex_constants::icase);
+				return *slot;
+			}
+
+			bool matches_any(uint32_t resourceType, const std::string& s) const {
+				if (!std::ranges::any_of(m_types, [&](const auto& resType) { return resType == resourceType; }))
+					return false;
+
+				for (size_t i = 0; i < m_pathRegexCompiled.size(); ++i) {
+					if (srell::regex_search(s, regex(i)))
+						return true;
+				}
+				return false;
+			}
+		};
+
+		std::vector<override_resource_t> OverrideResources;
+
+		const std::string& installation_path() const {
+			return m_sInstallationPath;
+		}
+
+		void installation_path(std::string s) {
+			m_sInstallationPath = std::move(s);
+			m_pInstallation.reset();
+		}
+
+		const xivres::installation& get_installation() const {
+			if (!m_pInstallation)
+				m_pInstallation = std::make_unique<xivres::installation>(m_sInstallationPath);
+			return *m_pInstallation;
+		}
+
+		friend void from_json(const nlohmann::json& j, additional_game_root_t& obj) {
+			obj.installation_path(j.at("path").get<std::string>());
+			obj.OverrideResources = j.at("overrideResources").get<std::vector<override_resource_t>>();
+		}
 	};
 
-	std::unique_ptr<xivres::installation> Installation;
-	std::vector<override_resource_t> OverrideResources;
-};
+	class replacement_rule_t {
+		mutable std::optional<srell::u8cregex> m_regexFrom;
 
-struct replacement_rule_t {
-	srell::u8cregex From;
-	std::string To;
-	bool Stop = false;
-};
+	public:
+		std::string From;
+		std::string To;
+		bool Stop = false;
 
-void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
-	obj.LogAllPaths = j.value<bool>("logAllPaths", false);
-	obj.LogReplacedPaths = j.value<bool>("logReplacedPaths", false);
-}
+		const srell::u8cregex& regex() const {
+			return *m_regexFrom;
+		}
+
+		friend void from_json(const nlohmann::json& j, replacement_rule_t& obj) {
+			obj.From = j.at("from").get<std::string>();
+			obj.To = j.at("to").get<std::string>();
+			obj.Stop = j.value("stop", true);
+			obj.m_regexFrom.emplace(obj.From, srell::regex_constants::icase);
+		}
+	};
+
+	class log_pattern_filter_t {
+		mutable std::optional<srell::u8cregex> m_regex;
+
+	public:
+		std::string Pattern;
+		bool Include = true;
+
+		const srell::u8cregex& regex() const {
+			return *m_regex;
+		}
+
+		friend void from_json(const nlohmann::json& j, log_pattern_filter_t& obj) {
+			obj.Pattern = j.at("pattern").get<std::string>();
+			obj.Include = j.value("include", true);
+			obj.m_regex.emplace(obj.Pattern, srell::regex_constants::icase);
+		}
+	};
+
+	bool LogReplacedPaths = false;
+	std::vector<log_pattern_filter_t> LogPathFilters;
+	std::vector<additional_game_root_t> AdditionalRoots;
+	std::vector<replacement_rule_t> PathReplacements;
+
+	friend void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
+		obj.LogReplacedPaths = j.value<bool>("logReplacedPaths", false);
+
+		if (const auto it = j.find("logPathFilters"); it == j.end())
+			obj.LogPathFilters.clear();
+		else {
+			if (!it->is_array())
+				throw std::runtime_error("logPathFilters must be an array of objects");
+
+			obj.LogPathFilters.clear();
+			for (const auto& jobj : *it)
+				obj.LogPathFilters.emplace_back(jobj.get<log_pattern_filter_t>());
+		}
+
+		if (const auto it = j.find("additionalRoots"); it == j.end())
+			obj.AdditionalRoots.clear();
+		else {
+			if (!it->is_array())
+				throw std::runtime_error("additionalRoots must be an array of objects");
+
+			std::set<std::string> unvisited;
+			for (const auto& prevItem : obj.AdditionalRoots)
+				unvisited.emplace(prevItem.installation_path());
+
+			std::map<std::string, size_t> pathOrder;
+			for (size_t i = 0; i < it->size(); i++) {
+				additional_game_root_t rootObj = it->at(i).get<additional_game_root_t>();
+
+				auto root = std::filesystem::path(xivres::util::unicode::convert<std::wstring>(rootObj.installation_path()));
+				if (!exists(root))
+					continue;
+				root = canonical(root);
+
+				rootObj.installation_path(xivres::util::unicode::convert<std::string>(root.wstring()));
+				pathOrder.emplace(rootObj.installation_path(), i);
+
+				if (!unvisited.erase(rootObj.installation_path())) {
+					auto& item = obj.AdditionalRoots.emplace_back(std::move(rootObj));
+					item.get_installation().preload_all_sqpacks();
+				} else {
+					for (auto& info : obj.AdditionalRoots) {
+						if (info.installation_path() != root)
+							continue;
+
+						info.OverrideResources = std::move(rootObj.OverrideResources);
+					}
+				}
+			}
+			for (auto it = obj.AdditionalRoots.begin(); it != obj.AdditionalRoots.end();) {
+				if (pathOrder.contains(it->installation_path()))
+					++it;
+				else
+					it = obj.AdditionalRoots.erase(it);
+			}
+			std::ranges::sort(obj.AdditionalRoots, [&pathOrder](const auto& l, const auto& r) { return pathOrder.at(l.installation_path()) < pathOrder.at(r.installation_path()); });
+		}
+
+		if (const auto it = j.find("pathReplacements"); it == j.end())
+			obj.PathReplacements.clear();
+		else {
+			if (!it->is_array())
+				throw std::runtime_error("pathReplacements must be an array of objects");
+
+			obj.PathReplacements.clear();
+			for (const auto& item : *it)
+				obj.PathReplacements.emplace_back(item.get<replacement_rule_t>());
+		}
+	}
+};
 
 static std::shared_mutex s_handleMtx;
 static std::shared_mutex s_modAccessMtx;
-static std::vector<std::pair<std::filesystem::path, additional_game_root_t>> s_additionalGameRoots;
 static std::map<sqpack_id_t, std::map<uint64_t, std::deque<std::shared_ptr<xivres::hotswap_packed_stream>>>> s_allocations;
 static std::map<xivres::path_spec, std::shared_ptr<xivres::packed_stream>> s_availableReplacementStreams;
 static std::map<HANDLE, xivres::stream*> s_sqpackStreams;
 static std::map<HANDLE, uint64_t> s_virtualFilePointers;
+static std::deque<std::string> s_fabricatedNameStorage;
 static xivres_redirect_config_t s_config;
-
-static std::vector<replacement_rule_t> s_loadPathRegex;
 
 static std::filesystem::path get_game_dir() {
 	static std::filesystem::path s_gameDir = []() {
@@ -375,12 +532,27 @@ static const xivres::installation& get_installation() {
 	xivres::sqpack::generator gen(sqpkId.exname(), sqpkId.name());
 	gen.add_sqpack(reader, true, true);
 
+	if (sqpkId.CategoryId == 7) {
+		xivres::sound::reader scd(reader.at("sound/system/Sample_System.scd"));
+		xivres::sound::writer blank;
+		blank.set_table_1(scd.read_table_1());
+		blank.set_table_2(scd.read_table_2());
+		blank.set_table_4(scd.read_table_4());
+		blank.set_table_5(scd.read_table_5());
+		for (size_t i = 0; i < 256; ++i)
+			blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty(std::chrono::milliseconds(100)));
+
+		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.Export())));
+	}
+
+	size_t counter = 0;
 	for (const auto [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ {16 * 1048576, 1024}, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
 		auto& allocations = s_allocations[sqpkId][space];
 
 		std::shared_ptr<xivres::hotswap_packed_stream> stream;
-		for (size_t i = 0, counter = 0; i < count; i++, counter++) {
-			xivres::path_spec spec(std::format("xivres-redirect/{:08}b-{:08x}.bin", space, counter));
+		const auto requiredPrefix = xivres::path_spec::required_prefix(sqpkId.packid());
+		for (size_t i = 0; i < count; i++, counter++) {
+			xivres::path_spec spec(std::format("{}x/{:x}.xrr", requiredPrefix, counter));
 			if (!stream)
 				stream = std::make_shared<xivres::hotswap_packed_stream>(spec, space);
 			if (gen.add(stream, false).Added.empty()) {
@@ -392,19 +564,6 @@ static const xivres::installation& get_installation() {
 		}
 	}
 
-	if (sqpkId.CategoryId == 7) {
-		xivres::sound::reader scd(reader.at("sound/system/Sample_System.scd"));
-		xivres::sound::writer blank;
-		blank.set_table_1(scd.read_table_1());
-		blank.set_table_2(scd.read_table_2());
-		blank.set_table_4(scd.read_table_4());
-		blank.set_table_5(scd.read_table_5());
-		for (size_t i = 0; i < 256; ++i)
-			blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty());
-
-		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.Export())));
-	}
-
 	ptr = std::make_unique<xivres::sqpack::generator::sqpack_views>(gen.export_to_views(false));
 	return ptr.get();
 }
@@ -414,17 +573,30 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	auto& pszPath = retAddr[0x11];
 
 	sqpack_id_t sqpkId(categoryId);
-	if (s_config.LogAllPaths)
-		OutputDebugStringW(std::format(L"cat=0x{:08x} res=0x{:08x} hash=0x{:08x} {}\n", categoryId, resourceType, resourceHash, xivres::util::unicode::convert<std::wstring>(pszPath)).c_str());
+	xivres::path_spec pathSpec(pszPath);
+	std::shared_lock lock(s_modAccessMtx);
+	std::shared_ptr<xivres::packed_stream> stream;
+
+	for (const auto& filter : s_config.LogPathFilters) {
+		if (srell::regex_search(pathSpec.path(), filter.regex())) {
+			if (filter.Include) {
+				OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
+					"cat=0x{:08x} res=0x{:08x} hash=0x{:08x} {}\n", categoryId, resourceType, resourceHash, pszPath
+				)).c_str());
+			}
+			break;
+		}
+	}
 
 	try {
-		if (!get_sqpack_view(sqpkId))
+		const auto pViews = get_sqpack_view(sqpkId);
+		if (!pViews)
 			return s_find_existing_resource_handle_original(p1, categoryId, resourceType, resourceHash);
 
 		std::string transformed = pszPath;
 		auto changed = false;
-		for (const auto& rule : s_loadPathRegex) {
-			auto n = srell::regex_replace(transformed, rule.From, rule.To);
+		for (const auto& rule : s_config.PathReplacements) {
+			auto n = srell::regex_replace(transformed, rule.regex(), rule.To);
 			if (n != transformed) {
 				transformed = std::move(n);
 				if (rule.Stop)
@@ -432,25 +604,27 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			}
 		}
 
-		xivres::path_spec pathSpec(transformed);
 		if (transformed != pszPath) {
+			xivres::path_spec transformedPathSpec(transformed);
 			auto exists = false;
-			if (!exists) exists = s_availableReplacementStreams.contains(pathSpec);
-			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)();
-			for (const auto& additionalInstallation : s_additionalGameRoots | std::views::values) {
-				if (!exists) exists = additionalInstallation.Installation->get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) == (std::numeric_limits<size_t>::max)();
+			if (!exists) exists = s_availableReplacementStreams.contains(transformedPathSpec);
+			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) == (std::numeric_limits<size_t>::max)();
+			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
+				if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) == (std::numeric_limits<size_t>::max)();
 			}
 
-			if (!exists)
-				pathSpec = pszPath;
-			else {
+			if (exists) {
+				pathSpec = std::move(transformedPathSpec);
+				s_fabricatedNameStorage.emplace_back(transformed.c_str());
+				while (s_fabricatedNameStorage.size() > 1024)
+					s_fabricatedNameStorage.pop_front();
+				pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
 				if (s_config.LogReplacedPaths)
-					OutputDebugStringW(std::format(L"\t=> {}\n", xivres::util::unicode::convert<std::wstring>(transformed)).c_str());
+					OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
+						"Replaced path: {} => {}\n", pszPath, transformed
+					)).c_str());
 			}
 		}
-
-		std::shared_lock lock(s_modAccessMtx);
-		std::shared_ptr<xivres::packed_stream> stream;
 
 		if (!stream) {
 			if (const auto it = s_availableReplacementStreams.find(pathSpec); it != s_availableReplacementStreams.end())
@@ -459,24 +633,22 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 
 		if (!stream) {
 			const auto originalExists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) != (std::numeric_limits<size_t>::max)();
-			for (const auto& additionalInstallation : s_additionalGameRoots | std::views::values) {
+			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
 				if (originalExists) {
 					auto use = false;
 
 					for (const auto& cond : additionalInstallation.OverrideResources) {
-						if (!std::ranges::any_of(cond.Types, [&](const auto& resType) { return resType == resourceType; }))
-							continue;
-						if (!std::ranges::any_of(cond.Paths, [&](const auto& pattern) { return srell::regex_search(pathSpec.path(), pattern); }))
-							continue;
-						use = true;
-						break;
+						if (cond.matches_any(resourceType, pathSpec.path())) {
+							use = true;
+							break;
+						}
 					}
 
 					if (!use)
 						continue;
 				}
 
-				const auto& sqpk = additionalInstallation.Installation->get_sqpack(sqpkId.packid());
+				const auto& sqpk = additionalInstallation.get_installation().get_sqpack(sqpkId.packid());
 				const auto index = sqpk.find_entry_index(pathSpec);
 				if (index == (std::numeric_limits<size_t>::max)())
 					continue;
@@ -992,88 +1164,6 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 	}
 }
 
-void update_path_replacements(const nlohmann::json& rules) {
-	if (!rules.is_array())
-		throw std::runtime_error("root must be an array");
-
-	s_loadPathRegex.clear();
-	for (const auto& item : rules) {
-		if (!item.is_array() || item.size() < 2)
-			continue;
-		auto& rule = s_loadPathRegex.emplace_back();
-		rule.From = srell::u8cregex(item[0].get<std::string>(), srell::regex_constants::icase);
-		rule.To = item[1].get<std::string>();
-		rule.Stop = item.size() < 3 || item[2].get<bool>();
-	}
-}
-
-void update_additional_roots(const nlohmann::json& json) {
-	if (!json.is_array())
-		throw std::runtime_error("Must be an array of strings");
-
-	std::set<std::filesystem::path> unvisited;
-	for (const auto& prevItem : s_additionalGameRoots | std::views::keys)
-		unvisited.emplace(prevItem);
-
-	std::map<std::filesystem::path, size_t> pathOrder;
-	for (size_t i = 0; i < json.size(); i++) {
-		const auto rootObj = json.at(i);
-		auto root = std::filesystem::path(xivres::util::unicode::convert<std::wstring>(rootObj.at("path").get<std::string>()));
-		if (!exists(root))
-			continue;
-		root = canonical(root);
-		pathOrder.emplace(root, i);
-
-		if (!unvisited.erase(root)) {
-			auto inst = std::make_unique<xivres::installation>(root);
-			inst->preload_all_sqpacks();
-			auto& item = s_additionalGameRoots.emplace_back(root, additional_game_root_t()).second;
-			item.Installation = std::move(inst);
-		}
-
-		for (auto& [itemPath, info] : s_additionalGameRoots) {
-			if (itemPath != root)
-				continue;
-
-			if (const auto it = rootObj.find("overrideResources"); it != rootObj.end() && it->is_array()) {
-				for (const auto& obj : *it) {
-					auto& ovr = info.OverrideResources.emplace_back();
-					for (const auto& typeObj : obj.at("types")) {
-						uint32_t resourceType = 0;
-						for (const auto c : typeObj.get<std::string>())
-							resourceType = (resourceType << 8) | static_cast<uint8_t>(c);
-						ovr.Types.insert(resourceType);
-					}
-					for (const auto& pathObj : obj.at("paths")) {
-						ovr.Paths.emplace_back(pathObj.get<std::string>(), srell::regex_constants::icase);
-					}
-				}
-			}
-		}
-	}
-	for (auto it = s_additionalGameRoots.begin(); it != s_additionalGameRoots.end();) {
-		if (pathOrder.contains(it->first))
-			++it;
-		else
-			it = s_additionalGameRoots.erase(it);
-	}
-	std::ranges::sort(s_additionalGameRoots, [&pathOrder](const auto& l, const auto& r) { return pathOrder.at(l.first) < pathOrder.at(r.first); });
-}
-
-void update_xivres_config(const nlohmann::json& json) {
-	from_json(json, s_config);
-
-	if (const auto it = json.find("additionalRoots"); it != json.end())
-		update_additional_roots(*it);
-	else
-		s_additionalGameRoots.clear();
-
-	if (const auto it = json.find("pathReplacements"); it != json.end())
-		update_path_replacements(*it);
-	else
-		s_loadPathRegex.clear();
-}
-
 void continuous_update_mod_dirs(HANDLE hReady) {
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hChangeNotification(
 		CreateFile(get_game_dir().c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr), &CloseHandle);
@@ -1135,11 +1225,12 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 
 		const auto lock = std::lock_guard(s_modAccessMtx);
 		s_availableReplacementStreams.clear();
+		// if (s_emptyScd) s_availableReplacementStreams.emplace(s_emptyScd->path_spec(), s_emptyScd);
 
 		try {
 			nlohmann::json json;
 			std::ifstream(configPath) >> json;
-			update_xivres_config(json);
+			from_json(json, s_config);
 		} catch (const std::exception& e) {
 			OutputDebugStringW(std::format(LR"(Error processing additional root rules file: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
 		}

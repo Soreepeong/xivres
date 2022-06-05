@@ -227,11 +227,24 @@ size_t xivres::sound::writer::sound_item::calculate_entry_size() const {
 	return sizeof sound_entry_header + auxLength + ExtraData.size() + Data.size();
 }
 
-xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_empty() {
+xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_empty(std::optional<std::chrono::milliseconds> duration) {
+	if (!duration) {
+		return {
+			.Header = {
+				.Format = sound_entry_format::Empty,
+			},
+		};
+	}
+
+	const auto blankLength = static_cast<uint32_t>(duration->count() * 2 * 44100 / 1000);
 	return {
 		.Header = {
-			.Format = sound_entry_format::Empty,
+			.StreamSize = blankLength,
+			.ChannelCount = 1,
+			.SamplingRate = 44100,
+			.Format = sound_entry_format::WaveFormatPcm,
 		},
+		.Data = std::vector<uint8_t>(blankLength),
 	};
 }
 

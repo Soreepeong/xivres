@@ -4,6 +4,27 @@
 
 xivres::path_spec::path_spec(const std::wstring& fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) {}
 
+std::string xivres::path_spec::required_prefix(uint32_t categoryId, uint32_t expacId, uint32_t partId) {
+	switch (categoryId){
+		case 0x00: return "common/";
+		case 0x01: return "bgcommon/";
+		case 0x02: return expacId > 0 ? std::format("bg/ex{}/{:02x}_", expacId, partId) : "bg/ffxiv/";
+		case 0x03: return expacId > 0 ? std::format("cut/ex{}/", expacId) : "cut/ffxiv/";
+		case 0x04: return "chara/";
+		case 0x05: return "shader/";
+		case 0x06: return "ui/";
+		case 0x07: return "sound/";
+		case 0x08: return "vfx/";
+		case 0x09: return "ui_script/";
+		case 0x0a: return "exd/";
+		case 0x0b: return "game_script/";
+		case 0x0c: return "music/";
+		case 0x12: return "sqpack_test/";
+		case 0x13: return "debug/";
+		default: return "invalid/";
+	}
+}
+
 xivres::path_spec::path_spec(std::string fullPath): path_spec() {
 	std::vector<std::span<char>> parts;
 	size_t previousOffset = 0, offset;

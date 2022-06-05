@@ -98,6 +98,12 @@ namespace xivres {
 			return *this;
 		}
 
+		[[nodiscard]] path_spec textless() const {
+			if (m_empty)
+				return *this;
+			return { m_pathHash, m_nameHash, m_fullPathHash, m_categoryId, m_expacId, m_partId };
+		}
+
 		void clear() noexcept {
 			m_text.clear();
 			m_fullPathHash = m_pathHash = m_nameHash = EmptyHashValue;
@@ -335,6 +341,9 @@ namespace xivres {
 				return _strcmpi(lt, r.FullPath);
 			}
 		};
+
+		static std::string required_prefix(uint32_t categoryId, uint32_t expacId, uint32_t prtId);
+		static std::string required_prefix(uint32_t packId) { return required_prefix(packId >> 16, (packId >> 8) & 0xFF, packId & 0xFF); }
 	};
 }
 

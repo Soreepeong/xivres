@@ -9,7 +9,7 @@ namespace xivres::sqpack {
 	class generator {
 		const uint64_t m_maxFileSize;
 
-		class DataViewStream;
+		class data_view_stream;
 
 	public:
 		struct entry_info {
@@ -47,7 +47,7 @@ namespace xivres::sqpack {
 
 		public:
 			class buffered_entry {
-				const DataViewStream* m_view = nullptr;
+				const data_view_stream* m_view = nullptr;
 				const entry_info* m_entry = nullptr;
 				std::vector<uint8_t> m_bufferPreallocated;
 				std::vector<uint8_t> m_bufferTemporary;
@@ -55,10 +55,10 @@ namespace xivres::sqpack {
 
 			public:
 				bool empty() const { return m_view == nullptr || m_entry == nullptr; }
-				bool is_same(const DataViewStream* view, const entry_info* entry) const { return m_view == view && m_entry == entry; }
+				bool is_same(const data_view_stream* view, const entry_info* entry) const { return m_view == view && m_entry == entry; }
 				void clear();
 				auto get() const { return std::make_pair(m_view, m_entry); }
-				void set(const DataViewStream* view, const entry_info* entry);
+				void set(const data_view_stream* view, const entry_info* entry);
 				const auto& buffer() const { return m_bufferActive; }
 			};
 
@@ -66,7 +66,7 @@ namespace xivres::sqpack {
 			buffered_entry m_lastActiveEntry;
 
 		public:
-			buffered_entry* GetBuffer(const DataViewStream* view, const entry_info* entry);
+			buffered_entry* GetBuffer(const data_view_stream* view, const entry_info* entry);
 
 			void Flush() { m_lastActiveEntry.clear(); }
 		};
