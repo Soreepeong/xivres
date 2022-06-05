@@ -1,0 +1,47 @@
+{
+	"logAllPaths": false,
+	"logReplacedPaths": false,
+	"additionalRoots": [
+		{
+			"path": "C:\\Program Files (x86)\\FINAL FANTASY XIV - KOREA\\game",
+			"overrideResources": [
+				{
+					"types": [
+						"atex",
+						"tex"
+					],
+					"paths": [
+						"^ui/"
+					]
+				},
+				{
+					"types": [
+						"fdt",
+						"tex"
+					],
+					"paths": [
+						"^common/font"
+					]
+				}
+			]
+		}
+	],
+	"pathReplacements": [
+		[
+			"^sound/voice/(vo_battle|vo_cm|vo_emote)/.*$",
+			"sound/empty256.scd"
+		],
+		[
+			"^((?:cut|sound/voice/vo_line)/.*?[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"$1ko"
+		],
+		[
+			"^(sound/.*)",
+			"$1"
+		],
+		[
+			"^((?!cut|sound/voice/vo_line).*[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"$1ko"
+		]
+	]
+}
