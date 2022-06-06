@@ -572,6 +572,18 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	const auto retAddr = static_cast<char**>(_AddressOfReturnAddress());
 	auto& pszPath = retAddr[0x11];
 
+	struct resource_load_details_t {
+		void* Unknown_0x00;
+		void* Unknown_0x08;
+		uint32_t SegmentOffset;
+		uint32_t SegmentLength;
+	};
+	uint32_t nSegmentOffset = 0, nSegmentLength = 0;
+	if (auto& pLoadDetails = reinterpret_cast<resource_load_details_t**>(retAddr)[0x12]; pLoadDetails) {
+		nSegmentOffset = pLoadDetails->SegmentOffset;
+		nSegmentLength = pLoadDetails->SegmentLength;
+	}
+
 	sqpack_id_t sqpkId(categoryId);
 	xivres::path_spec pathSpec(pszPath);
 	std::shared_lock lock(s_modAccessMtx);
@@ -614,15 +626,24 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			}
 
 			if (exists) {
+				if (nSegmentLength) {
+					const auto tstr = std::format("{}.{:x}.{:x}", transformed, nSegmentOffset, nSegmentLength);
+					resourceHash = crc32_z(0, reinterpret_cast<const Bytef*>(tstr.c_str()), tstr.size());
+				} else {
+					resourceHash = crc32_z(0, reinterpret_cast<const Bytef*>(transformed.c_str()), transformed.size());
+				}
+
 				pathSpec = std::move(transformedPathSpec);
 				s_fabricatedNameStorage.emplace_back(transformed.c_str());
 				while (s_fabricatedNameStorage.size() > 1024)
 					s_fabricatedNameStorage.pop_front();
-				pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
+
 				if (s_config.LogReplacedPaths)
 					OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
 						"Replaced path: {} => {}\n", pszPath, transformed
 					)).c_str());
+
+				pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
 			}
 		}
 
