@@ -12,6 +12,10 @@
 #include "stream.h"
 #include "xivstring.h"
 
+namespace xivres {
+	class installation;
+}
+
 namespace xivres::sqpack {
 	class reader;
 }
@@ -78,6 +82,7 @@ namespace xivres::excel::exl {
 		std::map<int, std::string> m_idToNameMap;
 
 	public:
+		reader(const xivres::installation& installation);
 		reader(const stream& strm);
 		const std::string& operator[](int id) const { return m_idToNameMap.at(id); }
 		int operator[](const std::string& s) const { return m_nameToIdMap.at(s); }
@@ -85,6 +90,8 @@ namespace xivres::excel::exl {
 		[[nodiscard]] auto end() const { return m_nameToIdMap.end(); }
 		[[nodiscard]] auto rbegin() const { return m_nameToIdMap.rbegin(); }
 		[[nodiscard]] auto rend() const { return m_nameToIdMap.rend(); }
+		[[nodiscard]] auto& name_to_id_map() const { return m_nameToIdMap; }
+		[[nodiscard]] auto& id_to_name_map() const { return m_idToNameMap; }
 	};
 }
 
@@ -92,6 +99,26 @@ namespace xivres::excel::exh {
 	struct column {
 		BE<cell_type> Type;
 		BE<uint16_t> Offset;
+		
+		bool is_integer() const {
+			switch (*Type) {
+				case cell_type::Bool:
+				case cell_type::Int8:
+				case cell_type::UInt8:
+				case cell_type::Int16:
+				case cell_type::UInt16:
+				case cell_type::Int32:
+				case cell_type::UInt32:
+				case cell_type::Int64:
+				case cell_type::UInt64:
+					return true;
+			}
+			return false;
+		}
+
+		bool is_string() const {
+			return *Type == cell_type::String;
+		}
 	};
 
 	struct page {
@@ -137,11 +164,14 @@ namespace xivres::excel::exh {
 		std::vector<game_language> m_languages;
 
 	public:
+		reader(const xivres::installation& installation, std::string name, bool strict = false);
 		reader(std::string name, const stream& strm, bool strict = false);
 		[[nodiscard]] const std::string& name() const { return m_name; }
 		[[nodiscard]] const header& header() const { return m_header; }
 		[[nodiscard]] const std::vector<column>& get_columns() const { return m_columns; }
+		[[nodiscard]] const column& get_column(size_t i) const { return m_columns.at(i); }
 		[[nodiscard]] const std::vector<page>& get_pages() const { return m_pages; }
+		[[nodiscard]] const page& get_page(size_t i) const { return m_pages.at(i); }
 		[[nodiscard]] const std::vector<game_language>& get_languages() const { return m_languages; }
 		[[nodiscard]] size_t get_owning_page_index(uint32_t rowId) const;
 		[[nodiscard]] const page& get_owning_page(uint32_t rowId) const { return m_pages[get_owning_page_index(rowId)]; }
@@ -175,6 +205,14 @@ namespace xivres::excel::exd::row {
 		cell& at(size_t index);
 		const cell& at(size_t index) const;
 		size_t size() const { return m_cells.size(); }
+		
+		std::vector<cell> get_cells_vector() const {
+			std::vector<cell> res;
+			res.reserve(m_cells.size());
+			for (size_t i = 0; i < m_cells.size(); i++)
+				res.emplace_back(at(i));
+			return res;
+		}
 
 		template<typename TParent, typename T, bool reversed>
 		class base_iterator {

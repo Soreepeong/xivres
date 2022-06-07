@@ -6,6 +6,10 @@
 
 using namespace xivres::util;
 
+xivres::excel::exl::reader::reader(const xivres::installation& installation)
+	: reader(*installation.get_file("exd/root.exl")) {
+}
+
 xivres::excel::exl::reader::reader(const stream& strm) {
 	std::string data(static_cast<size_t>(strm.size()), '\0');
 	strm.read_fully(0, std::span(data));
@@ -36,6 +40,9 @@ xivres::excel::exl::reader::reader(const stream& strm) {
 	}
 }
 
+xivres::excel::exh::reader::reader(const xivres::installation& installation, std::string name, bool strict)
+	: reader(name, *installation.get_file(std::format("exd/{}.exh", name))) {}
+
 xivres::excel::exh::reader::reader(std::string name, const stream& strm, bool strict)
 	: m_name(std::move(name))
 	, m_header(strm.read_fully<exh::header>(0))
@@ -61,35 +68,10 @@ size_t xivres::excel::exh::reader::get_owning_page_index(uint32_t rowId) const {
 }
 
 xivres::path_spec xivres::excel::exh::reader::get_exd_path(const page& page, game_language language) const {
-	const auto* languageCode = "";
-	switch (language) {
-		case game_language::Unspecified:
-			break;
-		case game_language::Japanese:
-			languageCode = "_ja";
-			break;
-		case game_language::English:
-			languageCode = "_en";
-			break;
-		case game_language::German:
-			languageCode = "_de";
-			break;
-		case game_language::French:
-			languageCode = "_fr";
-			break;
-		case game_language::ChineseSimplified:
-			languageCode = "_chs";
-			break;
-		case game_language::ChineseTraditional:
-			languageCode = "_cht";
-			break;
-		case game_language::Korean:
-			languageCode = "_ko";
-			break;
-		default:
-			throw std::invalid_argument("Invalid language");
-	}
-	return std::format("exd/{}_{}{}.exd", m_name, *page.StartId, languageCode);
+	if (language == game_language::Unspecified)
+		return std::format("exd/{}_{}.exd", m_name, *page.StartId);
+	else
+		return std::format("exd/{}_{}_{}.exd", m_name, *page.StartId, game_language_code(language));
 }
 
 xivres::excel::exd::row::reader::reader(std::span<const char> fixedData, std::span<const char> fullData, const std::vector<exh::column>& columns)
