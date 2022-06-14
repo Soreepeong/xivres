@@ -76,7 +76,7 @@ namespace xivres::texture {
 		}
 
 		[[nodiscard]] uint32_t header_and_mipmap_offsets_size() const {
-			return std::min<uint32_t>(80, static_cast<uint32_t>(sizeof header + MipmapCount * sizeof uint32_t));
+			return std::max<uint32_t>(80, static_cast<uint32_t>(sizeof header + MipmapCount * sizeof uint32_t));
 		}
 	};
 
