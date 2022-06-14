@@ -993,10 +993,10 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 		return;
 
 	std::map<xivres::path_spec, xivres::image_change_data::file> imc;
-	std::map<std::pair<xivres::textools::metafile::item_type_t, uint32_t>, xivres::equipment_deformer_parameter_file> eqdp;
+	std::map<std::pair<xivres::textools::metafile::item_types, uint32_t>, xivres::equipment_deformer_parameter_file> eqdp;
 	std::optional<xivres::equipment_parameter_file> eqp;
 	std::optional<xivres::gimmmick_parameter_file> gmp;
-	std::map<xivres::textools::metafile::est_type_t, xivres::ex_skeleton_table_file> est;
+	std::map<xivres::textools::metafile::est_types, xivres::ex_skeleton_table_file> est;
 
 	std::vector<std::filesystem::path> paths;
 	for (const auto& path : std::filesystem::recursive_directory_iterator(ttmpDir, std::filesystem::directory_options::follow_directory_symlink | std::filesystem::directory_options::skip_permission_denied)) {
@@ -1033,12 +1033,12 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				json.pop_back();
 			}
 
-			xivres::textools::ttmpl_t ttmpl;
+			xivres::textools::ttmpl ttmpl;
 			if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
-				ttmpl = json[0].get<xivres::textools::ttmpl_t>();
+				ttmpl = json[0].get<xivres::textools::ttmpl>();
 			else {
 				for (const auto& j : json)
-					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mod_entry_t>());
+					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mod_entry>());
 			}
 
 			const auto choicesFile = std::filesystem::path(path).replace_filename("choices.json");
@@ -1104,7 +1104,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				std::ofstream(std::filesystem::path(choicesFile).replace_filename("choices.fixed.json"), std::ios::binary) << choices.dump(1, '\t');
 
 			std::shared_ptr<xivres::stream> ttmpd = std::make_shared<oplocking_file_stream>(ttmpdPath, true);
-			ttmpl.for_each([&](const xivres::textools::mod_entry_t& entry) {
+			ttmpl.for_each([&](const xivres::textools::mod_entry& entry) {
 				if (!entry.is_textools_metadata()) {
 					const auto pathSpec = xivres::path_spec(entry.FullPath);
 					auto& stream = s_availableReplacementStreams[pathSpec];

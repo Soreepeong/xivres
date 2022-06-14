@@ -11,19 +11,16 @@
 #include "image_change_data.h"
 
 namespace xivres::textools {
-	template<typename T>
-	using LE = LE<T>;
-
-	struct mod_pack_entry_t {
+	struct mod_pack_entry {
 		std::string Name;
 		std::string Author;
 		std::string Version;
 		std::string Url;
 	};
-	void to_json(nlohmann::json&, const mod_pack_entry_t&);
-	void from_json(const nlohmann::json&, mod_pack_entry_t&);
+	void to_json(nlohmann::json&, const mod_pack_entry&);
+	void from_json(const nlohmann::json&, mod_pack_entry&);
 
-	struct mod_entry_t {
+	struct mod_entry {
 		std::string Name;
 		std::string Category;
 		std::string FullPath;
@@ -31,19 +28,19 @@ namespace xivres::textools {
 		uint64_t ModSize{};
 		std::string DatFile;
 		bool IsDefault{};
-		std::optional<mod_pack_entry_t> ModPack;
+		std::optional<mod_pack_entry> ModPack;
 
 		[[nodiscard]] bool is_textools_metadata() const;
 	};
-	void to_json(nlohmann::json&, const mod_entry_t&);
-	void from_json(const nlohmann::json&, mod_entry_t&);
+	void to_json(nlohmann::json&, const mod_entry&);
+	void from_json(const nlohmann::json&, mod_entry&);
 
 	namespace mod_pack_page {
 		struct option_t {
 			std::string Name;
 			std::string Description;
 			std::string ImagePath;
-			std::vector<mod_entry_t> ModsJsons;
+			std::vector<mod_entry> ModsJsons;
 			std::string GroupName;
 			std::string SelectionType;
 			bool IsChecked;
@@ -68,7 +65,7 @@ namespace xivres::textools {
 
 	}
 
-	struct ttmpl_t {
+	struct ttmpl {
 		std::string MinimumFrameworkVersion;
 		std::string FormatVersion;
 		std::string Name;
@@ -77,13 +74,13 @@ namespace xivres::textools {
 		std::string Description;
 		std::string Url;
 		std::vector<mod_pack_page::page_t> ModPackPages;
-		std::vector<mod_entry_t> SimpleModsList;
+		std::vector<mod_entry> SimpleModsList;
 
-		void for_each(std::function<void(textools::mod_entry_t&)> cb, const nlohmann::json& choices = {});
-		void for_each(std::function<void(const textools::mod_entry_t&)> cb, const nlohmann::json& choices = {}) const;
+		void for_each(std::function<void(mod_entry&)> cb, const nlohmann::json& choices = {});
+		void for_each(std::function<void(const mod_entry&)> cb, const nlohmann::json& choices = {}) const;
 	};
-	void to_json(nlohmann::json&, const ttmpl_t&);
-	void from_json(const nlohmann::json&, ttmpl_t&);
+	void to_json(nlohmann::json&, const ttmpl&);
+	void from_json(const nlohmann::json&, ttmpl&);
 
 	class metafile {
 	public:
@@ -91,7 +88,7 @@ namespace xivres::textools {
 		static const srell::u8cregex CharacterMetaPathTest;
 		static const srell::u8cregex HousingMetaPathTest;
 
-		enum class meta_data_type_t : uint32_t {
+		enum class meta_types : uint32_t {
 			Invalid,
 			Imc,
 			Eqdp,
@@ -100,7 +97,7 @@ namespace xivres::textools {
 			Gmp,
 		};
 
-		enum class est_type_t {
+		enum class est_types {
 			Invalid,
 			Face,
 			Hair,
@@ -108,7 +105,7 @@ namespace xivres::textools {
 			Body,
 		};
 
-		enum class item_type_t {
+		enum class item_types {
 			Invalid,
 			Equipment,
 			Accessory,
@@ -116,26 +113,26 @@ namespace xivres::textools {
 		};
 
 #pragma pack(push, 1)
-		struct header_t {
+		struct meta_header {
 			LE<uint32_t> EntryCount;
 			LE<uint32_t> HeaderSize;
 			LE<uint32_t> FirstEntryLocatorOffset;
 		};
 
-		struct entry_locator_t {
-			LE<meta_data_type_t> Type;
+		struct entry_locator {
+			LE<meta_types> Type;
 			LE<uint32_t> Offset;
 			LE<uint32_t> Size;
 		};
 
-		struct equipment_deformer_parameter_entry_t {
+		struct equipment_deformer_parameter_entry {
 			uint32_t RaceCode;
 			uint8_t Value : 2;
 			uint8_t Padding : 6;
 		};
-		static_assert(sizeof equipment_deformer_parameter_entry_t == 5);
+		static_assert(sizeof equipment_deformer_parameter_entry == 5);
 
-		struct equipment_and_gimmick_parameter_entry_t {
+		struct equipment_and_gimmick_parameter_entry {
 			uint32_t Enabled : 1;
 			uint32_t Animated : 1;
 			uint32_t RotationA : 10;
@@ -144,7 +141,7 @@ namespace xivres::textools {
 			uint8_t UnknownLow : 4;
 			uint8_t UnknownHigh : 4;
 		};
-		static_assert(sizeof equipment_and_gimmick_parameter_entry_t == 5);
+		static_assert(sizeof equipment_and_gimmick_parameter_entry == 5);
 
 		struct ex_skeleton_table_entry_t {
 			uint16_t RaceCode;
@@ -157,11 +154,11 @@ namespace xivres::textools {
 		const uint32_t& Version;
 		const std::string TargetPath;
 		const std::string SourcePath;
-		const header_t& Header;
-		const std::span<const entry_locator_t> AllEntries;
+		const meta_header& Header;
+		const std::span<const entry_locator> AllEntries;
 
-		item_type_t ItemType = item_type_t::Invalid;
-		est_type_t EstType = est_type_t::Invalid;
+		item_types ItemType = item_types::Invalid;
+		est_types EstType = est_types::Invalid;
 		std::string PrimaryType;
 		std::string SecondaryType;
 		std::string TargetImcPath;
@@ -172,10 +169,10 @@ namespace xivres::textools {
 		size_t EqpEntrySize = 0;
 		size_t EqpEntryOffset = 0;
 
-		metafile(std::string gamePath, const xivres::stream& stream);
+		metafile(std::string gamePath, const stream& stream);
 
 		template<typename T>
-		[[nodiscard]] std::span<const T> get_span(meta_data_type_t type) const {
+		[[nodiscard]] std::span<const T> get_span(meta_types type) const {
 			for (const auto& entry : AllEntries) {
 				if (entry.Type != type)
 					continue;
@@ -185,11 +182,11 @@ namespace xivres::textools {
 			return {};
 		}
 
-		static std::string equipment_deformer_parameter_path(item_type_t type, uint32_t race) {
+		static std::string equipment_deformer_parameter_path(item_types type, uint32_t race) {
 			switch (type) {
-				case item_type_t::Equipment:
+				case item_types::Equipment:
 					return std::format("chara/xls/charadb/equipmentdeformerparameter/c{:04}.eqdp", race);
-				case item_type_t::Accessory:
+				case item_types::Accessory:
 					return std::format("chara/xls/charadb/accessorydeformerparameter/c{:04}.eqdp", race);
 				default:
 					throw std::invalid_argument("only equipment and accessory have valid eqdp");
@@ -199,27 +196,27 @@ namespace xivres::textools {
 		static constexpr auto EqpPath = "chara/xls/equipmentparameter/equipmentparameter.eqp";
 		static constexpr auto GmpPath = "chara/xls/equipmentparameter/gimmickparameter.gmp";
 
-		static const char* ex_skeleton_table_path(est_type_t type) {
+		static const char* ex_skeleton_table_path(est_types type) {
 			switch (type) {
-				case est_type_t::Face:
+				case est_types::Face:
 					return "chara/xls/charadb/faceskeletontemplate.est";
-				case est_type_t::Hair:
+				case est_types::Hair:
 					return "chara/xls/charadb/hairskeletontemplate.est";
-				case est_type_t::Head:
+				case est_types::Head:
 					return "chara/xls/charadb/extra_met.est";
-				case est_type_t::Body:
+				case est_types::Body:
 					return "chara/xls/charadb/extra_top.est";
 				default:
 					return nullptr;
 			}
 		}
 
-		void apply_image_change_data_edits(std::function<xivres::image_change_data::file& ()> reader) const;
-		void apply_equipment_deformer_parameter_edits(std::function<xivres::equipment_deformer_parameter_file& (item_type_t, uint32_t)> reader) const;
+		void apply_image_change_data_edits(std::function<image_change_data::file& ()> reader) const;
+		void apply_equipment_deformer_parameter_edits(std::function<equipment_deformer_parameter_file& (item_types, uint32_t)> reader) const;
 		[[nodiscard]] bool has_equipment_parameter_edits() const;
-		void apply_equipment_parameter_edits(xivres::equipment_parameter_file& eqp) const;
+		void apply_equipment_parameter_edits(equipment_parameter_file& eqp) const;
 		[[nodiscard]] bool has_gimmick_parameter_edits() const;
-		void apply_gimmick_parameter_edits(xivres::gimmmick_parameter_file& gmp) const;
-		void apply_ex_skeleton_table_edits(xivres::ex_skeleton_table_file& est) const;
+		void apply_gimmick_parameter_edits(gimmmick_parameter_file& gmp) const;
+		void apply_ex_skeleton_table_edits(ex_skeleton_table_file& est) const;
 	};
 }

@@ -14,7 +14,7 @@ T JsonValueOrDefault(const nlohmann::json& json, const char* key, T defaultValue
 	return defaultValue;
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const mod_pack_entry_t& p) {
+void xivres::textools::to_json(nlohmann::json& j, const mod_pack_entry& p) {
 	j = nlohmann::json::object({
 		{"Name", p.Name},
 		{"Author", p.Author},
@@ -23,7 +23,7 @@ void xivres::textools::to_json(nlohmann::json& j, const mod_pack_entry_t& p) {
 		});
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, mod_pack_entry_t& p) {
+void xivres::textools::from_json(const nlohmann::json& j, mod_pack_entry& p) {
 	if (j.is_null())
 		return;
 	if (!j.is_object())
@@ -35,7 +35,7 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_pack_entry_t& p) {
 	p.Url = JsonValueOrDefault(j, "Url", ""s, ""s);
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const mod_entry_t& p) {
+void xivres::textools::to_json(nlohmann::json& j, const mod_entry& p) {
 	j = nlohmann::json::object({
 		{"Name", p.Name},
 		{"Category", p.Category},
@@ -49,7 +49,7 @@ void xivres::textools::to_json(nlohmann::json& j, const mod_entry_t& p) {
 		j["ModPackEntry"] = *p.ModPack;
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, mod_entry_t& p) {
+void xivres::textools::from_json(const nlohmann::json& j, mod_entry& p) {
 	if (!j.is_object())
 		throw bad_data_error("ModEntry must be an object");
 
@@ -61,7 +61,7 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_entry_t& p) {
 	p.DatFile = JsonValueOrDefault(j, "DatFile", ""s, ""s);
 	p.IsDefault = JsonValueOrDefault(j, "IsDefault", false, false);
 	if (const auto it = j.find("ModPackEntry"); it != j.end() && !it->is_null())
-		p.ModPack = it->get<mod_pack_entry_t>();
+		p.ModPack = it->get<mod_pack_entry>();
 }
 
 void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const option_t& p) {
@@ -124,7 +124,7 @@ void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, page_t&
 		p.ModGroups = it->get<decltype(p.ModGroups)>();
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const ttmpl_t& p) {
+void xivres::textools::to_json(nlohmann::json& j, const ttmpl& p) {
 	j = nlohmann::json::object({
 		{"MinimumFrameworkVersion", p.MinimumFrameworkVersion},
 		{"FormatVersion", p.FormatVersion},
@@ -138,7 +138,7 @@ void xivres::textools::to_json(nlohmann::json& j, const ttmpl_t& p) {
 		});
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, ttmpl_t& p) {
+void xivres::textools::from_json(const nlohmann::json& j, ttmpl& p) {
 	if (!j.is_object())
 		throw bad_data_error("TTMPL must be an object");
 
@@ -155,7 +155,7 @@ void xivres::textools::from_json(const nlohmann::json& j, ttmpl_t& p) {
 		p.SimpleModsList = it->get<decltype(p.SimpleModsList)>();
 }
 
-void xivres::textools::ttmpl_t::for_each(std::function<void(mod_entry_t&)> cb, const nlohmann::json& choices) {
+void xivres::textools::ttmpl::for_each(std::function<void(mod_entry&)> cb, const nlohmann::json& choices) {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -190,7 +190,7 @@ void xivres::textools::ttmpl_t::for_each(std::function<void(mod_entry_t&)> cb, c
 	}
 }
 
-void xivres::textools::ttmpl_t::for_each(std::function<void(const mod_entry_t&)> cb, const nlohmann::json& choices) const {
+void xivres::textools::ttmpl::for_each(std::function<void(const mod_entry&)> cb, const nlohmann::json& choices) const {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -225,7 +225,7 @@ void xivres::textools::ttmpl_t::for_each(std::function<void(const mod_entry_t&)>
 	}
 }
 
-bool xivres::textools::mod_entry_t::is_textools_metadata() const {
+bool xivres::textools::mod_entry::is_textools_metadata() const {
 	if (FullPath.length() < 5)
 		return false;
 	auto metaExt = FullPath.substr(FullPath.length() - 5);
@@ -259,8 +259,8 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 	, Version(*reinterpret_cast<const uint32_t*>(&Data[0]))
 	, TargetPath(std::move(gamePath))
 	, SourcePath(reinterpret_cast<const char*>(&Data[sizeof Version]))
-	, Header(*reinterpret_cast<const header_t*>(&Data[sizeof Version + SourcePath.size() + 1]))
-	, AllEntries(span_cast<entry_locator_t>(Data, Header.FirstEntryLocatorOffset, Header.EntryCount)) {
+	, Header(*reinterpret_cast<const meta_header*>(&Data[sizeof Version + SourcePath.size() + 1]))
+	, AllEntries(span_cast<entry_locator>(Data, Header.FirstEntryLocatorOffset, Header.EntryCount)) {
 	if (srell::u8csmatch matches;
 		regex_search(TargetPath, matches, CharacterMetaPathTest)) {
 		PrimaryType = matches["PrimaryType"].str();
@@ -286,36 +286,36 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 					c = std::tolower(c);
 			}
 			if (0 == slot.compare("met"))
-				ItemType = item_type_t::Equipment, SlotIndex = 0, EqpEntrySize = 3, EqpEntryOffset = 5, EstType = est_type_t::Head;
+				ItemType = item_types::Equipment, SlotIndex = 0, EqpEntrySize = 3, EqpEntryOffset = 5, EstType = est_types::Head;
 			else if (0 == slot.compare("top"))
-				ItemType = item_type_t::Equipment, SlotIndex = 1, EqpEntrySize = 2, EqpEntryOffset = 0, EstType = est_type_t::Body;
+				ItemType = item_types::Equipment, SlotIndex = 1, EqpEntrySize = 2, EqpEntryOffset = 0, EstType = est_types::Body;
 			else if (0 == slot.compare("glv"))
-				ItemType = item_type_t::Equipment, SlotIndex = 2, EqpEntrySize = 1, EqpEntryOffset = 3;
+				ItemType = item_types::Equipment, SlotIndex = 2, EqpEntrySize = 1, EqpEntryOffset = 3;
 			else if (0 == slot.compare("dwn"))
-				ItemType = item_type_t::Equipment, SlotIndex = 3, EqpEntrySize = 1, EqpEntryOffset = 2;
+				ItemType = item_types::Equipment, SlotIndex = 3, EqpEntrySize = 1, EqpEntryOffset = 2;
 			else if (0 == slot.compare("sho"))
-				ItemType = item_type_t::Equipment, SlotIndex = 4, EqpEntrySize = 1, EqpEntryOffset = 4;
+				ItemType = item_types::Equipment, SlotIndex = 4, EqpEntrySize = 1, EqpEntryOffset = 4;
 			else if (0 == slot.compare("ear"))
-				ItemType = item_type_t::Accessory, SlotIndex = 0;
+				ItemType = item_types::Accessory, SlotIndex = 0;
 			else if (0 == slot.compare("nek"))
-				ItemType = item_type_t::Accessory, SlotIndex = 1;
+				ItemType = item_types::Accessory, SlotIndex = 1;
 			else if (0 == slot.compare("wrs"))
-				ItemType = item_type_t::Accessory, SlotIndex = 2;
+				ItemType = item_types::Accessory, SlotIndex = 2;
 			else if (0 == slot.compare("rir"))
-				ItemType = item_type_t::Accessory, SlotIndex = 3;
+				ItemType = item_types::Accessory, SlotIndex = 3;
 			else if (0 == slot.compare("ril"))
-				ItemType = item_type_t::Accessory, SlotIndex = 4;
+				ItemType = item_types::Accessory, SlotIndex = 4;
 		} else if (PrimaryType == "human") {
 			if (SecondaryType == "hair")
-				EstType = est_type_t::Hair;
+				EstType = est_types::Hair;
 			else if (SecondaryType == "face")
-				EstType = est_type_t::Face;
+				EstType = est_types::Face;
 		}
 
 	} else if (regex_search(TargetPath, matches, HousingMetaPathTest)) {
 		PrimaryType = matches["PrimaryType"].str();
 		PrimaryId = static_cast<uint16_t>(std::strtol(matches["PrimaryId"].str().c_str(), nullptr, 10));
-		ItemType = item_type_t::Housing;
+		ItemType = item_types::Housing;
 
 	} else {
 		throw bad_data_error("Unsupported meta file");
@@ -334,7 +334,7 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 }
 
 void xivres::textools::metafile::apply_image_change_data_edits(std::function<image_change_data::file& ()> reader) const {
-	if (const auto imcedit = get_span<image_change_data::entry>(meta_data_type_t::Imc); !imcedit.empty()) {
+	if (const auto imcedit = get_span<image_change_data::entry>(meta_types::Imc); !imcedit.empty()) {
 		auto& imc = reader();
 		using imc_t = image_change_data::image_change_data_type;
 		if (imc.header().Type == imc_t::Unknown) {
@@ -348,8 +348,8 @@ void xivres::textools::metafile::apply_image_change_data_edits(std::function<ima
 	}
 }
 
-void xivres::textools::metafile::apply_equipment_deformer_parameter_edits(std::function<equipment_deformer_parameter_file& (item_type_t, uint32_t)> reader) const {
-	if (const auto eqdpedit = get_span<equipment_deformer_parameter_entry_t>(meta_data_type_t::Eqdp); !eqdpedit.empty()) {
+void xivres::textools::metafile::apply_equipment_deformer_parameter_edits(std::function<equipment_deformer_parameter_file& (item_types, uint32_t)> reader) const {
+	if (const auto eqdpedit = get_span<equipment_deformer_parameter_entry>(meta_types::Eqdp); !eqdpedit.empty()) {
 		for (const auto& v : eqdpedit) {
 			auto& eqdp = reader(ItemType, v.RaceCode);
 			auto& target = eqdp.setinfo(PrimaryId);
@@ -360,11 +360,11 @@ void xivres::textools::metafile::apply_equipment_deformer_parameter_edits(std::f
 }
 
 bool xivres::textools::metafile::has_equipment_parameter_edits() const {
-	return !get_span<uint8_t>(meta_data_type_t::Eqp).empty();
+	return !get_span<uint8_t>(meta_types::Eqp).empty();
 }
 
 void xivres::textools::metafile::apply_equipment_parameter_edits(equipment_parameter_file& eqp) const {
-	if (const auto eqpedit = get_span<uint8_t>(meta_data_type_t::Eqp); !eqpedit.empty()) {
+	if (const auto eqpedit = get_span<uint8_t>(meta_types::Eqp); !eqpedit.empty()) {
 		if (eqpedit.size() != EqpEntrySize)
 			throw bad_data_error(std::format("expected {}b for eqp; got {}b", EqpEntrySize, eqpedit.size()));
 		std::copy_n(&eqpedit[0], EqpEntrySize, &eqp.paramter_bytes(PrimaryId)[EqpEntryOffset]);
@@ -372,11 +372,11 @@ void xivres::textools::metafile::apply_equipment_parameter_edits(equipment_param
 }
 
 bool xivres::textools::metafile::has_gimmick_parameter_edits() const {
-	return !get_span<uint8_t>(meta_data_type_t::Gmp).empty();
+	return !get_span<uint8_t>(meta_types::Gmp).empty();
 }
 
 void xivres::textools::metafile::apply_gimmick_parameter_edits(gimmmick_parameter_file& gmp) const {
-	if (const auto gmpedit = get_span<uint8_t>(meta_data_type_t::Gmp); !gmpedit.empty()) {
+	if (const auto gmpedit = get_span<uint8_t>(meta_types::Gmp); !gmpedit.empty()) {
 		if (gmpedit.size() != sizeof uint64_t)
 			throw bad_data_error(std::format("gmp data must be 8 bytes; {} byte(s) given", gmpedit.size()));
 		std::copy_n(&gmpedit[0], gmpedit.size(), &gmp.paramter_bytes(PrimaryId)[0]);
@@ -384,7 +384,7 @@ void xivres::textools::metafile::apply_gimmick_parameter_edits(gimmmick_paramete
 }
 
 void xivres::textools::metafile::apply_ex_skeleton_table_edits(ex_skeleton_table_file& est) const {
-	if (const auto estedit = get_span<ex_skeleton_table_entry_t>(meta_data_type_t::Est); !estedit.empty()) {
+	if (const auto estedit = get_span<ex_skeleton_table_entry_t>(meta_types::Est); !estedit.empty()) {
 		auto estpairs = est.to_pairs();
 		for (const auto& v : estedit) {
 			const auto key = ex_skeleton_table_file::descriptor_t{ .SetId = v.SetId, .RaceCode = v.RaceCode };
