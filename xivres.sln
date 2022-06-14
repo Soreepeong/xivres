@@ -19,8 +19,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.vorbis", "xivres.vor
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.redirect", "xivres.redirect\xivres.redirect.vcxproj", "{C1FB16A6-F92D-4AE1-953F-FE6DB547045D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.redirect.inject", "xivres.redirect.inject\xivres.redirect.inject.vcxproj", "{8145A0CA-4D63-4450-9402-EDFD4163FEA8}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32

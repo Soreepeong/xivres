@@ -13,7 +13,6 @@ namespace xivres {
 		German = 3,
 		French = 4,
 		ChineseSimplified = 5,
-		ChineseTraditional = 6,
 		Korean = 7,
 	};
 

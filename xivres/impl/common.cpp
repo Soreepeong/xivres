@@ -8,7 +8,6 @@ const char* xivres::game_language_code(game_language lang) {
 		case game_language::German: return "de";
 		case game_language::French: return "fr";
 		case game_language::ChineseSimplified: return "chs";
-		case game_language::ChineseTraditional: return "cht";
 		case game_language::Korean: return "ko";
 		default: throw std::out_of_range("Invalid language");
 	}
