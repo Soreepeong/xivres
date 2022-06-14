@@ -107,7 +107,7 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 	} else
 		relativeOffset -= static_cast<std::streamoff>(srcTyped.size_bytes());
 
-	if (const auto padSize = m_header.header_and_mipmap_offsets_size() - sizeof m_header - std::span(m_mipmapOffsets).size_bytes();
+	if (const auto padSize = static_cast<std::streamoff>(m_header.header_and_mipmap_offsets_size() - sizeof m_header - std::span(m_mipmapOffsets).size_bytes());
 		relativeOffset < padSize) {
 		const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(padSize - relativeOffset));
 		std::fill_n(out.begin(), available, 0);
