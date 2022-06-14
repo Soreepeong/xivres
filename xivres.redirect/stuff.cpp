@@ -4,16 +4,16 @@
 #include <xivres/packed_stream.model.h>
 #include <xivres/packed_stream.standard.h>
 #include <xivres/packed_stream.texture.h>
+#include <xivres/path_spec.h>
 #include <xivres/sqpack.generator.h>
 #include <xivres/sqpack.reader.h>
-#include <xivres/path_spec.h>
+#include <xivres/textools.h>
 #include <xivres/sound.h>
 #include <xivres/util.on_dtor.h>
 #include <xivres/util.thread_pool.h>
 #include <xivres/util.unicode.h>
 #include <xivres/xivstring.h>
 
-#include "textools.h"
 #include "utils.h"
 
 class oplocking_file_stream : public xivres::default_base_stream {
@@ -993,10 +993,10 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 		return;
 
 	std::map<xivres::path_spec, xivres::image_change_data::file> imc;
-	std::map<std::pair<textools::metafile::item_type_t, uint32_t>, xivres::equipment_deformer_parameter_file> eqdp;
+	std::map<std::pair<xivres::textools::metafile::item_type_t, uint32_t>, xivres::equipment_deformer_parameter_file> eqdp;
 	std::optional<xivres::equipment_parameter_file> eqp;
 	std::optional<xivres::gimmmick_parameter_file> gmp;
-	std::map<textools::metafile::est_type_t, xivres::ex_skeleton_table_file> est;
+	std::map<xivres::textools::metafile::est_type_t, xivres::ex_skeleton_table_file> est;
 
 	std::vector<std::filesystem::path> paths;
 	for (const auto& path : std::filesystem::recursive_directory_iterator(ttmpDir, std::filesystem::directory_options::follow_directory_symlink | std::filesystem::directory_options::skip_permission_denied)) {
@@ -1033,12 +1033,12 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				json.pop_back();
 			}
 
-			textools::ttmpl_t ttmpl;
+			xivres::textools::ttmpl_t ttmpl;
 			if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
-				ttmpl = json[0].get<textools::ttmpl_t>();
+				ttmpl = json[0].get<xivres::textools::ttmpl_t>();
 			else {
 				for (const auto& j : json)
-					ttmpl.SimpleModsList.emplace_back(j.get<textools::mod_entry_t>());
+					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mod_entry_t>());
 			}
 
 			const auto choicesFile = std::filesystem::path(path).replace_filename("choices.json");
@@ -1104,7 +1104,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				std::ofstream(std::filesystem::path(choicesFile).replace_filename("choices.fixed.json"), std::ios::binary) << choices.dump(1, '\t');
 
 			std::shared_ptr<xivres::stream> ttmpd = std::make_shared<oplocking_file_stream>(ttmpdPath, true);
-			ttmpl.for_each([&](const textools::mod_entry_t& entry) {
+			ttmpl.for_each([&](const xivres::textools::mod_entry_t& entry) {
 				if (!entry.is_textools_metadata()) {
 					const auto pathSpec = xivres::path_spec(entry.FullPath);
 					auto& stream = s_availableReplacementStreams[pathSpec];
@@ -1115,7 +1115,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				if (!ttmpd)
 					ttmpd = std::make_shared<xivres::file_stream>(ttmpdPath);
 
-				const auto metadata = textools::metafile(entry.FullPath, xivres::unpacked_stream(std::make_shared<xivres::stream_as_packed_stream>(entry.FullPath, ttmpd->substream(entry.ModOffset, entry.ModSize))));
+				const auto metadata = xivres::textools::metafile(entry.FullPath, xivres::unpacked_stream(std::make_shared<xivres::stream_as_packed_stream>(entry.FullPath, ttmpd->substream(entry.ModOffset, entry.ModSize))));
 				metadata.apply_image_change_data_edits([&]() -> xivres::image_change_data::file& {
 					const auto& imcPath = metadata.TargetImcPath;
 					if (const auto it = imc.find(imcPath); it == imc.end())
@@ -1127,7 +1127,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				metadata.apply_equipment_deformer_parameter_edits([&](auto type, auto race) -> xivres::equipment_deformer_parameter_file& {
 					const auto key = std::make_pair(type, race);
 					if (const auto it = eqdp.find(key); it == eqdp.end()) {
-						auto& res = eqdp[key] = xivres::equipment_deformer_parameter_file(*get_installation().get_file(textools::metafile::equipment_deformer_parameter_path(type, race)));
+						auto& res = eqdp[key] = xivres::equipment_deformer_parameter_file(*get_installation().get_file(xivres::textools::metafile::equipment_deformer_parameter_path(type, race)));
 						res.expand_or_collapse(true);
 						return res;
 					} else
@@ -1136,7 +1136,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 
 				if (metadata.has_equipment_parameter_edits()) {
 					if (!eqp) {
-						eqp.emplace(*get_installation().get_file(textools::metafile::EqpPath));
+						eqp.emplace(*get_installation().get_file(xivres::textools::metafile::EqpPath));
 						*eqp = eqp->expand_or_collapse(true);
 					}
 					metadata.apply_equipment_parameter_edits(*eqp);
@@ -1144,14 +1144,14 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 
 				if (metadata.has_gimmick_parameter_edits()) {
 					if (!eqp) {
-						gmp.emplace(*get_installation().get_file(textools::metafile::GmpPath));
+						gmp.emplace(*get_installation().get_file(xivres::textools::metafile::GmpPath));
 						*gmp = gmp->expand_or_collapse(true);
 					}
 					metadata.apply_gimmick_parameter_edits(*gmp);
 				}
 
 				if (const auto it = est.find(metadata.EstType); it == est.end()) {
-					if (const auto estPath = textools::metafile::ex_skeleton_table_path(metadata.EstType))
+					if (const auto estPath = xivres::textools::metafile::ex_skeleton_table_path(metadata.EstType))
 						metadata.apply_ex_skeleton_table_edits(est[metadata.EstType] = xivres::ex_skeleton_table_file(*get_installation().get_file(estPath)));
 				} else
 					metadata.apply_ex_skeleton_table_edits(it->second);
@@ -1168,19 +1168,19 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 	}
 	for (const auto& [spec, file] : eqdp) {
 		auto& [type, race] = spec;
-		const auto pathSpec = xivres::path_spec(textools::metafile::equipment_deformer_parameter_path(type, race));
+		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::equipment_deformer_parameter_path(type, race));
 		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
 	}
 	if (eqp) {
-		const auto pathSpec = xivres::path_spec(textools::metafile::EqpPath);
+		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::EqpPath);
 		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(eqp->data_bytes()));
 	}
 	if (gmp) {
-		const auto pathSpec = xivres::path_spec(textools::metafile::GmpPath);
+		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::GmpPath);
 		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(gmp->data_bytes()));
 	}
 	for (const auto& [estType, file] : est) {
-		const auto pathSpec = textools::metafile::ex_skeleton_table_path(estType);
+		const auto pathSpec = xivres::textools::metafile::ex_skeleton_table_path(estType);
 		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
 	}
 }

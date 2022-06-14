@@ -1,18 +1,18 @@
 #pragma once
 
+#include <srell.hpp>
 #include <string>
-#include <memory>
 #include <vector>
 #include <nlohmann/json.hpp>
 
-#include <xivres/equipment_deformer_parameter.h>
-#include <xivres/equipment_and_gimmick_parameter.h>
-#include <xivres/ex_skeleton_table.h>
-#include <xivres/image_change_data.h>
+#include "equipment_and_gimmick_parameter.h"
+#include "equipment_deformer_parameter.h"
+#include "ex_skeleton_table.h"
+#include "image_change_data.h"
 
-namespace textools {
+namespace xivres::textools {
 	template<typename T>
-	using LE = xivres::LE<T>;
+	using LE = LE<T>;
 
 	struct mod_pack_entry_t {
 		std::string Name;
@@ -33,7 +33,7 @@ namespace textools {
 		bool IsDefault{};
 		std::optional<mod_pack_entry_t> ModPack;
 
-		bool is_textools_metadata() const;
+		[[nodiscard]] bool is_textools_metadata() const;
 	};
 	void to_json(nlohmann::json&, const mod_entry_t&);
 	void from_json(const nlohmann::json&, mod_entry_t&);
@@ -175,7 +175,7 @@ namespace textools {
 		metafile(std::string gamePath, const xivres::stream& stream);
 
 		template<typename T>
-		std::span<const T> get_span(meta_data_type_t type) const {
+		[[nodiscard]] std::span<const T> get_span(meta_data_type_t type) const {
 			for (const auto& entry : AllEntries) {
 				if (entry.Type != type)
 					continue;
@@ -216,9 +216,9 @@ namespace textools {
 
 		void apply_image_change_data_edits(std::function<xivres::image_change_data::file& ()> reader) const;
 		void apply_equipment_deformer_parameter_edits(std::function<xivres::equipment_deformer_parameter_file& (item_type_t, uint32_t)> reader) const;
-		bool has_equipment_parameter_edits() const;
+		[[nodiscard]] bool has_equipment_parameter_edits() const;
 		void apply_equipment_parameter_edits(xivres::equipment_parameter_file& eqp) const;
-		bool has_gimmick_parameter_edits() const;
+		[[nodiscard]] bool has_gimmick_parameter_edits() const;
 		void apply_gimmick_parameter_edits(xivres::gimmmick_parameter_file& gmp) const;
 		void apply_ex_skeleton_table_edits(xivres::ex_skeleton_table_file& est) const;
 	};

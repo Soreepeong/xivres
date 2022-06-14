@@ -47,6 +47,7 @@
     <ClInclude Include="include\xivres\model.h" />
     <ClInclude Include="include\xivres\util.pixel_formats.h" />
     <ClInclude Include="include\xivres\stream.h" />
+    <ClInclude Include="include\xivres\textools.h" />
     <ClInclude Include="include\xivres\xivstring.h" />
     <ClInclude Include="include\xivres\sound.h" />
     <ClInclude Include="include\xivres\sqpack.h" />
@@ -90,6 +91,7 @@
     <ClCompile Include="impl\packed_stream.cpp" />
     <ClCompile Include="impl\unpacked_stream.cpp" />
     <ClCompile Include="impl\sound.cpp" />
+    <ClCompile Include="impl\textools.cpp" />
     <ClCompile Include="impl\xivstring.cpp" />
     <ClCompile Include="impl\sqpack.cpp" />
     <ClCompile Include="impl\sqpack.generator.cpp" />

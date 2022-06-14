@@ -185,8 +185,8 @@
     <ClInclude Include="include\xivres\texture.preview.h">
       <Filter>Headers\resource types\texture</Filter>
     </ClInclude>
-    <ClInclude Include="include\xivres\terrain.h">
-      <Filter>Headers\resource types</Filter>
+    <ClInclude Include="include\xivres\textools.h">
+      <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -281,6 +281,9 @@
       <Filter>Impl\resource types\texture</Filter>
     </ClCompile>
     <ClCompile Include="impl\path_spec.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\textools.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
   </ItemGroup>
