@@ -116,47 +116,37 @@ std::streamsize xivres::standard_passthrough_packer::translate_read(std::streamo
 	return static_cast<std::streamsize>(length - out.size_bytes());
 }
 
-std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const stream& strm, int compressionLevel) const {
-	const auto rawStreamSize = static_cast<uint32_t>(strm.size());
+std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack() {
+	const auto rawStreamSize = static_cast<uint32_t>(unpacked().size());
 
 	const auto blockAlignment = align<uint32_t>(rawStreamSize, packed::MaxBlockDataSize);
-	std::vector<std::pair<bool, std::vector<uint8_t>>> blockDataList(blockAlignment.Count);
+	std::vector<block_data_t> blockDataList(blockAlignment.Count);
 
-	{
-		util::thread_pool<> threadPool;
-		std::vector<std::optional<util::zlib_deflater>> deflaters(threadPool.GetThreadCount());
-		std::vector<std::vector<uint8_t>> readBuffers(threadPool.GetThreadCount());
+	if (cores() <= 1) {
+		blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+			compress_block(0, offset, length, blockDataList[index]);
+			return !is_cancelled();
+		});
+		
+	} else {
+		util::thread_pool pool(cores());
 
 		try {
 			blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-				if (is_cancelled())
-					return false;
-
-				threadPool.Submit([this, compressionLevel, offset, length, &strm, &readBuffers, &deflaters, &blockData = blockDataList[index]](size_t threadIndex) {
-					if (is_cancelled())
-						return;
-
-					auto& readBuffer = readBuffers[threadIndex];
-					auto& deflater = deflaters[threadIndex];
-					if (compressionLevel && !deflater)
-						deflater.emplace(compressionLevel, Z_DEFLATED, -15);
-
-					readBuffer.clear();
-					readBuffer.resize(length);
-					strm.read_fully(offset, std::span(readBuffer));
-
-					if ((blockData.first = deflater && deflater->deflate(std::span(readBuffer)).size() < readBuffer.size()))
-						blockData.second = std::move(deflater->result());
-					else
-						blockData.second = std::move(readBuffer);
+				pool.Submit([this, offset, length, &blockData = blockDataList[index]](size_t threadIndex) {
+					if (!is_cancelled())
+						compress_block(threadIndex, offset, length, blockData);
 				});
-
-				return true;
+				
+				return !is_cancelled();
 			});
+			
+			pool.SubmitDoneAndWait();
 		} catch (...) {
 			// pass
 		}
-		threadPool.SubmitDoneAndWait();
+			
+		pool.SubmitDoneAndWait();
 	}
 
 	if (is_cancelled())
@@ -167,8 +157,8 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 		+ sizeof packed::standard_block_locator * blockAlignment.Count
 	));
 	size_t entryBodyLength = 0;
-	for (const auto& blockData : blockDataList | std::views::values)
-		entryBodyLength += align(sizeof packed::block_header + blockData.size());
+	for (const auto& blockData : blockDataList)
+		entryBodyLength += align(sizeof packed::block_header + blockData.Data.size());
 
 	std::vector<uint8_t> result(entryHeaderLength + entryBodyLength);
 
@@ -185,23 +175,23 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack(const 
 	blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
 		if (is_cancelled())
 			return false;
-		auto& [useCompressed, targetBuf] = blockDataList[index];
+		auto& blockData = blockDataList[index];
 
 		auto& header = *reinterpret_cast<packed::block_header*>(&*resultDataPtr);
 		header.HeaderSize = sizeof packed::block_header;
 		header.Version = 0;
-		header.CompressedSize = useCompressed ? static_cast<uint32_t>(targetBuf.size()) : packed::block_header::CompressedSizeNotCompressed;
+		header.CompressedSize = blockData.Deflated ? static_cast<uint32_t>(blockData.Data.size()) : packed::block_header::CompressedSizeNotCompressed;
 		header.DecompressedSize = length;
 
-		std::ranges::copy(targetBuf, resultDataPtr + sizeof header);
+		std::ranges::copy(blockData.Data, resultDataPtr + sizeof header);
 
 		locators[index].Offset = index == 0 ? 0 : locators[index - 1].BlockSize + locators[index - 1].Offset;
-		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof header + targetBuf.size()));
+		locators[index].BlockSize = static_cast<uint16_t>(align(sizeof header + blockData.Data.size()));
 		locators[index].DecompressedDataSize = static_cast<uint16_t>(length);
 
 		resultDataPtr += locators[index].BlockSize;
 
-		std::vector<uint8_t>().swap(targetBuf);
+		std::vector<uint8_t>().swap(blockData.Data);
 		return true;
 	});
 

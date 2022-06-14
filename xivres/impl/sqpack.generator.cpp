@@ -400,6 +400,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	}
 
 	for (size_t i = 0; i < res.Entries.size(); ++i) {
+		ProgressCallback(i, res.Entries.size());
 		auto& entry = res.Entries[i];
 		const auto& pathSpec = entry->Provider->path_spec();
 		entry->EntrySize = align((std::max)(entry->EntrySize, static_cast<uint32_t>(entry->Provider->size()))).Alloc;
@@ -528,7 +529,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	return res;
 }
 
-void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict) {
+void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict, size_t cores) {
 	header dataHeader{};
 	memcpy(dataHeader.Signature, header::Signature_Value, sizeof header::Signature_Value);
 	dataHeader.HeaderSize = sizeof header;
@@ -561,78 +562,92 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 	std::vector<sqindex::data_locator> locators;
 
-	std::fstream dataFile;
-	std::vector<char> buf(65536);
-	for (size_t i = 0; i < entries.size(); ++i) {
-		auto& entry = *entries[i];
-		const auto provider{std::move(entry.Provider)};
-		const auto entrySize = provider->size();
-
-		if (dataSubheaders.empty() ||
-			sizeof header + sizeof sqdata::header + dataSubheaders.back().DataSize + entrySize > dataSubheaders.back().MaxFileSize) {
-			if (!dataSubheaders.empty() && dataFile.is_open()) {
-				if (strict) {
-					util::hash_sha1 sha1;
-					dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
-					align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
-						dataFile.read(&buf[0], static_cast<size_t>(size));
-						if (!dataFile)
-							throw std::runtime_error("Failed to read from output data file.");
-						sha1.process_bytes(&buf[0], static_cast<size_t>(size));
-					}, sizeof header + sizeof sqdata::header);
-
-					sha1.get_digest_bytes(dataSubheaders.back().DataSha1.Value);
-					dataSubheaders.back().Sha1.set_from_span(reinterpret_cast<char*>(&dataSubheaders.back()), offsetof(sqdata::header, Sha1));
-				}
-
-				dataFile.seekp(0, std::ios::beg);
-				dataFile.write(reinterpret_cast<const char*>(&dataHeader), sizeof dataHeader);
-				dataFile.write(reinterpret_cast<const char*>(&dataSubheaders.back()), sizeof dataSubheaders.back());
-				dataFile.close();
-			}
-
-			dataFile.open(dir / std::format("{}.win32.dat{}", DatName, dataSubheaders.size()), std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
-			dataSubheaders.emplace_back(sqdata::header{
-				.HeaderSize = sizeof sqdata::header,
-				.Unknown1 = sqdata::header::Unknown1_Value,
-				.DataSize = 0,
-				.SpanIndex = static_cast<uint32_t>(dataSubheaders.size()),
-				.MaxFileSize = m_maxFileSize,
+	{
+		util::thread_pool<size_t, std::pair<entry_info*, std::vector<char>>> pool(cores);
+		for (size_t i = 0; i < entries.size(); ++i) {
+			pool.Submit(i, [this, entry = entries[i].get()]() {
+				return std::make_pair(entry, entry->Provider->read_vector<char>());
 			});
 		}
 
-		entry.Locator = {static_cast<uint32_t>(dataSubheaders.size() - 1), sizeof header + sizeof sqdata::header + dataSubheaders.back().DataSize};
-		dataFile.seekg(static_cast<std::streamoff>(entry.Locator.offset()), std::ios::beg);
-		align<uint64_t>(entrySize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
-			const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
-			provider->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-			dataFile.write(&buf[0], static_cast<std::streamsize>(bufSpan.size()));
+		pool.SubmitDone();
+
+		std::fstream dataFile;
+		for (size_t i = 0;; i++) {
+			const auto resultPair = pool.GetResult();
+			if (!resultPair)
+				break;
+
+			auto& entry = *resultPair->second.first;
+			auto& data = resultPair->second.second;
+			ProgressCallback(i, entries.size());
+			const auto provider{std::move(entry.Provider)};
+			const auto entrySize = provider->size();
+
+			if (dataSubheaders.empty() ||
+				sizeof header + sizeof sqdata::header + dataSubheaders.back().DataSize + entrySize > dataSubheaders.back().MaxFileSize) {
+				if (!dataSubheaders.empty() && dataFile.is_open()) {
+					if (strict) {
+						std::vector<char> buf(65536);
+						util::hash_sha1 sha1;
+						dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
+						align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
+							dataFile.read(&buf[0], static_cast<size_t>(size));
+							if (!dataFile)
+								throw std::runtime_error("Failed to read from output data file.");
+							sha1.process_bytes(&buf[0], static_cast<size_t>(size));
+						}, sizeof header + sizeof sqdata::header);
+
+						sha1.get_digest_bytes(dataSubheaders.back().DataSha1.Value);
+						dataSubheaders.back().Sha1.set_from_span(reinterpret_cast<char*>(&dataSubheaders.back()), offsetof(sqdata::header, Sha1));
+					}
+
+					dataFile.seekp(0, std::ios::beg);
+					dataFile.write(reinterpret_cast<const char*>(&dataHeader), sizeof dataHeader);
+					dataFile.write(reinterpret_cast<const char*>(&dataSubheaders.back()), sizeof dataSubheaders.back());
+					dataFile.close();
+				}
+
+				dataFile.open(dir / std::format("{}.win32.dat{}", DatName, dataSubheaders.size()), std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+				dataSubheaders.emplace_back(sqdata::header{
+					.HeaderSize = sizeof sqdata::header,
+					.Unknown1 = sqdata::header::Unknown1_Value,
+					.DataSize = 0,
+					.SpanIndex = static_cast<uint32_t>(dataSubheaders.size()),
+					.MaxFileSize = m_maxFileSize,
+				});
+			}
+
+			entry.Locator = {static_cast<uint32_t>(dataSubheaders.size() - 1), sizeof header + sizeof sqdata::header + dataSubheaders.back().DataSize};
+			dataFile.seekg(static_cast<std::streamoff>(entry.Locator.offset()), std::ios::beg);
+			dataFile.write(&data[0], static_cast<std::streamsize>(data.size()));
 			if (!dataFile)
 				throw std::runtime_error("Failed to write to output data file.");
-		});
 
-		dataSubheaders.back().DataSize = dataSubheaders.back().DataSize + entrySize;
-	}
-
-	if (!dataSubheaders.empty() && dataFile.is_open()) {
-		if (strict) {
-			util::hash_sha1 sha1;
-			dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
-			align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
-				dataFile.read(&buf[0], static_cast<size_t>(size));
-				if (!dataFile)
-					throw std::runtime_error("Failed to read from output data file.");
-				sha1.process_bytes(&buf[0], static_cast<size_t>(size));
-			}, sizeof header + sizeof sqdata::header);
-
-			sha1.get_digest_bytes(dataSubheaders.back().DataSha1.Value);
-			dataSubheaders.back().Sha1.set_from_span(reinterpret_cast<char*>(&dataSubheaders.back()), offsetof(sqdata::header, Sha1));
+			dataSubheaders.back().DataSize = dataSubheaders.back().DataSize + entrySize;
 		}
 
-		dataFile.seekp(0, std::ios::beg);
-		dataFile.write(reinterpret_cast<const char*>(&dataHeader), sizeof dataHeader);
-		dataFile.write(reinterpret_cast<const char*>(&dataSubheaders.back()), sizeof dataSubheaders.back());
-		dataFile.close();
+		if (!dataSubheaders.empty() && dataFile.is_open()) {
+			if (strict) {
+				std::vector<char> buf(65536);
+				util::hash_sha1 sha1;
+				dataFile.seekg(sizeof header + sizeof sqdata::header, std::ios::beg);
+				align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
+					dataFile.read(&buf[0], static_cast<size_t>(size));
+					if (!dataFile)
+						throw std::runtime_error("Failed to read from output data file.");
+					sha1.process_bytes(&buf[0], static_cast<size_t>(size));
+				}, sizeof header + sizeof sqdata::header);
+
+				sha1.get_digest_bytes(dataSubheaders.back().DataSha1.Value);
+				dataSubheaders.back().Sha1.set_from_span(reinterpret_cast<char*>(&dataSubheaders.back()), offsetof(sqdata::header, Sha1));
+			}
+
+			dataFile.seekp(0, std::ios::beg);
+			dataFile.write(reinterpret_cast<const char*>(&dataHeader), sizeof dataHeader);
+			dataFile.write(reinterpret_cast<const char*>(&dataSubheaders.back()), sizeof dataSubheaders.back());
+			dataFile.close();
+		}
 	}
 
 	std::vector<sqindex::pair_hash_locator> fileEntries1;

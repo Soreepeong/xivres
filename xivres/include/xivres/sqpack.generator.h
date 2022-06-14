@@ -1,6 +1,8 @@
 #ifndef XIVRES_SQPACKGENERATOR_H_
 #define XIVRES_SQPACKGENERATOR_H_
 
+#include <thread>
+
 #include "sqpack.reader.h"
 #include "unpacked_stream.h"
 #include "util.listener_manager.h"
@@ -82,7 +84,7 @@ namespace xivres::sqpack {
 		std::vector<sqindex::segment_3_entry> m_sqpackIndex2Segment3;
 
 	public:
-		util::listener_manager<generator, void, const std::string&> Log;
+		util::listener_manager<generator, void, size_t, size_t> ProgressCallback;
 
 		generator(std::string ex, std::string name, uint64_t maxFileSize = sqdata::header::MaxFileSize_MaxValue);
 
@@ -94,7 +96,7 @@ namespace xivres::sqpack {
 		void reserve_space(path_spec pathSpec, uint32_t size);
 
 		[[nodiscard]] sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr);
-		void export_to_files(const std::filesystem::path& dir, bool strict = false);
+		void export_to_files(const std::filesystem::path& dir, bool strict = false, size_t cores = std::thread::hardware_concurrency());
 
 		[[nodiscard]] std::unique_ptr<default_base_stream> get(const path_spec& pathSpec) const;
 		[[nodiscard]] std::vector<path_spec> all_path_spec() const;

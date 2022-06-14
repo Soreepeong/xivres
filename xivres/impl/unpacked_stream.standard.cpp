@@ -27,9 +27,11 @@ std::streamsize xivres::standard_unpacker::read(std::streamoff offset, void* buf
 	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), static_cast<uint32_t>(offset));
 	if (it != m_blocks.begin())
 		--it;
-	for (; it < m_blocks.end() && !info.complete(); ++it) {
-		info.skip_to(it->RequestOffset);
-		info.forward(*m_stream, it->BlockOffset, it->BlockSize);
+	for (; it < m_blocks.end(); ++it) {
+		if (info.skip_to(it->RequestOffset))
+			break;
+		if (info.forward(*m_stream, it->BlockOffset, it->BlockSize))
+			break;
 	}
 	
 	info.skip_to(size());

@@ -38,7 +38,7 @@ static auto test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> packed,
 		const auto decodedOriginal = decoded->read_vector<char>();
 
 		pcszLastStep = "Compress-pack decoded original";
-		packed = std::make_shared<compressing_packed_stream<TCompressingPacker>>(pathSpec, decoded, Z_BEST_COMPRESSION);
+		packed = std::make_shared<compressing_packed_stream<TCompressingPacker>>(pathSpec, decoded, Z_BEST_COMPRESSION, 1);
 		const auto packedCompressed = packed->read_vector<char>();
 
 		pcszLastStep = "Decode Compress-packed";
@@ -164,65 +164,48 @@ static std::shared_ptr<xivres::stream> make_ogg_crispy(std::shared_ptr<xivres::s
 }
 
 static void test_sqpack_generator(const xivres::installation& gameReader) {
-	xivres::util::thread_pool pool;
 	auto sqpackIds = gameReader.get_sqpack_ids();
 	std::ranges::sort(sqpackIds, [&gameReader](const uint32_t l, const uint32_t r) { return gameReader.get_sqpack(l).TotalDataSize > gameReader.get_sqpack(r).TotalDataSize; });
 	for (const auto p : sqpackIds) {
-		if (p != 0x60000)
-			continue;
-		const auto wfn = [p, &gameReader]() {
-			const auto ps = xivres::path_spec("ui/uld/Title_Logo600.tex");
-			try {
-				const auto& packfile = gameReader.get_sqpack(p);
-				xivres::sqpack::generator generator(((p >> 8) & 0xff) ? std::format("ex{}", (p >> 8) & 0xff) : "ffxiv", std::format("{:0>6x}", p));
-				std::cout << std::format("Working on {:06x} ({} entries)", p, packfile.Entries.size()) << std::endl;
-				for (size_t i = 0; i < packfile.Entries.size(); i++) {
-					if (i % 1000 == 0)
-						std::cout << std::format("Read: {:06x}: {}/{}", p, i, packfile.Entries.size()) << std::endl;
-					const auto& entry = packfile.Entries[i];
-					try {
-						auto packed = packfile.packed_at(entry);
-						switch (packed->get_packed_type()) {
-							case xivres::packed::type::standard:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
-								// if ((p >> 16) == 0xC)
-								// 	packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.PathSpec, make_ogg_crispy(std::move(packed)));
-								// else
-								// packed = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
-								break;
-							case xivres::packed::type::model:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
-								// packed = std::make_shared<xivres::passthrough_packed_stream<xivres::model_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
-								break;
-							case xivres::packed::type::texture:
-								// packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), 0);
-								if (entry.PathSpec == ps) {
-									__debugbreak();
-									packed = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)));
-								}
-								break;
-							default: break;
-						}
-						generator.add(packed);
-					} catch (const std::out_of_range&) {
-						// pass
+		try {
+			const auto& packfile = gameReader.get_sqpack(p);
+			xivres::sqpack::generator generator(((p >> 8) & 0xff) ? std::format("ex{}", (p >> 8) & 0xff) : "ffxiv", std::format("{:0>6x}", p), xivres::sqdata::header::MaxFileSize_Value * 4);
+			std::cout << std::format("Working on {:06x} ({} entries)", p, packfile.Entries.size()) << std::endl;
+			for (size_t i = 0; i < packfile.Entries.size(); i++) {
+				if (i % 1000 == 0)
+					std::cout << std::format("Read: {:06x}: {}/{}", p, i, packfile.Entries.size()) << std::endl;
+				const auto& entry = packfile.Entries[i];
+				try {
+					auto packed = packfile.packed_at(entry);
+					switch (packed->get_packed_type()) {
+						case xivres::packed::type::standard:
+							packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), Z_BEST_COMPRESSION, 1);
+							break;
+						case xivres::packed::type::model:
+							packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), Z_BEST_COMPRESSION, 1);
+							break;
+						case xivres::packed::type::texture:
+							packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.PathSpec, std::make_shared<xivres::unpacked_stream>(std::move(packed)), Z_BEST_COMPRESSION, 1);
+							break;
+						default: break;
 					}
+					generator.add(packed);
+				} catch (const std::out_of_range&) {
+					// pass
 				}
-				const auto dir = std::filesystem::path(std::format("C:/ffxiv/game/sqpack/{}", generator.DatExpac));
-				create_directories(dir);
-				std::cout << std::format("Export: {:06x}", p) << std::endl;
-				generator.export_to_files(dir);
-				std::cout << std::format("Complete: {:06x}", p) << std::endl;
-			} catch (const std::exception& e) {
-				std::cout << std::format("Error: {:06x}: {}", p, e.what()) << std::endl;
 			}
-		};
-		if (UseThreading)
-			pool.Submit(wfn);
-		else
-			wfn();
+			const auto dir = std::filesystem::path(std::format("C:/ffxiv/game/sqpack/{}", generator.DatExpac));
+			create_directories(dir);
+			const auto callbackHolder = generator.ProgressCallback([p](size_t progress, size_t progressMax) {
+				if (progress % 1000 == 0)
+					std::cout << std::format("Export: {:06x}: {}/{}", p, progress, progressMax) << std::endl;
+			});
+			generator.export_to_files(dir);
+			std::cout << std::format("Complete: {:06x}", p) << std::endl;
+		} catch (const std::exception& e) {
+			std::cout << std::format("Error: {:06x}: {}", p, e.what()) << std::endl;
+		}
 	}
-	pool.SubmitDoneAndWait();
 }
 
 static void test_ogg_decode_encode(const xivres::installation& gameReader) {
@@ -262,13 +245,17 @@ void test_range_read(const xivres::installation& gameReader) {
 	// specs.emplace_back(0x602a1840, 0xf2925549, 0x85c56562, 0x01, 0x00, 0x00);
 	// specs.emplace_back(0x2428c8c9, 0xcff27cf9, 0xd971bea2, 0x01, 0x00, 0x00);
 	// specs.emplace_back(0xb9ae4029, 0x2049ae1c, 0x01c3d0ca, 0x01, 0x00, 0x00);
-	specs.emplace_back(0x210fc65d, 0x1442c7c8, 0x0a303bca, 0x02, 0x00, 0x00);
+	// specs.emplace_back(0x210fc65d, 0x1442c7c8, 0x0a303bca, 0x02, 0x00, 0x00);
 	// specs.emplace_back(0x210fc65d, 0x1442c7c8, 0x0a303bca, 0x02, 0x00, 0x00);
 	// specs.emplace_back(0xa59934f6, 0x83234281, 0xdadc46dd, 0x02, 0x00, 0x00);
 	// specs.emplace_back(0xdbe71b5b, 0xbaa24aef, 0x4a506bf6, 0x02, 0x03, 0x01);
 	// for (const auto& p : gameReader.get_sqpack(0x040000).Entries)
 	// 	if (p.PathSpec.path_hash() != 0xffffffff)
 	// 		specs.emplace_back(p.PathSpec);
+	// specs.emplace_back(0x07e929a2, 0x52438a44, 0xc3e25beb, 0x02, 0x00, 0x00);
+	// specs.emplace_back(0x07e929a2, 0xdaafee72, 0x9c57f1da, 0x02, 0x00, 0x00);
+	// specs.emplace_back("bg/ffxiv/air_a1/evt/a1e2/bgparts/_a1e2_t1_vfog1.mdl");
+	specs.emplace_back(0x8813b068, 0xfd63781b, 0x5d4fda62, 0x01, 0x00, 0x00);
 
 	xivres::util::thread_pool pool(1);
 	std::vector<std::vector<char>> bufs(pool.GetThreadCount());
@@ -279,16 +266,19 @@ void test_range_read(const xivres::installation& gameReader) {
 		pool.Submit([&gameReader, &spec, &bufs](size_t nThreadIndex) {
 			auto& buf = bufs[nThreadIndex];
 			const auto packed0 = gameReader.get_file_packed(spec);
-			if (packed0->get_packed_type() != xivres::packed::type::texture)
+			if (packed0->get_packed_type() != xivres::packed::type::model)
 				return;
 
+			const auto packeddata0 = packed0->read_vector<char>();
 			const auto decoded0 = std::make_shared<xivres::unpacked_stream>(packed0);
 			const auto data0 = decoded0->read_vector<char>();
-			const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(spec, decoded0);
+			const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::model_passthrough_packer>>(spec, decoded0);
+			const auto packeddata1 = packed1->read_vector<char>();
 			const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
 			const auto data1 = decoded1->read_vector<char>();
 			const auto data11 = decoded1->read_vector<char>();
-			const auto packed2 = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(spec, decoded0, Z_NO_COMPRESSION);
+			const auto packed2 = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(spec, decoded0, Z_BEST_COMPRESSION);
+			const auto packeddata2 = packed2->read_vector<char>();
 			const auto decoded2 = std::make_shared<xivres::unpacked_stream>(packed2);
 			const auto data2 = decoded2->read_vector<char>();
 			const auto data22 = decoded2->read_vector<char>();
@@ -334,12 +324,12 @@ void test_range_read(const xivres::installation& gameReader) {
 				}
 			});
 
-			std::thread t1([&]() { preview(xivres::texture::stream(decoded0), L"Source"); });
-			std::thread t2([&]() { preview(xivres::texture::stream(decoded1), L"Dec1"); });
-			std::thread t3([&]() { preview(xivres::texture::stream(decoded2), L"Dec2"); });
-			t1.join();
-			t2.join();
-			t3.join();
+			// std::thread t1([&]() { preview(xivres::texture::stream(decoded0), L"Source"); });
+			// std::thread t2([&]() { preview(xivres::texture::stream(decoded1), L"Dec1"); });
+			// std::thread t3([&]() { preview(xivres::texture::stream(decoded2), L"Dec2"); });
+			// t1.join();
+			// t2.join();
+			// t3.join();
 		});
 	}
 
@@ -353,13 +343,13 @@ int main() {
 
 		xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 		// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
-		
+
 		// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
 		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
-		
-		test_range_read(gameReader);
+
+		// test_range_read(gameReader);
 		// test_pack_unpack(gameReader);
-		// test_sqpack_generator(gameReader);
+		test_sqpack_generator(gameReader);
 		// test_ogg_decode_encode(gameReader);
 		// test_excel(gameReader);
 

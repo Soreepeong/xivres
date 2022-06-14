@@ -74,8 +74,8 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 			m_header.VertexSize[lodI] += m_blocks[blkI].DecompressedSize;
 		for (size_t blkI = locator.FirstBlockIndices.Index[lodI], i_ = blkI + locator.BlockCount.Index[lodI]; blkI < i_; ++blkI)
 			m_header.IndexSize[lodI] += m_blocks[blkI].DecompressedSize;
-		m_header.VertexOffset[lodI] = static_cast<uint32_t>(sizeof m_header + (locator.FirstBlockIndices.Vertex[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Vertex[lodI]].RequestOffsetPastHeader));
-		m_header.IndexOffset[lodI] = static_cast<uint32_t>(sizeof m_header + (locator.FirstBlockIndices.Index[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Index[lodI]].RequestOffsetPastHeader));
+		m_header.VertexOffset[lodI] = locator.BlockCount.Vertex[lodI] ? static_cast<uint32_t>(sizeof m_header + m_blocks[locator.FirstBlockIndices.Vertex[lodI]].RequestOffsetPastHeader) : 0;
+		m_header.IndexOffset[lodI] = locator.BlockCount.Index[lodI] ? static_cast<uint32_t>(sizeof m_header + m_blocks[locator.FirstBlockIndices.Index[lodI]].RequestOffsetPastHeader) : 0;
 	}
 }
 
@@ -91,9 +91,11 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
 	if (it != m_blocks.begin())
 		--it;
-	for (; it != m_blocks.end() && !info.complete(); ++it) {
-		info.skip_to(it->RequestOffsetPastHeader - sizeof m_header);
-		info.forward(*m_stream, it->BlockOffset, it->PaddedChunkSize);
+	for (; it != m_blocks.end(); ++it) {
+		if (info.skip_to(it->RequestOffsetPastHeader + sizeof m_header))
+			break;
+		if (info.forward(*m_stream, it->BlockOffset, it->PaddedChunkSize))
+			break;
 	}
 	
 	info.skip_to(size());

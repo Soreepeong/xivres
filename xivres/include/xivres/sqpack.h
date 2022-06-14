@@ -217,7 +217,7 @@ namespace xivres::sqpack::sqindex {
 
 namespace xivres::sqdata {
 	struct header {
-		static constexpr uint32_t MaxFileSize_Value = 0x77359400; // 2GB
+		static constexpr uint64_t MaxFileSize_Value = 0x77359400ULL; // 2GB
 		static constexpr uint64_t MaxFileSize_MaxValue = 0x800000000ULL; // 32GiB, maximum addressable via how LEDataLocator works
 		static constexpr uint32_t Unknown1_Value = 0x10;
 

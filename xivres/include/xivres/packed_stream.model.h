@@ -2,6 +2,7 @@
 #define XIVRES_MODELPACKEDFILESTREAM_H_
 
 #include "packed_stream.h"
+#include "util.thread_pool.h"
 
 namespace xivres {
 	class model_passthrough_packer : public passthrough_packer<packed::type::model> {
@@ -25,9 +26,12 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class model_compressing_packer : public compressing_packer<packed::type::model> {
+	class model_compressing_packer : public compressing_packer {
 	public:
-		[[nodiscard]] std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
+		static constexpr auto Type = packed::type::model;
+		using compressing_packer::compressing_packer;
+		
+		[[nodiscard]] std::unique_ptr<stream> pack() override;
 	};
 }
 

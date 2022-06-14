@@ -1,6 +1,7 @@
 #ifndef XIVRES_PACKEDSTREAM_H_
 #define XIVRES_PACKEDSTREAM_H_
 
+#include <thread>
 #include <type_traits>
 
 #include <zlib.h>
@@ -8,6 +9,7 @@
 #include "path_spec.h"
 #include "sqpack.h"
 #include "stream.h"
+#include "util.zlib_wrapper.h"
 
 namespace xivres {
 	class unpacked_stream;
@@ -47,7 +49,8 @@ namespace xivres {
 	public:
 		stream_as_packed_stream(xivres::path_spec pathSpec, std::shared_ptr<const stream> strm)
 			: packed_stream(std::move(pathSpec))
-			, m_stream(std::move(strm)) {}
+			, m_stream(std::move(strm)) {
+		}
 
 		[[nodiscard]] std::streamsize size() const override {
 			return m_stream->size();
@@ -96,8 +99,11 @@ namespace xivres {
 		virtual std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) = 0;
 
 	public:
-		passthrough_packer(std::shared_ptr<const stream> strm) : m_stream(std::move(strm)) {}
+		passthrough_packer(std::shared_ptr<const stream> strm) : m_stream(std::move(strm)) {
+		}
+
 		[[nodiscard]] packed::type get_packed_type() override final { return TPackedFileType; }
+
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) override final {
 			ensure_initialized();
 			return translate_read(offset, buf, length);
@@ -112,7 +118,8 @@ namespace xivres {
 	public:
 		passthrough_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm)
 			: packed_stream(std::move(spec))
-			, m_packer(std::move(strm)) {}
+			, m_packer(std::move(strm)) {
+		}
 
 		[[nodiscard]] std::streamsize size() const final {
 			return m_packer.size();
@@ -127,46 +134,99 @@ namespace xivres {
 		}
 	};
 
-	class untyped_compressing_packer {
-	public:
-		untyped_compressing_packer() = default;
-		untyped_compressing_packer(untyped_compressing_packer&&) = default;
-		untyped_compressing_packer(const untyped_compressing_packer&) = default;
-		untyped_compressing_packer& operator=(untyped_compressing_packer&&) = default;
-		untyped_compressing_packer& operator=(const untyped_compressing_packer&) = default;
-		virtual ~untyped_compressing_packer() = default;
-	};
-
-	template<packed::type TPackedFileType>
-	class compressing_packer : public untyped_compressing_packer {
-	public:
-		static constexpr auto Type = TPackedFileType;
-
-	private:
+	class compressing_packer {
+		const stream& m_stream;
+		const int m_nCompressionLevel;
 		bool m_bCancel = false;
-
-	protected:
-		[[nodiscard]] bool is_cancelled() const { return m_bCancel; }
+		
+		std::vector<std::optional<util::zlib_deflater>> m_deflaters;
+		std::vector<std::vector<uint8_t>> m_buffers;
 
 	public:
+		compressing_packer(const stream& strm, int compressionLevel, size_t cores)
+			: m_stream(strm)
+			, m_nCompressionLevel(compressionLevel)
+			, m_deflaters((std::max<size_t>)(cores, 1))
+			, m_buffers((std::max<size_t>)(cores, 1)) {
+		}
+
+		virtual ~compressing_packer() = default;
+		
 		void cancel() { m_bCancel = true; }
 
-		[[nodiscard]] virtual std::unique_ptr<stream> pack(const stream& rawStream, int compressionLevel) const = 0;
+		[[nodiscard]] virtual std::unique_ptr<stream> pack() = 0;
+
+	protected:
+		struct block_data_t {
+			bool Deflated{};
+			bool AllZero{};
+			uint32_t DecompressedSize{};
+			std::vector<uint8_t> Data;
+		};
+		
+		[[nodiscard]] bool is_cancelled() const {
+			return m_bCancel;
+		}
+		
+		[[nodiscard]] const stream& unpacked() const {
+			return m_stream;
+		}
+		
+		[[nodiscard]] size_t cores() const {
+			return m_deflaters.size();
+		}
+
+		[[nodiscard]] int compression_level() const {
+			return m_nCompressionLevel;
+		}
+		
+		util::zlib_deflater& deflater_at(size_t threadIndex) {
+			auto& deflater = m_deflaters[threadIndex];
+			if (compression_level() && !deflater)
+				deflater.emplace(compression_level(), Z_DEFLATED, -15);
+			return *deflater;
+		}
+
+		std::vector<uint8_t>& buffer_at(size_t threadIndex) {
+			return m_buffers[threadIndex];
+		}
+
+		void compress_block(size_t threadIndex, uint32_t offset, uint32_t length, block_data_t& blockData) {
+			if (is_cancelled())
+				return;
+
+			auto& buffer = buffer_at(threadIndex);
+
+			buffer.clear();
+			buffer.resize(length);
+			if (const auto read = static_cast<size_t>(unpacked().read(offset, &buffer[0], length)); read != length)
+				std::fill_n(&buffer[read], length - read, 0);
+
+			blockData.DecompressedSize = static_cast<uint32_t>(length);
+			blockData.AllZero = std::ranges::all_of(buffer, [](const auto& c) { return !c; });
+			if ((blockData.Deflated = compression_level() && deflater_at(threadIndex).deflate(std::span(buffer)).size() < buffer.size()))
+				blockData.Data = std::move(deflater_at(threadIndex).result());
+			else
+				blockData.Data = std::move(buffer);
+		}
 	};
 
-	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<untyped_compressing_packer, TPacker>>>
+	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<compressing_packer, TPacker>>>
 	class compressing_packed_stream : public packed_stream {
 		constexpr static int CompressionLevel_AlreadyPacked = Z_BEST_COMPRESSION + 1;
 
 		mutable std::mutex m_mtx;
 		mutable std::shared_ptr<const stream> m_stream;
 		mutable int m_compressionLevel;
+		const size_t m_nCores;
 
 	public:
-		compressing_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm, int compressionLevel = Z_BEST_COMPRESSION)
+		compressing_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm, int compressionLevel = Z_BEST_COMPRESSION, size_t cores = std::thread::hardware_concurrency())
 			: packed_stream(std::move(spec))
 			, m_stream(std::move(strm))
-			, m_compressionLevel(compressionLevel) {}
+			, m_compressionLevel(compressionLevel)
+			, m_nCores(cores) {
+		}
 
 		[[nodiscard]] std::streamsize size() const final {
 			ensure_initialized();
@@ -191,7 +251,7 @@ namespace xivres {
 			if (m_compressionLevel == CompressionLevel_AlreadyPacked)
 				return;
 
-			auto newStream = TPacker().pack(*m_stream, m_compressionLevel);
+			auto newStream = TPacker(*m_stream, m_compressionLevel, m_nCores).pack();
 			if (!newStream)
 				throw std::logic_error("TODO; cancellation currently unhandled");
 

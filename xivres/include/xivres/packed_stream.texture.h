@@ -26,9 +26,12 @@ namespace xivres {
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;
 	};
 
-	class texture_compressing_packer : public compressing_packer<packed::type::texture> {
+	class texture_compressing_packer : public compressing_packer {
 	public:
-		[[nodiscard]] std::unique_ptr<stream> pack(const stream& strm, int compressionLevel) const override;
+		static constexpr auto Type = packed::type::texture;
+		using compressing_packer::compressing_packer;
+		
+		[[nodiscard]] std::unique_ptr<stream> pack() override;
 	};
 }
 
