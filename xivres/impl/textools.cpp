@@ -14,7 +14,7 @@ T JsonValueOrDefault(const nlohmann::json& json, const char* key, T defaultValue
 	return defaultValue;
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const mod_pack_entry& p) {
+void xivres::textools::to_json(nlohmann::json& j, const mod_pack& p) {
 	j = nlohmann::json::object({
 		{"Name", p.Name},
 		{"Author", p.Author},
@@ -23,7 +23,7 @@ void xivres::textools::to_json(nlohmann::json& j, const mod_pack_entry& p) {
 		});
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, mod_pack_entry& p) {
+void xivres::textools::from_json(const nlohmann::json& j, mod_pack& p) {
 	if (j.is_null())
 		return;
 	if (!j.is_object())
@@ -35,7 +35,7 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_pack_entry& p) {
 	p.Url = JsonValueOrDefault(j, "Url", ""s, ""s);
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const mod_entry& p) {
+void xivres::textools::to_json(nlohmann::json& j, const mods_json& p) {
 	j = nlohmann::json::object({
 		{"Name", p.Name},
 		{"Category", p.Category},
@@ -49,7 +49,7 @@ void xivres::textools::to_json(nlohmann::json& j, const mod_entry& p) {
 		j["ModPackEntry"] = *p.ModPack;
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, mod_entry& p) {
+void xivres::textools::from_json(const nlohmann::json& j, mods_json& p) {
 	if (!j.is_object())
 		throw bad_data_error("ModEntry must be an object");
 
@@ -61,10 +61,10 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_entry& p) {
 	p.DatFile = JsonValueOrDefault(j, "DatFile", ""s, ""s);
 	p.IsDefault = JsonValueOrDefault(j, "IsDefault", false, false);
 	if (const auto it = j.find("ModPackEntry"); it != j.end() && !it->is_null())
-		p.ModPack = it->get<mod_pack_entry>();
+		p.ModPack = it->get<mod_pack>();
 }
 
-void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const option_t& p) {
+void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const mod_option_json& p) {
 	j = nlohmann::json::object({
 		{"Name", p.Name},
 		{"Description", p.Description},
@@ -76,7 +76,7 @@ void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const option_t&
 		});
 }
 
-void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, option_t& p) {
+void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, mod_option_json& p) {
 	if (!j.is_object())
 		throw bad_data_error("Option must be an object");
 
@@ -90,7 +90,7 @@ void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, option_
 	p.IsChecked = JsonValueOrDefault(j, "IsChecked", false, false);
 }
 
-void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const mod_group_t& p) {
+void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const mod_group_json& p) {
 	j = nlohmann::json::object({
 		{"GroupName", p.GroupName},
 		{"SelectionType", p.SelectionType},
@@ -98,7 +98,7 @@ void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const mod_group
 		});
 }
 
-void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, mod_group_t& p) {
+void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, mod_group_json& p) {
 	if (!j.is_object())
 		throw bad_data_error("Option must be an object");
 
@@ -108,14 +108,14 @@ void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, mod_gro
 		p.OptionList = it->get<decltype(p.OptionList)>();
 }
 
-void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const page_t& p) {
+void xivres::textools::mod_pack_page::to_json(nlohmann::json& j, const mod_pack_page_json& p) {
 	j = nlohmann::json::object({
 		{"PageIndex", p.PageIndex},
 		{"ModGroups", p.ModGroups},
 		});
 }
 
-void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, page_t& p) {
+void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, mod_pack_page_json& p) {
 	if (!j.is_object())
 		throw bad_data_error("Option must be an object");
 
@@ -124,10 +124,10 @@ void xivres::textools::mod_pack_page::from_json(const nlohmann::json& j, page_t&
 		p.ModGroups = it->get<decltype(p.ModGroups)>();
 }
 
-void xivres::textools::to_json(nlohmann::json& j, const ttmpl& p) {
+void xivres::textools::to_json(nlohmann::json& j, const mod_pack_json& p) {
 	j = nlohmann::json::object({
 		{"MinimumFrameworkVersion", p.MinimumFrameworkVersion},
-		{"FormatVersion", p.FormatVersion},
+		{"TTMPVersion", p.TTMPVersion},
 		{"Name", p.Name},
 		{"Author", p.Author},
 		{"Version", p.Version},
@@ -138,12 +138,12 @@ void xivres::textools::to_json(nlohmann::json& j, const ttmpl& p) {
 		});
 }
 
-void xivres::textools::from_json(const nlohmann::json& j, ttmpl& p) {
+void xivres::textools::from_json(const nlohmann::json& j, mod_pack_json& p) {
 	if (!j.is_object())
 		throw bad_data_error("TTMPL must be an object");
 
 	p.MinimumFrameworkVersion = JsonValueOrDefault(j, "MinimumFrameworkVersion", ""s, ""s);
-	p.FormatVersion = JsonValueOrDefault(j, "FormatVersion", ""s, ""s);
+	p.TTMPVersion = JsonValueOrDefault(j, "TTMPVersion", ""s, ""s);
 	p.Name = JsonValueOrDefault(j, "Name", ""s, ""s);
 	p.Author = JsonValueOrDefault(j, "Author", ""s, ""s);
 	p.Version = JsonValueOrDefault(j, "Version", ""s, ""s);
@@ -155,7 +155,7 @@ void xivres::textools::from_json(const nlohmann::json& j, ttmpl& p) {
 		p.SimpleModsList = it->get<decltype(p.SimpleModsList)>();
 }
 
-void xivres::textools::ttmpl::for_each(std::function<void(mod_entry&)> cb, const nlohmann::json& choices) {
+void xivres::textools::mod_pack_json::for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices) {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -190,7 +190,7 @@ void xivres::textools::ttmpl::for_each(std::function<void(mod_entry&)> cb, const
 	}
 }
 
-void xivres::textools::ttmpl::for_each(std::function<void(const mod_entry&)> cb, const nlohmann::json& choices) const {
+void xivres::textools::mod_pack_json::for_each(std::function<void(const mods_json&)> cb, const nlohmann::json& choices) const {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -225,7 +225,7 @@ void xivres::textools::ttmpl::for_each(std::function<void(const mod_entry&)> cb,
 	}
 }
 
-bool xivres::textools::mod_entry::is_textools_metadata() const {
+bool xivres::textools::mods_json::is_textools_metadata() const {
 	if (FullPath.length() < 5)
 		return false;
 	auto metaExt = FullPath.substr(FullPath.length() - 5);

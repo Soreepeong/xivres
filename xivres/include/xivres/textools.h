@@ -11,16 +11,16 @@
 #include "image_change_data.h"
 
 namespace xivres::textools {
-	struct mod_pack_entry {
+	struct mod_pack {
 		std::string Name;
 		std::string Author;
 		std::string Version;
 		std::string Url;
 	};
-	void to_json(nlohmann::json&, const mod_pack_entry&);
-	void from_json(const nlohmann::json&, mod_pack_entry&);
+	void to_json(nlohmann::json&, const mod_pack&);
+	void from_json(const nlohmann::json&, mod_pack&);
 
-	struct mod_entry {
+	struct mods_json {
 		std::string Name;
 		std::string Category;
 		std::string FullPath;
@@ -28,59 +28,59 @@ namespace xivres::textools {
 		uint64_t ModSize{};
 		std::string DatFile;
 		bool IsDefault{};
-		std::optional<mod_pack_entry> ModPack;
+		std::optional<mod_pack> ModPack;
 
 		[[nodiscard]] bool is_textools_metadata() const;
 	};
-	void to_json(nlohmann::json&, const mod_entry&);
-	void from_json(const nlohmann::json&, mod_entry&);
+	void to_json(nlohmann::json&, const mods_json&);
+	void from_json(const nlohmann::json&, mods_json&);
 
 	namespace mod_pack_page {
-		struct option_t {
+		struct mod_option_json {
 			std::string Name;
 			std::string Description;
 			std::string ImagePath;
-			std::vector<mod_entry> ModsJsons;
+			std::vector<mods_json> ModsJsons;
 			std::string GroupName;
 			std::string SelectionType;
 			bool IsChecked;
 		};
-		void to_json(nlohmann::json&, const option_t&);
-		void from_json(const nlohmann::json&, option_t&);
+		void to_json(nlohmann::json&, const mod_option_json&);
+		void from_json(const nlohmann::json&, mod_option_json&);
 
-		struct mod_group_t {
+		struct mod_group_json {
 			std::string GroupName;
 			std::string SelectionType;
-			std::vector<option_t> OptionList;
+			std::vector<mod_option_json> OptionList;
 		};
-		void to_json(nlohmann::json&, const mod_group_t&);
-		void from_json(const nlohmann::json&, mod_group_t&);
+		void to_json(nlohmann::json&, const mod_group_json&);
+		void from_json(const nlohmann::json&, mod_group_json&);
 
-		struct page_t {
+		struct mod_pack_page_json {
 			int PageIndex{};
-			std::vector<mod_group_t> ModGroups;
+			std::vector<mod_group_json> ModGroups;
 		};
-		void to_json(nlohmann::json&, const page_t&);
-		void from_json(const nlohmann::json&, page_t&);
+		void to_json(nlohmann::json&, const mod_pack_page_json&);
+		void from_json(const nlohmann::json&, mod_pack_page_json&);
 
 	}
 
-	struct ttmpl {
-		std::string MinimumFrameworkVersion;
-		std::string FormatVersion;
+	struct mod_pack_json {
+		std::string TTMPVersion;
 		std::string Name;
 		std::string Author;
 		std::string Version;
 		std::string Description;
 		std::string Url;
-		std::vector<mod_pack_page::page_t> ModPackPages;
-		std::vector<mod_entry> SimpleModsList;
+		std::string MinimumFrameworkVersion;
+		std::vector<mod_pack_page::mod_pack_page_json> ModPackPages;
+		std::vector<mods_json> SimpleModsList;
 
-		void for_each(std::function<void(mod_entry&)> cb, const nlohmann::json& choices = {});
-		void for_each(std::function<void(const mod_entry&)> cb, const nlohmann::json& choices = {}) const;
+		void for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices = {});
+		void for_each(std::function<void(const mods_json&)> cb, const nlohmann::json& choices = {}) const;
 	};
-	void to_json(nlohmann::json&, const ttmpl&);
-	void from_json(const nlohmann::json&, ttmpl&);
+	void to_json(nlohmann::json&, const mod_pack_json&);
+	void from_json(const nlohmann::json&, mod_pack_json&);
 
 	class metafile {
 	public:

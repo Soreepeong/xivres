@@ -1033,12 +1033,12 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				json.pop_back();
 			}
 
-			xivres::textools::ttmpl ttmpl;
+			xivres::textools::mod_pack_json ttmpl;
 			if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
-				ttmpl = json[0].get<xivres::textools::ttmpl>();
+				ttmpl = json[0].get<xivres::textools::mod_pack_json>();
 			else {
 				for (const auto& j : json)
-					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mod_entry>());
+					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mods_json>());
 			}
 
 			const auto choicesFile = std::filesystem::path(path).replace_filename("choices.json");
@@ -1104,7 +1104,7 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 				std::ofstream(std::filesystem::path(choicesFile).replace_filename("choices.fixed.json"), std::ios::binary) << choices.dump(1, '\t');
 
 			std::shared_ptr<xivres::stream> ttmpd = std::make_shared<oplocking_file_stream>(ttmpdPath, true);
-			ttmpl.for_each([&](const xivres::textools::mod_entry& entry) {
+			ttmpl.for_each([&](const xivres::textools::mods_json& entry) {
 				if (!entry.is_textools_metadata()) {
 					const auto pathSpec = xivres::path_spec(entry.FullPath);
 					auto& stream = s_availableReplacementStreams[pathSpec];
