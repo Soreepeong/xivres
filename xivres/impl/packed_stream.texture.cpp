@@ -354,10 +354,10 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 	size_t subBlockCount = 0;
 	for (auto& repeatedItem : blockDataList) {
 		for (auto& mipmapItem : repeatedItem) {
-			// while (!mipmapItem.empty() && mipmapItem.back().AllZero)
-			// 	mipmapItem.pop_back();
-			// if (mipmapItem.empty())
-			// 	mipmapItem.emplace_back(false, false, 4, std::vector<uint8_t>(4));
+			while (!mipmapItem.empty() && mipmapItem.back().AllZero)
+				mipmapItem.pop_back();
+			if (mipmapItem.empty())
+				mipmapItem.emplace_back(false, false, 4, std::vector<uint8_t>(4));
 			for (const auto& block : mipmapItem)
 				entryBodyLength += align(sizeof packed::block_header + block.Data.size());
 			subBlockCount += mipmapItem.size();
@@ -398,7 +398,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 			auto& loc = blockLocators[blockLocatorIndexCounter++];
 			loc.CompressedOffset = blockOffsetCounter;
 			loc.CompressedSize = 0;
-			loc.DecompressedSize = 0;
+			loc.DecompressedSize = (std::max)(mipmapSizes[mipmapIndex], blockDataList[mipmapIndex][repeatIndex].front().DecompressedSize);
 			loc.FirstBlockIndex = blockLocatorIndexCounter == 1 ? 0 : blockLocators[blockLocatorIndexCounter - 2].FirstBlockIndex + blockLocators[blockLocatorIndexCounter - 2].BlockCount;
 			loc.BlockCount = static_cast<uint32_t>(blockDataList[mipmapIndex][repeatIndex].size());
 
@@ -411,7 +411,6 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack(const s
 				header.Version = 0;
 				header.CompressedSize = blockData.Deflated ? static_cast<uint32_t>(blockData.Data.size()) : packed::block_header::CompressedSizeNotCompressed;
 				header.DecompressedSize = blockData.DecompressedSize;
-				loc.DecompressedSize += blockData.DecompressedSize;
 
 				std::ranges::copy(blockData.Data, resultDataPtr + sizeof header);
 

@@ -13,45 +13,46 @@ namespace xivres {
 			uint8_t m_buffer[ReadBufferMaxSize];
 			const std::span<uint8_t> m_target;
 			std::span<uint8_t> m_remaining;
-			std::streamoff m_relativeOffset = 0;
-			uint32_t m_relativeOffsetExpected = 0;
+			uint32_t m_skipLength;
+			uint32_t m_currentOffset;
 
 			util::zlib_inflater m_inflater{ -MAX_WBITS };
 
 		public:
 			block_decoder(void* buf, std::streamsize length, std::streampos offset);
 
-			void skip(uint32_t lengthToSkip);
+			bool skip(size_t lengthToSkip, bool dataFilled = false);
 
-			void forward(std::span<uint8_t> data);
+			bool skip_to(size_t offset, bool dataFilled = false);
 
-			void forward(uint32_t requestOffset, const stream& strm, uint32_t blockOffset, size_t knownBlockSize = ReadBufferMaxSize);
+			bool forward(std::span<uint8_t> data);
 
-			void forward_zerofill(size_t len);
+			bool forward(const stream& strm, uint32_t blockOffset, size_t knownBlockSize = ReadBufferMaxSize);
 
 			[[nodiscard]] const auto& block_header() const { return *reinterpret_cast<const packed::block_header*>(m_buffer); }
 
-			[[nodiscard]] uint32_t relative_offset() const { return static_cast<uint32_t>(m_relativeOffset); }
+			[[nodiscard]] uint32_t current_offset() const { return m_currentOffset; }
 
 			[[nodiscard]] bool complete() const { return m_remaining.empty(); }
 
 			[[nodiscard]] std::streamsize filled() const { return static_cast<std::streamsize>(m_target.size() - m_remaining.size()); }
-
-		private:
-			void ensure_relative_offset(uint32_t requestOffset);
 		};
 
+		const uint32_t m_size;
 		const std::shared_ptr<const packed_stream> m_stream;
 
 	public:
-		base_unpacker(std::shared_ptr<const packed_stream> strm)
-			: m_stream(std::move(strm)) {}
+		base_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
+			: m_size(header.DecompressedSize)
+			, m_stream(std::move(strm)) {}
 		base_unpacker(base_unpacker&&) = delete;
 		base_unpacker(const base_unpacker&) = delete;
 		base_unpacker& operator=(base_unpacker&&) = delete;
 		base_unpacker& operator=(const base_unpacker&) = delete;
 
 		virtual std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) = 0;
+
+		[[nodiscard]] uint32_t size() const { return m_size; }
 
 		virtual ~base_unpacker() = default;
 

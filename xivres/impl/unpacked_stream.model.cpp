@@ -2,9 +2,7 @@
 #include "../include/xivres/model.h"
 
 xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
-	: base_unpacker(std::move(strm)) {
-	const auto AsHeader = [this]() -> model::header& { return *reinterpret_cast<model::header*>(&m_head[0]); };
-
+	: base_unpacker(header, std::move(strm)) {
 	const auto underlyingSize = m_stream->size();
 	uint64_t readOffset = sizeof packed::file_header;
 	const auto locator = m_stream->read_fully<packed::model_block_locator>(static_cast<std::streamoff>(readOffset));
@@ -12,8 +10,8 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 
 	readOffset += sizeof locator;
 	for (const auto blockSize : m_stream->read_vector<uint16_t>(readOffset, blockCount)) {
-		m_blocks.emplace_back(BlockInfo{
-			.RequestOffset = 0,
+		m_blocks.emplace_back(block_info_t{
+			.RequestOffsetPastHeader = 0,
 			.BlockOffset = m_blocks.empty() ? *header.HeaderSize : m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize,
 			.PaddedChunkSize = blockSize,
 			.GroupIndex = UINT16_MAX,
@@ -21,16 +19,13 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 		});
 	}
 
-	m_head.resize(sizeof model::header);
-	AsHeader() = {
-		.Version = header.BlockCountOrVersion,
-		.VertexDeclarationCount = locator.VertexDeclarationCount,
-		.MaterialCount = locator.MaterialCount,
-		.LodCount = locator.LodCount,
-		.EnableIndexBufferStreaming = locator.EnableIndexBufferStreaming,
-		.EnableEdgeGeometry = locator.EnableEdgeGeometry,
-		.Padding = locator.Padding,
-	};
+	m_header.Version = header.BlockCountOrVersion;
+	m_header.VertexDeclarationCount = locator.VertexDeclarationCount;
+	m_header.MaterialCount = locator.MaterialCount;
+	m_header.LodCount = locator.LodCount;
+	m_header.EnableIndexBufferStreaming = locator.EnableIndexBufferStreaming;
+	m_header.EnableEdgeGeometry = locator.EnableEdgeGeometry;
+	m_header.Padding = locator.Padding;
 
 	if (m_blocks.empty())
 		return;
@@ -66,21 +61,21 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 			m_stream->read_fully(block.BlockOffset, &blockHeader, sizeof blockHeader);
 
 		block.DecompressedSize = static_cast<uint16_t>(blockHeader.DecompressedSize);
-		block.RequestOffset = lastOffset;
+		block.RequestOffsetPastHeader = lastOffset;
 		lastOffset += block.DecompressedSize;
 	}
 
 	for (size_t blkI = locator.FirstBlockIndices.Stack, i_ = blkI + locator.BlockCount.Stack; blkI < i_; ++blkI)
-		AsHeader().StackSize += m_blocks[blkI].DecompressedSize;
+		m_header.StackSize += m_blocks[blkI].DecompressedSize;
 	for (size_t blkI = locator.FirstBlockIndices.Runtime, i_ = blkI + locator.BlockCount.Runtime; blkI < i_; ++blkI)
-		AsHeader().RuntimeSize += m_blocks[blkI].DecompressedSize;
+		m_header.RuntimeSize += m_blocks[blkI].DecompressedSize;
 	for (size_t lodI = 0; lodI < 3; ++lodI) {
 		for (size_t blkI = locator.FirstBlockIndices.Vertex[lodI], i_ = blkI + locator.BlockCount.Vertex[lodI]; blkI < i_; ++blkI)
-			AsHeader().VertexSize[lodI] += m_blocks[blkI].DecompressedSize;
+			m_header.VertexSize[lodI] += m_blocks[blkI].DecompressedSize;
 		for (size_t blkI = locator.FirstBlockIndices.Index[lodI], i_ = blkI + locator.BlockCount.Index[lodI]; blkI < i_; ++blkI)
-			AsHeader().IndexSize[lodI] += m_blocks[blkI].DecompressedSize;
-		AsHeader().VertexOffset[lodI] = static_cast<uint32_t>(m_head.size() + (locator.FirstBlockIndices.Vertex[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Vertex[lodI]].RequestOffset));
-		AsHeader().IndexOffset[lodI] = static_cast<uint32_t>(m_head.size() + (locator.FirstBlockIndices.Index[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Index[lodI]].RequestOffset));
+			m_header.IndexSize[lodI] += m_blocks[blkI].DecompressedSize;
+		m_header.VertexOffset[lodI] = static_cast<uint32_t>(sizeof m_header + (locator.FirstBlockIndices.Vertex[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Vertex[lodI]].RequestOffsetPastHeader));
+		m_header.IndexOffset[lodI] = static_cast<uint32_t>(sizeof m_header + (locator.FirstBlockIndices.Index[lodI] == m_blocks.size() ? lastOffset : m_blocks[locator.FirstBlockIndices.Index[lodI]].RequestOffsetPastHeader));
 	}
 }
 
@@ -89,18 +84,18 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 		return 0;
 
 	block_decoder info(buf, length, offset);
-	info.forward(m_head);
+	info.forward(util::span_cast<uint8_t>(1, &m_header));
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
 
-	auto it = std::lower_bound(m_blocks.begin(), m_blocks.end(), static_cast<uint32_t>(info.relative_offset()), [&](const BlockInfo& l, uint32_t r) {
-		return l.RequestOffset < r;
-	});
-	if (it == m_blocks.end() || (it != m_blocks.end() && it != m_blocks.begin() && it->RequestOffset > info.relative_offset()))
+	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
+	if (it != m_blocks.begin())
 		--it;
-
-	info.skip(it->RequestOffset);
-	for (; it != m_blocks.end() && !info.complete(); ++it)
-		info.forward(it->RequestOffset, *m_stream, it->BlockOffset, it->PaddedChunkSize);
+	for (; it != m_blocks.end() && !info.complete(); ++it) {
+		info.skip_to(it->RequestOffsetPastHeader - sizeof m_header);
+		info.forward(*m_stream, it->BlockOffset, it->PaddedChunkSize);
+	}
+	
+	info.skip_to(size());
 	return info.filled();
 }

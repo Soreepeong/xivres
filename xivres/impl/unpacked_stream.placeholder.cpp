@@ -1,6 +1,7 @@
 #include "../include/xivres/unpacked_stream.placeholder.h"
 
-xivres::placeholder_unpacker::placeholder_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm, std::span<uint8_t> headerRewrite /*= {}*/) : base_unpacker(std::move(strm)) {
+xivres::placeholder_unpacker::placeholder_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm, std::span<uint8_t> headerRewrite)
+	: base_unpacker(header, std::move(strm)) {
 	if (header.DecompressedSize < header.BlockCountOrVersion) {
 		auto src = m_stream->read_vector<uint8_t>(header.HeaderSize, header.DecompressedSize);
 		if (!headerRewrite.empty())

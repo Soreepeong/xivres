@@ -7,15 +7,39 @@
 
 namespace xivres {
 	class texture_unpacker : public base_unpacker {
-		struct block_info_t {
+		struct subblock_info_t {
 			uint32_t RequestOffset;
 			uint32_t BlockOffset;
-			uint32_t RemainingDecompressedSize;
-			uint32_t ZeroFillSize;
-			std::vector<uint16_t> RemainingBlockSizes;
+			uint16_t BlockSize;
+			uint16_t DecompressedSize;
 
-			bool operator<(uint32_t r) const {
-				return RequestOffset < r;
+			[[nodiscard]] uint32_t request_offset_end() const {
+				return RequestOffset + DecompressedSize;
+			}
+
+			operator bool() const {
+				return RequestOffset != (std::numeric_limits<uint32_t>::max)();
+			}
+			
+			friend bool operator<(uint32_t r, const subblock_info_t& info) {
+				return r < info.RequestOffset;
+			}
+		};
+		
+		struct block_info_t {
+			uint32_t DecompressedSize;
+			std::vector<subblock_info_t> Subblocks;
+
+			[[nodiscard]] uint32_t request_offset_begin() const {
+				return Subblocks.front().RequestOffset;
+			}
+
+			[[nodiscard]] uint32_t request_offset_end() const {
+				return Subblocks.front().RequestOffset + DecompressedSize;
+			}
+			
+			friend bool operator<(uint32_t r, const block_info_t& info) {
+				return r < info.Subblocks.front().RequestOffset;
 			}
 		};
 

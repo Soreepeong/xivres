@@ -32,6 +32,7 @@ static auto test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> packed,
 
 		pcszLastStep = "Decode packed original";
 		decoded = std::make_shared<unpacked_stream>(packed);
+		auto dec2 = decoded;
 		if (decoded->size() == 0)
 			return std::make_pair(packed->get_packed_type(), std::string());
 		const auto decodedOriginal = decoded->read_vector<char>();
@@ -48,7 +49,7 @@ static auto test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> packed,
 			return std::make_pair(packed->get_packed_type(), std::string("DIFF(Comp)"));
 
 		pcszLastStep = "Passthrough-pack decoded original";
-		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, decoded);
+		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, dec2);
 		const auto packedPassthrough = packed->read_vector<char>();
 
 		pcszLastStep = "Decode Passthrough-packed";
@@ -100,9 +101,8 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 					case xivres::packed::type::texture: std::cout << " Texture ";
 						break;
 				}
-				if (!res.empty()) {
+				if (!res.empty())
 					std::cout << std::format("\n\t=>{}", res) << std::endl;
-				}
 			}
 		}
 
@@ -258,16 +258,19 @@ static void test_excel(const xivres::installation& gameReader) {
 
 void test_range_read(const xivres::installation& gameReader) {
 	std::vector<xivres::path_spec> specs;
-	specs.emplace_back("common/graphics/texture/-omni_shadow_index_table.tex");
-	specs.emplace_back(0x602a1840, 0xf2925549, 0x85c56562, 0x01, 0x00, 0x00);
-	specs.emplace_back(0x2428c8c9, 0xcff27cf9, 0xd971bea2, 0x01, 0x00, 0x00);
-	specs.emplace_back(0xb9ae4029, 0x2049ae1c, 0x01c3d0ca, 0x01, 0x00, 0x00);
-	specs.emplace_back(0xdbe71b5b, 0xbaa24aef, 0x4a506bf6, 0x02, 0x03, 0x01);
-	for (const auto& p : gameReader.get_sqpack(0x040000).Entries)
-		if (p.PathSpec.path_hash() != 0xffffffff)
-			specs.emplace_back(p.PathSpec);
+	// specs.emplace_back("common/graphics/texture/-omni_shadow_index_table.tex");
+	// specs.emplace_back(0x602a1840, 0xf2925549, 0x85c56562, 0x01, 0x00, 0x00);
+	// specs.emplace_back(0x2428c8c9, 0xcff27cf9, 0xd971bea2, 0x01, 0x00, 0x00);
+	// specs.emplace_back(0xb9ae4029, 0x2049ae1c, 0x01c3d0ca, 0x01, 0x00, 0x00);
+	specs.emplace_back(0x210fc65d, 0x1442c7c8, 0x0a303bca, 0x02, 0x00, 0x00);
+	// specs.emplace_back(0x210fc65d, 0x1442c7c8, 0x0a303bca, 0x02, 0x00, 0x00);
+	// specs.emplace_back(0xa59934f6, 0x83234281, 0xdadc46dd, 0x02, 0x00, 0x00);
+	// specs.emplace_back(0xdbe71b5b, 0xbaa24aef, 0x4a506bf6, 0x02, 0x03, 0x01);
+	// for (const auto& p : gameReader.get_sqpack(0x040000).Entries)
+	// 	if (p.PathSpec.path_hash() != 0xffffffff)
+	// 		specs.emplace_back(p.PathSpec);
 
-	xivres::util::thread_pool pool;
+	xivres::util::thread_pool pool(1);
 	std::vector<std::vector<char>> bufs(pool.GetThreadCount());
 	for (auto& buf : bufs)
 		buf.resize(1048576);
@@ -284,41 +287,59 @@ void test_range_read(const xivres::installation& gameReader) {
 			const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(spec, decoded0);
 			const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
 			const auto data1 = decoded1->read_vector<char>();
+			const auto data11 = decoded1->read_vector<char>();
 			const auto packed2 = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(spec, decoded0, Z_NO_COMPRESSION);
 			const auto decoded2 = std::make_shared<xivres::unpacked_stream>(packed2);
 			const auto data2 = decoded2->read_vector<char>();
+			const auto data22 = decoded2->read_vector<char>();
 			if (const auto m = std::ranges::mismatch(data1, data0).in1 - data1.begin(); m != data0.size()) {
+				__debugbreak();
+				__debugbreak();
+			}
+			if (const auto m = std::ranges::mismatch(data1, data11).in1 - data1.begin(); m != data0.size()) {
+				__debugbreak();
 				__debugbreak();
 			}
 			if (const auto m = std::ranges::mismatch(data2, data0).in1 - data2.begin(); m != data0.size()) {
+				__debugbreak();
+				__debugbreak();
+			}
+			if (const auto m = std::ranges::mismatch(data2, data22).in1 - data2.begin(); m != data0.size()) {
+				__debugbreak();
 				__debugbreak();
 			}
 
 			xivres::align<uint64_t>(decoded0->size(), buf.size()).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
 				const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
 				decoded0->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-				if (0 != memcmp(&buf[0], &data0[offset], size))
+				if (const auto m = std::ranges::mismatch(bufSpan, std::span(data0).subspan(offset, size)).in1 - bufSpan.begin(); m != bufSpan.size()) {
 					__debugbreak();
+					__debugbreak();
+				}
 			});
 			xivres::align<uint64_t>(decoded1->size(), buf.size()).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
 				const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
 				decoded1->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-				if (0 != memcmp(&buf[0], &data1[offset], size))
+				if (const auto m = std::ranges::mismatch(bufSpan, std::span(data1).subspan(offset, size)).in1 - bufSpan.begin(); m != bufSpan.size()) {
 					__debugbreak();
+					__debugbreak();
+				}
 			});
 			xivres::align<uint64_t>(decoded2->size(), buf.size()).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
 				const auto bufSpan = std::span(buf).subspan(0, static_cast<size_t>(size));
 				decoded2->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-				if (0 != memcmp(&buf[0], &data2[offset], size))
+				if (const auto m = std::ranges::mismatch(bufSpan, std::span(data2).subspan(offset, size)).in1 - bufSpan.begin(); m != bufSpan.size()) {
 					__debugbreak();
+					__debugbreak();
+				}
 			});
 
-			// std::thread t1([&]() { preview(xivres::texture::stream(decoded0), L"Source"); });
-			// std::thread t2([&]() { preview(xivres::texture::stream(decoded1), L"Dec1"); });
-			// std::thread t3([&]() { preview(xivres::texture::stream(decoded2), L"Dec2"); });
-			// t1.join();
-			// t2.join();
-			// t3.join();
+			std::thread t1([&]() { preview(xivres::texture::stream(decoded0), L"Source"); });
+			std::thread t2([&]() { preview(xivres::texture::stream(decoded1), L"Dec1"); });
+			std::thread t3([&]() { preview(xivres::texture::stream(decoded2), L"Dec2"); });
+			t1.join();
+			t2.join();
+			t3.join();
 		});
 	}
 
@@ -330,48 +351,15 @@ int main() {
 		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 		system("chcp 65001 > NUL");
 
-		// const auto ind2 = xivres::sqpack::reader::from_path(LR"(C:\ffxiv\game\sqpack\ffxiv\060000.win32.index)");
-		// const auto p3 = ind2.packed_at("ui/uld/Title_Logo600.tex"); // ->read_vector<char>();
-		// std::ofstream("Z:/test.p3.bin", std::ios::binary).write(p3.data(), p3.size());
-
-		// xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
-		xivres::installation gameReader(R"(Z:\XIV\JP\game)");
-
-		/*
-		auto packed0 = gameReader.get_file_packed("ui/uld/Title_Logo600.tex");
-		auto decoded0 = std::make_shared<xivres::unpacked_stream>(packed0);
-		// preview(xivres::texture::stream(decoded0));
-		const auto packed1 = std::make_shared<xivres::passthrough_packed_stream<xivres::texture_passthrough_packer>>(decoded0->path_spec(), decoded0);
-		const auto decoded1 = std::make_shared<xivres::unpacked_stream>(packed1);
-		const auto packed2 = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(decoded0->path_spec(), decoded0, 0);
-		const auto decoded2 = std::make_shared<xivres::unpacked_stream>(packed1);
-		if (memcmp(decoded1->read_vector<char>().data(), decoded2->read_vector<char>().data(), decoded1->size()) != 0)
-			__debugbreak();
-		auto p0 = packed0->read_vector<char>();
-		auto p1 = packed1->read_vector<char>();
-		auto p2 = packed2->read_vector<char>();
-		std::ofstream("Z:/test.p0.bin", std::ios::binary).write(p0.data(), p0.size());
-		std::ofstream("Z:/test.p1.bin", std::ios::binary).write(p1.data(), p1.size());
-		std::ofstream(LR"(C:\Users\SP\AppData\Roaming\XivAlexander\TexToolsMods\test\TTMPD.mpd)", std::ios::binary).write(p2.data(), p1.size());
-		std::ofstream(LR"(C:\Users\SP\AppData\Roaming\XivAlexander\TexToolsMods\test\TTMPL.mpl)") << std::format(
-			R"({{"DatFile": "060000", "FullPath": "{}", "ModOffset": {}, "ModSize": {}}})",
-			"ui/uld/Title_Logo600.tex", 0, p2.size());
-		//*/
-		// __debugbreak();
-		// std::vector<uint8_t> buf(decoded1->size());
-		// xivres::align<uint64_t>(decoded1->size(), 1024).iterate_chunks([&](uint64_t, uint64_t offset, uint64_t size) {
-		// 	const auto bufSpan = std::span(buf).subspan(offset, size);
-		// 	decoded1->read_fully(static_cast<std::streamoff>(offset), bufSpan);
-		// });
-		// preview(xivres::texture::stream(std::make_shared<xivres::memory_stream>(buf)));
-		// std::thread t1([&]() { preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")), L"Source");} );
-		// std::thread t2([&]() { preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")), L"Source");} );
-		// t1.join();
-		// t2.join();
+		xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+		// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 		
-		// test_range_read(gameReader);
+		// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
+		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
+		
+		test_range_read(gameReader);
 		// test_pack_unpack(gameReader);
-		test_sqpack_generator(gameReader);
+		// test_sqpack_generator(gameReader);
 		// test_ogg_decode_encode(gameReader);
 		// test_excel(gameReader);
 

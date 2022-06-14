@@ -23,24 +23,23 @@ void xivres::model_passthrough_packer::ensure_initialized() {
 	if (*m_header.Entry.DecompressedSize)
 		return;
 
-	model::header hdr;
-	m_stream->read_fully(0, &hdr, sizeof hdr);
+	const auto unpackedHeader = m_stream->read_fully<model::header>(0);
 
 	m_header.Entry.Type = packed::type::model;
 	m_header.Entry.DecompressedSize = static_cast<uint32_t>(m_stream->size());
-	m_header.Entry.BlockCountOrVersion = hdr.Version;
+	m_header.Entry.BlockCountOrVersion = unpackedHeader.Version;
 
-	m_header.Model.VertexDeclarationCount = hdr.VertexDeclarationCount;
-	m_header.Model.MaterialCount = hdr.MaterialCount;
-	m_header.Model.LodCount = hdr.LodCount;
-	m_header.Model.EnableIndexBufferStreaming = hdr.EnableIndexBufferStreaming;
-	m_header.Model.EnableEdgeGeometry = hdr.EnableEdgeGeometry;
+	m_header.Model.VertexDeclarationCount = unpackedHeader.VertexDeclarationCount;
+	m_header.Model.MaterialCount = unpackedHeader.MaterialCount;
+	m_header.Model.LodCount = unpackedHeader.LodCount;
+	m_header.Model.EnableIndexBufferStreaming = unpackedHeader.EnableIndexBufferStreaming;
+	m_header.Model.EnableEdgeGeometry = unpackedHeader.EnableEdgeGeometry;
 
 	const auto getNextBlockOffset = [&]() {
 		return m_paddedBlockSizes.empty() ? 0U : m_blockOffsets.back() + m_paddedBlockSizes.back();
 	};
 
-	auto baseFileOffset = static_cast<uint32_t>(sizeof hdr);
+	auto baseFileOffset = static_cast<uint32_t>(sizeof unpackedHeader);
 	const auto generateSet = [&](const uint32_t size) {
 		const auto alignedDecompressedSize = align(size).Alloc;
 		const auto alignedBlock = align<uint32_t, uint16_t>(size, packed::MaxBlockDataSize);
@@ -68,35 +67,35 @@ void xivres::model_passthrough_packer::ensure_initialized() {
 		m_header.Model.BlockCount.Stack,
 		m_header.Model.FirstBlockOffsets.Stack,
 		m_header.Model.FirstBlockIndices.Stack,
-		m_header.Model.ChunkSizes.Stack) = generateSet(hdr.StackSize);
+		m_header.Model.ChunkSizes.Stack) = generateSet(unpackedHeader.StackSize);
 
 	std::tie(m_header.Model.AlignedDecompressedSizes.Runtime,
 		m_header.Model.BlockCount.Runtime,
 		m_header.Model.FirstBlockOffsets.Runtime,
 		m_header.Model.FirstBlockIndices.Runtime,
-		m_header.Model.ChunkSizes.Runtime) = generateSet(hdr.RuntimeSize);
+		m_header.Model.ChunkSizes.Runtime) = generateSet(unpackedHeader.RuntimeSize);
 
 	for (size_t i = 0; i < 3; i++) {
-		if (!hdr.VertexOffset[i])
+		if (!unpackedHeader.VertexOffset[i])
 			break;
 
 		std::tie(m_header.Model.AlignedDecompressedSizes.Vertex[i],
 			m_header.Model.BlockCount.Vertex[i],
 			m_header.Model.FirstBlockOffsets.Vertex[i],
 			m_header.Model.FirstBlockIndices.Vertex[i],
-			m_header.Model.ChunkSizes.Vertex[i]) = generateSet(hdr.VertexSize[i]);
+			m_header.Model.ChunkSizes.Vertex[i]) = generateSet(unpackedHeader.VertexSize[i]);
 
 		std::tie(m_header.Model.AlignedDecompressedSizes.EdgeGeometryVertex[i],
 			m_header.Model.BlockCount.EdgeGeometryVertex[i],
 			m_header.Model.FirstBlockOffsets.EdgeGeometryVertex[i],
 			m_header.Model.FirstBlockIndices.EdgeGeometryVertex[i],
-			m_header.Model.ChunkSizes.EdgeGeometryVertex[i]) = generateSet(hdr.IndexOffset[i] - baseFileOffset);
+			m_header.Model.ChunkSizes.EdgeGeometryVertex[i]) = generateSet(unpackedHeader.IndexOffset[i] - baseFileOffset);
 
 		std::tie(m_header.Model.AlignedDecompressedSizes.Index[i],
 			m_header.Model.BlockCount.Index[i],
 			m_header.Model.FirstBlockOffsets.Index[i],
 			m_header.Model.FirstBlockIndices.Index[i],
-			m_header.Model.ChunkSizes.Index[i]) = generateSet(hdr.IndexSize[i]);
+			m_header.Model.ChunkSizes.Index[i]) = generateSet(unpackedHeader.IndexSize[i]);
 	}
 
 	if (baseFileOffset > m_header.Entry.DecompressedSize)

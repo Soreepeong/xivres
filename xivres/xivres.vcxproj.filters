@@ -185,6 +185,9 @@
     <ClInclude Include="include\xivres\texture.preview.h">
       <Filter>Headers\resource types\texture</Filter>
     </ClInclude>
+    <ClInclude Include="include\xivres\terrain.h">
+      <Filter>Headers\resource types</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="impl\common.cpp">

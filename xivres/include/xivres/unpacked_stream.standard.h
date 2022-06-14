@@ -7,9 +7,18 @@
 
 namespace xivres {
 	class standard_unpacker : public base_unpacker {
-		const std::vector<packed::standard_block_locator> m_locators;
+		struct block_info_t {
+			uint32_t RequestOffset;
+			uint32_t BlockOffset;
+			uint32_t BlockSize;
+			
+			friend bool operator<(uint32_t r, const block_info_t& info) {
+				return r < info.RequestOffset;
+			}
+		};
+		
 		const uint32_t m_headerSize;
-		std::vector<uint32_t> m_offsets;
+		std::vector<block_info_t> m_blocks;
 
 	public:
 		standard_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm);
