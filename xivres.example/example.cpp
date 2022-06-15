@@ -159,49 +159,56 @@ static std::shared_ptr<xivres::stream> make_ogg_crispy(std::shared_ptr<xivres::s
 
 static void test_sqpack_generator(const xivres::installation& gameReader) {
 	auto sqpackIds = gameReader.get_sqpack_ids();
-	std::ranges::sort(sqpackIds, [&gameReader](const uint32_t l, const uint32_t r) { return gameReader.get_sqpack(l).TotalDataSize > gameReader.get_sqpack(r).TotalDataSize; });
+	// std::ranges::sort(sqpackIds, [&gameReader](const uint32_t l, const uint32_t r) { return gameReader.get_sqpack(l).TotalDataSize > gameReader.get_sqpack(r).TotalDataSize; });
+	xivres::util::thread_pool::task_waiter waiter;
 	for (const auto p : sqpackIds) {
-		try {
-			const auto& packfile = gameReader.get_sqpack(p);
-			xivres::sqpack::generator generator(((p >> 8) & 0xff) ? std::format("ex{}", (p >> 8) & 0xff) : "ffxiv", std::format("{:0>6x}", p), xivres::sqdata::header::MaxFileSize_Value * 4);
-			std::cout << std::format("Working on {:06x} ({} entries)", p, packfile.Entries.size()) << std::endl;
-			for (size_t i = 0; i < packfile.Entries.size(); i++) {
-				if (i % 1000 == 0)
-					std::cout << std::format("Read: {:06x}: {}/{}", p, i, packfile.Entries.size()) << std::endl;
-				const auto& entry = packfile.Entries[i];
-				try {
-					auto packed = packfile.packed_at(entry);
-					std::shared_ptr<xivres::stream> unpacked = std::make_shared<xivres::unpacked_stream>(packed);
-					unpacked = std::make_shared<xivres::lazy_preloading_stream>(unpacked);
-					switch (packed->get_packed_type()) {
-						case xivres::packed::type::standard:
-							packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
-							break;
-						case xivres::packed::type::model:
-							packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
-							break;
-						case xivres::packed::type::texture:
-							packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
-							break;
-						default: break;
+		while (waiter.pending() >= 2)
+			waiter.wait_one();
+
+		waiter.submit([&gameReader, p](auto&) {
+			try {
+				const auto& packfile = gameReader.get_sqpack(p);
+				xivres::sqpack::generator generator(((p >> 8) & 0xff) ? std::format("ex{}", (p >> 8) & 0xff) : "ffxiv", std::format("{:0>6x}", p), xivres::sqdata::header::MaxFileSize_Value * 4);
+				std::cout << std::format("Working on {:06x} ({} entries)", p, packfile.Entries.size()) << std::endl;
+				for (size_t i = 0; i < packfile.Entries.size(); i++) {
+					if (i % 1000 == 0)
+						std::cout << std::format("Read: {:06x}: {}/{}", p, i, packfile.Entries.size()) << std::endl;
+					const auto& entry = packfile.Entries[i];
+					try {
+						auto packed = packfile.packed_at(entry);
+						std::shared_ptr<xivres::stream> unpacked = std::make_shared<xivres::unpacked_stream>(packed);
+						unpacked = std::make_shared<xivres::lazy_preloading_stream>(unpacked);
+						switch (packed->get_packed_type()) {
+							case xivres::packed::type::standard:
+								packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
+								break;
+							case xivres::packed::type::model:
+								packed = std::make_shared<xivres::compressing_packed_stream<xivres::model_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
+								break;
+							case xivres::packed::type::texture:
+								packed = std::make_shared<xivres::compressing_packed_stream<xivres::texture_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
+								break;
+							default: break;
+						}
+						generator.add(packed);
+					} catch (const std::out_of_range&) {
+						// pass
 					}
-					generator.add(packed);
-				} catch (const std::out_of_range&) {
-					// pass
 				}
+				const auto dir = std::filesystem::path(std::format("C:/ffxiv/game/sqpack/{}", generator.DatExpac));
+				create_directories(dir);
+				const auto callbackHolder = generator.ProgressCallback([p](size_t progress, size_t progressMax) {
+					if (progress % 1000 == 0)
+						std::cout << std::format("Export: {:06x}: {}/{}", p, progress, progressMax) << std::endl;
+				});
+				generator.export_to_files(dir);
+				std::cout << std::format("Complete: {:06x}", p) << std::endl;
+			} catch (const std::exception& e) {
+				std::cout << std::format("Error: {:06x}: {}", p, e.what()) << std::endl;
 			}
-			const auto dir = std::filesystem::path(std::format("C:/ffxiv/game/sqpack/{}", generator.DatExpac));
-			create_directories(dir);
-			const auto callbackHolder = generator.ProgressCallback([p](size_t progress, size_t progressMax) {
-				if (progress % 1000 == 0)
-					std::cout << std::format("Export: {:06x}: {}/{}", p, progress, progressMax) << std::endl;
-			});
-			generator.export_to_files(dir);
-			std::cout << std::format("Complete: {:06x}", p) << std::endl;
-		} catch (const std::exception& e) {
-			std::cout << std::format("Error: {:06x}: {}", p, e.what()) << std::endl;
-		}
+		});
 	}
+	waiter.wait_all();
 }
 
 static void test_ogg_decode_encode(const xivres::installation& gameReader) {

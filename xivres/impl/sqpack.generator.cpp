@@ -572,6 +572,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					task.throw_if_cancelled();
 					return std::make_pair(i, entry->Provider->read_vector<char>());
 				});
+				ProgressCallback(i, entries.size());
 			}
 
 			const auto resultPair = waiter.get();
@@ -580,7 +581,6 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 			auto& entry = *entries[resultPair->first];
 			auto& data = resultPair->second;
-			ProgressCallback(i, entries.size());
 			const auto provider{std::move(entry.Provider)};
 			const auto entrySize = provider->size();
 
