@@ -12,26 +12,13 @@ namespace xivres {
 	protected:
 		/*
 		 * Value   Time taken to decode everything (ms)
-		 * 2       43937
-		 * 4       40781
-		 * 8       39594
-		 * 16      36547
-		 * 24      34782
-		 * 32      34297
-		 * 40      34234
-		 * 48      33875
-		 * 64      33500
-		 * 96      33328
-		 * 128     32828
-		 * 192     32532
-		 * 256     32484
-		 * 512     32125
-		 * 1024    31953
-		 * 2048    32156
-		 * 4096    32203
-		 * 8192    32110
+		 * 32      48969
+		 * 512     37594
+		 * 768     37266
+		 * 1024    36828
+		 * 2048    37000
 		 */
-		static constexpr size_t MinBlockCountForMultithreadedDecompression = 1024;
+		static constexpr size_t MinBlockCountForMultithreadedDecompression = 768;
 
 		util::thread_pool::object_pool<std::vector<uint8_t>> m_preloads;
 

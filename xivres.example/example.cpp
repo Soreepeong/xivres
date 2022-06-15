@@ -35,6 +35,7 @@ static std::string test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> 
 
 		pcszLastStep = "Decode Compress-packed";
 		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, packed));
+		const auto decodedCompressed = decoded->read_vector<uint8_t>();
 
 		pcszLastStep = "Passthrough-pack decoded original";
 		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, decoded);
@@ -45,6 +46,8 @@ static std::string test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> 
 		const auto decodedPassthrough = decoded->read_vector<uint8_t>();
 		if (decodedOriginal.empty() && decodedPassthrough.empty())
 			void();
+		else if (decodedOriginal.size() != decodedCompressed.size() || memcmp(&decodedOriginal[0], &decodedCompressed[0], decodedCompressed.size()) != 0)
+			return "DIFF";
 		else if (decodedOriginal.size() != decodedPassthrough.size() || memcmp(&decodedOriginal[0], &decodedPassthrough[0], decodedPassthrough.size()) != 0)
 			return "DIFF";
 
@@ -340,6 +343,10 @@ int main() {
 
 		// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
 		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
+		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo400.tex")));
+		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo500.tex")));
+		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
+		// preview(xivres::texture::stream(gameReader.get_file("common/font/font1.tex")));
 
 		// test_range_read(gameReader);
 		test_pack_unpack(gameReader, true);

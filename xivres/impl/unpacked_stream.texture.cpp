@@ -58,7 +58,10 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 		pooledPreload.emplace();
 	auto& preload = *pooledPreload;
 	preload.resize(preloadTo - preloadFrom);
-	m_stream->read_fully(preloadFrom, std::span(preload));
+	{
+		const auto _ = util::thread_pool::pool::current().release_working_status();
+		m_stream->read_fully(preloadFrom, std::span(preload));
+	}
 
 	for (; it != m_blocks.end() && !info.complete(); ++it) {
 		auto it2 = std::upper_bound(it->Subblocks.begin(), it->Subblocks.end(), info.current_offset());
@@ -74,7 +77,9 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 			const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&blockSpan[0]);
 			it2->DecompressedSize = static_cast<uint16_t>(blockHeader.DecompressedSize);
 			if (info.skip_to(it2->RequestOffset))
-				info.forward_sqblock(blockSpan);
+				break;
+			if (info.forward_sqblock(blockSpan))
+				break;
 
 			auto prev = it2++;
 			if (it2 == it->Subblocks.end())
