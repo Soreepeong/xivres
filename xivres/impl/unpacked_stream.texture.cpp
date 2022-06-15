@@ -33,41 +33,52 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 	if (!length)
 		return 0;
 
-	block_decoder info(buf, length, offset);
+	block_decoder info(*this, buf, length, offset);
 	info.forward(m_head);
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
 
-	const auto lock = std::lock_guard(m_mtx);
 	const auto streamSize = m_blocks.back().request_offset_end();
 	if (info.current_offset() >= streamSize)
-		return 0;
+		return info.filled();
 
-	auto i = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
-	if (i != m_blocks.begin())
-		--i;
+	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
+	if (it != m_blocks.begin())
+		--it;
 
-	for (; i != m_blocks.end() && !info.complete(); ++i) {
-		auto j = std::upper_bound(i->Subblocks.begin(), i->Subblocks.end(), info.current_offset());
-		if (j != i->Subblocks.begin())
-			--j;
+	bool multithreaded = false;
+	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
+	info.multithreaded(multithreaded = multithreaded || std::distance(it, itEnd) > 1);
 
-		while (j != i->Subblocks.end() && !info.complete()) {
-			if (!*j)
+	const auto preloadFrom = it->Subblocks.front().BlockOffset;
+	const auto preloadTo = itEnd == m_blocks.end() ? m_packedSize : itEnd->Subblocks.front().BlockOffset;
+	const auto preloadStream = lazy_preloading_stream(m_stream, preloadFrom, preloadTo - preloadFrom);
+
+	for (; it != m_blocks.end() && !info.complete(); ++it) {
+		auto it2 = std::upper_bound(it->Subblocks.begin(), it->Subblocks.end(), info.current_offset());
+		if (it2 != it->Subblocks.begin())
+			--it2;
+
+		multithreaded = multithreaded || std::distance(it2, std::upper_bound(it2, it->Subblocks.end(), static_cast<uint32_t>(offset + length))) > 16;
+		multithreaded = multithreaded || (!it->Subblocks.back() && it->Subblocks.size() > 16);
+		info.multithreaded(multithreaded);
+
+		while (it2 != it->Subblocks.end() && !info.complete()) {
+			if (!*it2)
 				throw std::runtime_error("Offset error");
 			
-			if (info.skip_to(j->RequestOffset))
+			if (info.skip_to(it2->RequestOffset))
 				break;
-			info.forward(*m_stream, j->BlockOffset, j->BlockSize);
-			j->DecompressedSize = info.block_header().DecompressedSize;
+			info.forward(*m_stream, it2->BlockOffset, it2->BlockSize);
+			it2->DecompressedSize = info.MostRecentBlockHeader.DecompressedSize;
 
-			auto prev = j++;
-			if (j == i->Subblocks.end()) {
-				info.skip_to(i->request_offset_end());
+			auto prev = it2++;
+			if (it2 == it->Subblocks.end()) {
+				info.skip_to(it->request_offset_end());
 				break;
 			}
-			j->RequestOffset = prev->RequestOffset + prev->DecompressedSize;
-			j->BlockOffset = prev->BlockOffset + prev->BlockSize;
+			it2->RequestOffset = prev->RequestOffset + prev->DecompressedSize;
+			it2->BlockOffset = prev->BlockOffset + prev->BlockSize;
 		}
 	}
 

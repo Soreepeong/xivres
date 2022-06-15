@@ -43,8 +43,6 @@ namespace xivres {
 			}
 		};
 
-		std::mutex m_mtx;
-
 		std::vector<uint8_t> m_head;
 		std::vector<block_info_t> m_blocks;
 

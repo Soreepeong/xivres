@@ -8,7 +8,7 @@ namespace xivres::util {
 	template<typename T>
 	union byte_order_storage {
 		T Value;
-		char Bytes[sizeof T];
+		char Bytes[sizeof(T)];
 
 		static byte_order_storage<T> from_without_swap(T value) {
 			return byte_order_storage<T>(value);
@@ -39,7 +39,7 @@ namespace xivres::util {
 
 		else {
 			auto storage = byte_order_storage(value);
-			std::reverse(storage.Bytes, storage.Bytes + sizeof T);
+			std::reverse(storage.Bytes, storage.Bytes + sizeof(T));
 			return storage;
 		}
 	}
@@ -59,7 +59,7 @@ namespace xivres::util {
 			return static_cast<T>(_byteswap_uint64(static_cast<uint64_t>(storage.Value)));
 
 		else {
-			std::reverse(storage.Bytes, storage.Bytes + sizeof T);
+			std::reverse(storage.Bytes, storage.Bytes + sizeof(T));
 			return storage.Value;
 		}
 	}

@@ -380,7 +380,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 		}
 
 		if (progressCallback && !progressCallback(currentBlockIndex))
-			throw util::cancelled_error();
+			return {};
 		if (data.empty())
 			break;
 	}

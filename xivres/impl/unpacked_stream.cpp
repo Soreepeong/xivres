@@ -8,8 +8,9 @@
 #pragma warning(push)
 #pragma warning(disable: 26495)
 // ReSharper disable once CppPossiblyUninitializedMember
-xivres::base_unpacker::block_decoder::block_decoder(void* buf, std::streamsize length, std::streampos offset)  // NOLINT(cppcoreguidelines-pro-type-member-init)
-	: m_target(static_cast<uint8_t*>(buf), static_cast<size_t>(length))
+xivres::base_unpacker::block_decoder::block_decoder(base_unpacker& unpacker, void* buf, std::streamsize length, std::streampos offset)  // NOLINT(cppcoreguidelines-pro-type-member-init)
+	: m_unpacker(unpacker)
+	, m_target(static_cast<uint8_t*>(buf), static_cast<size_t>(length))
 	, m_remaining(m_target)
 	, m_skipLength(static_cast<uint32_t>(offset))
 	, m_currentOffset(0) {
@@ -58,46 +59,84 @@ bool xivres::base_unpacker::block_decoder::forward(std::span<uint8_t> data) {
 }
 
 bool xivres::base_unpacker::block_decoder::forward(const stream& strm, const uint32_t blockOffset, const size_t knownBlockSize) {
-	const auto data = std::span(m_buffer, static_cast<size_t>(strm.read(blockOffset, m_buffer, static_cast<std::streamsize>(knownBlockSize))));
+	auto& [buffer, inflater] = *m_unpacker.m_tls;
+	buffer.resize(knownBlockSize);
+
+	const auto data = std::span(&buffer[0], static_cast<size_t>(strm.read(blockOffset, &buffer[0], static_cast<std::streamsize>(knownBlockSize))));
 
 	if (data.empty())
 		throw bad_data_error("Empty block read");
 	
-	if (data.size() < sizeof block_header())
+	if (data.size() < sizeof MostRecentBlockHeader)
 		throw bad_data_error("Block read size < sizeof blockHeader");
 	
-	if (data.size() < block_header().total_block_size())
+	memcpy(&MostRecentBlockHeader, &buffer[0], sizeof MostRecentBlockHeader);
+
+	if (data.size() < MostRecentBlockHeader.total_block_size())
 		throw bad_data_error("Incomplete block read");
 
-	if (sizeof m_buffer < block_header().total_block_size())
+	if (MostRecentBlockHeader.total_block_size() > buffer.size())
 		throw bad_data_error("sizeof blockHeader + blockHeader.CompressSize must be under 16K");
 
-	if (m_skipLength >= block_header().DecompressedSize)
-		return skip(block_header().DecompressedSize);
+	if (m_skipLength >= MostRecentBlockHeader.DecompressedSize)
+		return skip(MostRecentBlockHeader.DecompressedSize);
 
-	const auto target = m_remaining.subspan(0, (std::min)(m_remaining.size_bytes(), static_cast<size_t>(block_header().DecompressedSize - m_skipLength)));
-	if (block_header().compressed()) {
-		if (sizeof block_header() + block_header().CompressedSize > data.size_bytes())
+	const auto target = m_remaining.subspan(0, (std::min)(m_remaining.size_bytes(), static_cast<size_t>(MostRecentBlockHeader.DecompressedSize - m_skipLength)));
+	if (MostRecentBlockHeader.compressed()) {
+		if (sizeof MostRecentBlockHeader + MostRecentBlockHeader.CompressedSize > data.size_bytes())
 			throw bad_data_error("Failed to read block");
 
-		if (m_skipLength) {
-			const auto buf = m_inflater(data.subspan(sizeof block_header(), block_header().CompressedSize), block_header().DecompressedSize);
-			if (buf.size_bytes() != block_header().DecompressedSize)
-				throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-					*block_header().DecompressedSize, buf.size_bytes()));
-			std::copy_n(&buf[static_cast<size_t>(m_skipLength)],
-				target.size_bytes(),
-				target.begin());
-			
+		if (m_bMultithreaded) {
+			m_waiter.submit([this, target, buffer_ = std::move(buffer), dataLength = data.size(), skip = m_skipLength](auto& c) mutable {
+				auto& [buffer, inflater] = *m_unpacker.m_tls;
+				buffer = std::move(buffer_);
+				const auto data = std::span(buffer).subspan(0, dataLength);
+
+				if (!inflater)
+					inflater.emplace(-MAX_WBITS);
+
+				const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
+				if (skip) {
+					const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
+					if (buf.size_bytes() != blockHeader.DecompressedSize)
+						throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
+							*blockHeader.DecompressedSize, buf.size_bytes()));
+					std::copy_n(&buf[static_cast<size_t>(skip)],
+						target.size_bytes(),
+						target.begin());
+
+				} else {
+					const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);
+					if (buf.size_bytes() != target.size_bytes())
+						throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
+							target.size_bytes(), buf.size_bytes()));
+				}
+			});
+
 		} else {
-			const auto buf = m_inflater(data.subspan(sizeof block_header(), block_header().CompressedSize), target);
-			if (buf.size_bytes() != target.size_bytes())
-				throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-					target.size_bytes(), buf.size_bytes()));
+			if (!inflater)
+				inflater.emplace(-MAX_WBITS);
+
+			const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
+			if (m_skipLength) {
+				const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
+				if (buf.size_bytes() != blockHeader.DecompressedSize)
+					throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
+						*blockHeader.DecompressedSize, buf.size_bytes()));
+				std::copy_n(&buf[static_cast<size_t>(m_skipLength)],
+					target.size_bytes(),
+					target.begin());
+
+			} else {
+				const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);
+				if (buf.size_bytes() != target.size_bytes())
+					throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
+						target.size_bytes(), buf.size_bytes()));
+			}
 		}
 
 	} else {
-		std::copy_n(&data[static_cast<size_t>(sizeof block_header() + m_skipLength)], target.size(), target.begin());
+		std::copy_n(&data[static_cast<size_t>(sizeof MostRecentBlockHeader + m_skipLength)], target.size(), target.begin());
 	}
 
 	return skip(m_skipLength + target.size_bytes(), true);

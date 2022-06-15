@@ -9,6 +9,7 @@
 #include "path_spec.h"
 #include "sqpack.h"
 #include "stream.h"
+#include "util.thread_pool.h"
 #include "util.zlib_wrapper.h"
 
 namespace xivres {
@@ -137,17 +138,16 @@ namespace xivres {
 	class compressing_packer {
 		const stream& m_stream;
 		const int m_nCompressionLevel;
+		const bool m_bMultithreaded;
 		bool m_bCancel = false;
 		
-		std::vector<std::optional<util::zlib_deflater>> m_deflaters;
-		std::vector<std::vector<uint8_t>> m_buffers;
+		util::thread_pool::scoped_tls<std::pair<std::vector<uint8_t>, std::optional<util::zlib_deflater>>> m_threadLocals;
 
 	public:
-		compressing_packer(const stream& strm, int compressionLevel, size_t cores)
+		compressing_packer(const stream& strm, int compressionLevel, bool multithreaded)
 			: m_stream(strm)
 			, m_nCompressionLevel(compressionLevel)
-			, m_deflaters((std::max<size_t>)(cores, 1))
-			, m_buffers((std::max<size_t>)(cores, 1)) {
+			, m_bMultithreaded(multithreaded) {
 		}
 
 		virtual ~compressing_packer() = default;
@@ -163,39 +163,28 @@ namespace xivres {
 			uint32_t DecompressedSize{};
 			std::vector<uint8_t> Data;
 		};
+
+		[[nodiscard]] bool multithreaded() const {
+			return m_bMultithreaded;
+		}
 		
-		[[nodiscard]] bool is_cancelled() const {
+		[[nodiscard]] bool cancelled() const {
 			return m_bCancel;
 		}
 		
 		[[nodiscard]] const stream& unpacked() const {
 			return m_stream;
 		}
-		
-		[[nodiscard]] size_t cores() const {
-			return m_deflaters.size();
-		}
 
 		[[nodiscard]] int compression_level() const {
 			return m_nCompressionLevel;
 		}
-		
-		util::zlib_deflater& deflater_at(size_t threadIndex) {
-			auto& deflater = m_deflaters[threadIndex];
-			if (compression_level() && !deflater)
-				deflater.emplace(compression_level(), Z_DEFLATED, -15);
-			return *deflater;
-		}
 
-		std::vector<uint8_t>& buffer_at(size_t threadIndex) {
-			return m_buffers[threadIndex];
-		}
-
-		void compress_block(size_t threadIndex, uint32_t offset, uint32_t length, block_data_t& blockData) {
-			if (is_cancelled())
+		void compress_block(uint32_t offset, uint32_t length, block_data_t& blockData) {
+			if (cancelled())
 				return;
 
-			auto& buffer = buffer_at(threadIndex);
+			auto& [buffer, deflater] = *m_threadLocals;
 
 			buffer.clear();
 			buffer.resize(length);
@@ -204,10 +193,16 @@ namespace xivres {
 
 			blockData.DecompressedSize = static_cast<uint32_t>(length);
 			blockData.AllZero = std::ranges::all_of(buffer, [](const auto& c) { return !c; });
-			if ((blockData.Deflated = compression_level() && deflater_at(threadIndex).deflate(std::span(buffer)).size() < buffer.size()))
-				blockData.Data = std::move(deflater_at(threadIndex).result());
-			else
-				blockData.Data = std::move(buffer);
+			if (compression_level()) {
+				if (!deflater)
+					deflater.emplace(compression_level(), Z_DEFLATED, -15);
+				if (deflater->deflate(std::span(buffer)).size() < buffer.size()) {
+					blockData.Data = std::move(deflater->result());
+					blockData.Deflated = true;
+					return;
+				}
+			}
+			blockData.Data = std::move(buffer);
 		}
 	};
 
@@ -218,14 +213,14 @@ namespace xivres {
 		mutable std::mutex m_mtx;
 		mutable std::shared_ptr<const stream> m_stream;
 		mutable int m_compressionLevel;
-		const size_t m_nCores;
+		const bool m_bMultithreaded;
 
 	public:
-		compressing_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm, int compressionLevel = Z_BEST_COMPRESSION, size_t cores = std::thread::hardware_concurrency())
+		compressing_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm, int compressionLevel = Z_BEST_COMPRESSION, bool multithreaded = true)
 			: packed_stream(std::move(spec))
 			, m_stream(std::move(strm))
 			, m_compressionLevel(compressionLevel)
-			, m_nCores(cores) {
+			, m_bMultithreaded(multithreaded) {
 		}
 
 		[[nodiscard]] std::streamsize size() const final {
@@ -251,7 +246,7 @@ namespace xivres {
 			if (m_compressionLevel == CompressionLevel_AlreadyPacked)
 				return;
 
-			auto newStream = TPacker(*m_stream, m_compressionLevel, m_nCores).pack();
+			auto newStream = TPacker(*m_stream, m_compressionLevel, m_bMultithreaded).pack();
 			if (!newStream)
 				throw std::logic_error("TODO; cancellation currently unhandled");
 

@@ -1276,37 +1276,29 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 }
 
 void preload_stuff() {
-	std::thread([]() {
-		xivres::util::thread_pool pool;
-		try {
-			auto packIds = get_installation().get_sqpack_ids();
-			std::ranges::sort(packIds, [](const auto l, const auto r) {
-				auto partIdL = l & 0xFF;
-				auto partIdR = r & 0xFF;
-				if (partIdL != partIdR)
-					return partIdL < partIdR;
+	auto packIds = get_installation().get_sqpack_ids();
+	std::ranges::sort(packIds, [](const auto l, const auto r) {
+		auto partIdL = l & 0xFF;
+		auto partIdR = r & 0xFF;
+		if (partIdL != partIdR)
+			return partIdL < partIdR;
 
-				auto expacIdL = (l >> 8) & 0xFF;
-				auto expacIdR = (r >> 8) & 0xFF;
-				if (expacIdL != expacIdR)
-					return expacIdL < expacIdR;
+		auto expacIdL = (l >> 8) & 0xFF;
+		auto expacIdR = (r >> 8) & 0xFF;
+		if (expacIdL != expacIdR)
+			return expacIdL < expacIdR;
 
-				auto categoryIdL = l >> 16;
-				auto categoryIdR = r >> 16;
-				if (categoryIdL != categoryIdR)
-					return categoryIdL < categoryIdR;
-				return false;
-			});
-			for (const auto id : packIds) {
-				pool.Submit([id]() {
-					static_cast<void>(get_sqpack_view(sqpack_id_t::from_filename_int(id)));
-				});
-			}
-			pool.SubmitDoneAndWait();
-		} catch (const std::exception&) {
-			pool.PropagateInnerErrorIfErrorOccurred();
-		}
-	}).detach();
+		auto categoryIdL = l >> 16;
+		auto categoryIdR = r >> 16;
+		if (categoryIdL != categoryIdR)
+			return categoryIdL < categoryIdR;
+		return false;
+	});
+	for (const auto id : packIds) {
+		xivres::util::thread_pool::pool::instance().submit<void>([id](auto&) {
+			static_cast<void>(get_sqpack_view(sqpack_id_t::from_filename_int(id)));
+		});
+	}
 }
 
 void do_stuff() {

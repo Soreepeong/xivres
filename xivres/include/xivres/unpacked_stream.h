@@ -2,24 +2,35 @@
 #define XIVRES_PACKEDFILEUNPACKINGSTREAM_H_
 
 #include "packed_stream.h"
+#include "util.thread_pool.h"
 #include "util.zlib_wrapper.h"
 
 namespace xivres {
+	class unpacked_stream;
+
 	class base_unpacker {
 	protected:
+		util::thread_pool::scoped_tls<std::vector<uint8_t>> m_tlsPreload;
+		util::thread_pool::scoped_tls<std::pair<std::vector<uint8_t>, std::optional<util::zlib_inflater>>> m_tls;
+
 		class block_decoder {
 			static constexpr auto ReadBufferMaxSize = 16384;
 
-			uint8_t m_buffer[ReadBufferMaxSize];
+			base_unpacker& m_unpacker;
+			util::thread_pool::task_waiter<> m_waiter;
+			bool m_bMultithreaded = false;
+
 			const std::span<uint8_t> m_target;
 			std::span<uint8_t> m_remaining;
 			uint32_t m_skipLength;
 			uint32_t m_currentOffset;
 
-			util::zlib_inflater m_inflater{ -MAX_WBITS };
-
 		public:
-			block_decoder(void* buf, std::streamsize length, std::streampos offset);
+			packed::block_header MostRecentBlockHeader;
+
+			block_decoder(base_unpacker& stream, void* buf, std::streamsize length, std::streampos offset);
+
+			void multithreaded(bool m) { m_bMultithreaded = m; }
 
 			bool skip(size_t lengthToSkip, bool dataFilled = false);
 
@@ -29,21 +40,20 @@ namespace xivres {
 
 			bool forward(const stream& strm, uint32_t blockOffset, size_t knownBlockSize = ReadBufferMaxSize);
 
-			[[nodiscard]] const auto& block_header() const { return *reinterpret_cast<const packed::block_header*>(m_buffer); }
-
 			[[nodiscard]] uint32_t current_offset() const { return m_currentOffset; }
 
 			[[nodiscard]] bool complete() const { return m_remaining.empty(); }
 
-			[[nodiscard]] std::streamsize filled() const { return static_cast<std::streamsize>(m_target.size() - m_remaining.size()); }
+			[[nodiscard]] std::streamsize filled() { m_waiter.wait_all(); return static_cast<std::streamsize>(m_target.size() - m_remaining.size()); }
 		};
 
-		const uint32_t m_size;
+		const uint32_t m_size, m_packedSize;
 		const std::shared_ptr<const packed_stream> m_stream;
 
 	public:
 		base_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
 			: m_size(header.DecompressedSize)
+			, m_packedSize(static_cast<uint32_t>(header.occupied_size()))
 			, m_stream(std::move(strm)) {}
 		base_unpacker(base_unpacker&&) = delete;
 		base_unpacker(const base_unpacker&) = delete;

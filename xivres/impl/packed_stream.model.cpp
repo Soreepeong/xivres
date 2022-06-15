@@ -224,8 +224,8 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 
 	std::vector<std::vector<block_data_t>> blockDataList;
 	blockDataList.reserve(11);
-	
-	if (cores() <= 1) {
+
+	if (!multithreaded()) {
 		auto baseFileOffset = static_cast<uint32_t>(sizeof unpackedHeader);
 		const auto generateSet = [&](const uint32_t setSize) {
 			const auto alignedBlock = align<uint32_t, uint16_t>(setSize, packed::MaxBlockDataSize);
@@ -234,8 +234,8 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			setBlockDataList.resize(alignedBlock.Count);
 
 			alignedBlock.iterate_chunks_breakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
-				compress_block(0, offset, length, setBlockDataList[blockIndex]);
-				return !is_cancelled();
+				compress_block(offset, length, setBlockDataList[blockIndex]);
+				return !cancelled();
 			}, baseFileOffset);
 
 			baseFileOffset += setSize;
@@ -249,9 +249,9 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			generateSet(unpackedHeader.IndexOffset[i] - unpackedHeader.VertexOffset[i] - unpackedHeader.VertexSize[i]);
 			generateSet(unpackedHeader.IndexSize[i]);
 		}
-		
+
 	} else {
-		util::thread_pool pool(cores());
+		util::thread_pool::task_waiter waiter;
 		auto baseFileOffset = static_cast<uint32_t>(sizeof unpackedHeader);
 		const auto generateSet = [&](const uint32_t setSize) {
 			const auto alignedBlock = align<uint32_t, uint16_t>(setSize, packed::MaxBlockDataSize);
@@ -260,36 +260,33 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			setBlockDataList.resize(alignedBlock.Count);
 
 			alignedBlock.iterate_chunks_breakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
-				pool.Submit([this, offset, length, &blockData = setBlockDataList[blockIndex]](size_t threadIndex) {
-					if (!is_cancelled())
-						compress_block(threadIndex, offset, length, blockData);
+				waiter.submit([this, offset, length, &blockData = setBlockDataList[blockIndex]](util::thread_pool::task<void>& c) {
+					if (c.cancelled())
+						cancel();
+					if (!cancelled())
+						compress_block(offset, length, blockData);
 				});
-				
-				return !is_cancelled();
+
+				return !cancelled();
 			}, baseFileOffset);
 
 			baseFileOffset += setSize;
 		};
 
-		try {
-			generateSet(unpackedHeader.StackSize);
-			generateSet(unpackedHeader.RuntimeSize);
+		generateSet(unpackedHeader.StackSize);
+		generateSet(unpackedHeader.RuntimeSize);
 
-			for (size_t i = 0; i < 3; i++) {
-				generateSet(unpackedHeader.VertexSize[i]);
-				generateSet(unpackedHeader.IndexOffset[i] - unpackedHeader.VertexOffset[i] - unpackedHeader.VertexSize[i]);
-				generateSet(unpackedHeader.IndexSize[i]);
-			}
-
-			pool.SubmitDoneAndWait();
-		} catch (...) {
-			// pass
+		for (size_t i = 0; i < 3; i++) {
+			generateSet(unpackedHeader.VertexSize[i]);
+			generateSet(unpackedHeader.IndexOffset[i] - unpackedHeader.VertexOffset[i] - unpackedHeader.VertexSize[i]);
+			generateSet(unpackedHeader.IndexSize[i]);
 		}
 
-		pool.SubmitDoneAndWait();
+		if (!cancelled())
+			waiter.wait_all();
 	}
 
-	if (is_cancelled())
+	if (cancelled())
 		return nullptr;
 
 	size_t totalBlockCount = 0, entryBodyLength = 0;
@@ -326,7 +323,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 	{
 		uint16_t totalBlockIndex = 0;
 		uint32_t nextBlockOffset = 0;
-		
+
 		auto resultDataPtr = result.begin() + entryHeaderLength;
 		auto baseFileOffset = static_cast<uint32_t>(sizeof unpackedHeader);
 		const auto generateSet = [&](size_t setIndex, const uint32_t size) {
@@ -336,7 +333,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			const auto firstBlockIndex = static_cast<uint16_t>(totalBlockIndex);
 
 			alignedBlock.iterate_chunks([&](size_t blockIndex, uint32_t offset, uint32_t length) {
-				if (is_cancelled())
+				if (cancelled())
 					return false;
 				auto& blockData = blockDataList[setIndex][blockIndex];
 
@@ -385,7 +382,7 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			modelHeader.ChunkSizes.Runtime) = generateSet(setIndexCounter++, unpackedHeader.RuntimeSize);
 
 		for (size_t i = 0; i < 3; i++) {
-			if (is_cancelled())
+			if (cancelled())
 				return {};
 
 			std::tie(modelHeader.AlignedDecompressedSizes.Vertex[i],

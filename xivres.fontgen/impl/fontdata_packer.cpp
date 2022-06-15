@@ -145,7 +145,7 @@ void xivres::fontgen::fontdata_packer::layout_glyphs() {
 	plansInProgress.reserve(m_targetPlans.size());
 	plansToTryAgain.reserve(m_targetPlans.size());
 
-	util::thread_pool pool(m_nThreads);
+	util::thread_pool::task_waiter waiter;
 
 	for (auto& rectangleInfo : m_targetPlans)
 		plansToTryAgain.emplace_back(&rectangleInfo);
@@ -223,13 +223,13 @@ void xivres::fontgen::fontdata_packer::layout_glyphs() {
 		if (successfulPlans.empty())
 			throw std::runtime_error("Failed to pack some characters");
 
-		draw_layoutted_glyphs(planeIndex, pool, std::move(successfulPlans));
+		draw_layoutted_glyphs(waiter, planeIndex, std::move(successfulPlans));
 	}
 
-	pool.SubmitDoneAndWait();
+	waiter.wait_all();
 }
 
-void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(size_t planeIndex, util::thread_pool<>& pool, std::vector<target_plan*> successfulPlans) {
+void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::task_waiter<>& waiter, size_t planeIndex, std::vector<target_plan*> successfulPlans) {
 	if (m_bCancelRequested)
 		return;
 
@@ -246,11 +246,12 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(size_t planeIndex, 
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(pSuccesses->size()))));
 
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		pool.Submit([this, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](size_t nThreadIndex) {
+		waiter.submit([this, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](util::thread_pool::task<void>& task) {
 			for (size_t i = nBase; i < pSuccesses->size() && !m_bCancelRequested; i += divideUnit) {
+				task.throw_if_cancelled();
 				++m_nCurrentProgress;
 				const auto& info = *(*pSuccesses)[i];
-				const auto& font = get_threadsafe_base_font(info.BaseFont, nThreadIndex);
+				const auto& font = get_threadsafe_base_font(info.BaseFont);
 				font.draw(
 					info.Codepoint,
 					pCurrentTargetBuffer,
@@ -267,17 +268,17 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(size_t planeIndex, 
 }
 
 void xivres::fontgen::fontdata_packer::measure_glyphs() {
-	util::thread_pool pool(m_nThreads);
+	util::thread_pool::task_waiter waiter;
 
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(m_targetPlans.size()))));
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		pool.Submit([this, divideUnit, &pool, nBase](size_t nThreadIndex) {
+		waiter.submit([this, divideUnit, nBase](util::thread_pool::task<void>& task) {
 			for (size_t i = nBase; i < m_targetPlans.size() && !m_bCancelRequested; i += divideUnit) {
 				++m_nCurrentProgress;
-				pool.AbortIfErrorOccurred();
+				task.throw_if_cancelled();
 
 				auto& info = m_targetPlans[i];
-				const auto& baseFont = get_threadsafe_base_font(info.BaseFont, nThreadIndex);
+				const auto& baseFont = get_threadsafe_base_font(info.BaseFont);
 
 				glyph_metrics gm;
 				if (!baseFont.try_get_glyph_metrics(info.Codepoint, gm))
@@ -290,7 +291,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 				info.BaseEntry.NextOffsetX = gm.AdvanceX - gm.X2;
 
 				for (auto& target : info.Targets) {
-					const auto& sourceFont = get_threadsafe_source_font(target.SourceFontIndex, nThreadIndex);
+					const auto& sourceFont = get_threadsafe_source_font(target.SourceFontIndex);
 					if (!sourceFont.try_get_glyph_metrics(info.Codepoint, gm))
 						throw std::runtime_error("Font reported to have a codepoint but it's failing to report glyph metrics");
 					if (gm.X1 < 0)
@@ -312,7 +313,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 		});
 	}
 
-	pool.SubmitDoneAndWait();
+	waiter.wait_all();
 }
 
 void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
@@ -333,10 +334,8 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 				pInfo = &m_targetPlans.back();
 				pInfo->BaseFont = font->get_base_font(codepoint);
 				pInfo->Codepoint = pInfo->BaseFont->uniqid_to_glyph(uniqid);
-				if (m_threadSafeBaseFonts[pInfo->BaseFont].empty()) {
-					m_threadSafeBaseFonts[pInfo->BaseFont].resize(m_nThreads);
-					m_threadSafeBaseFonts[pInfo->BaseFont][0] = pInfo->BaseFont->get_threadsafe_view();
-				}
+				if (!m_baseFonts[pInfo->BaseFont])
+					m_baseFonts[pInfo->BaseFont] = pInfo->BaseFont->get_threadsafe_view();
 				pInfo->UnicodeBlock = &block;
 				pInfo->BaseEntry.codepoint(pInfo->Codepoint);
 			}
@@ -370,25 +369,23 @@ void xivres::fontgen::fontdata_packer::prepare_threadsafe_source_fonts() {
 	size_t nMaxCharacterCount = 0;
 	for (const auto& font : m_sourceFonts) {
 		nMaxCharacterCount += font->all_codepoints().size();
-		m_threadSafeSourceFonts.emplace_back();
-		m_threadSafeSourceFonts.back().resize(m_nThreads);
-		m_threadSafeSourceFonts.back()[0] = font->get_threadsafe_view();
+		m_threadSafeSourceFonts.emplace_back(std::make_unique<util::thread_pool::scoped_tls<std::shared_ptr<fixed_size_font>>>());
 	}
 
 	m_targetPlans.reserve(nMaxCharacterCount);
 }
 
-const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_source_font(size_t fontIndex, size_t threadIndex) {
-	auto& copy = m_threadSafeSourceFonts[fontIndex][threadIndex];
+const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_source_font(size_t fontIndex) {
+	auto& copy = **m_threadSafeSourceFonts[fontIndex];
 	if (!copy)
-		copy = m_threadSafeSourceFonts[fontIndex][0]->get_threadsafe_view();
+		copy = m_sourceFonts[fontIndex]->get_threadsafe_view();
 	return *copy;
 }
 
-const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_base_font(const fixed_size_font* font, size_t threadIndex) {
-	auto& copy = m_threadSafeBaseFonts[font][threadIndex];
+const xivres::fontgen::fixed_size_font& xivres::fontgen::fontdata_packer::get_threadsafe_base_font(const fixed_size_font* font) {
+	auto& copy = *m_threadSafeBaseFonts[font];
 	if (!copy)
-		copy = m_threadSafeBaseFonts[font][0]->get_threadsafe_view();
+		copy = m_baseFonts[font]->get_threadsafe_view();
 	return *copy;
 }
 

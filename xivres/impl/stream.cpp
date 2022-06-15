@@ -4,6 +4,7 @@
 #endif
 
 #include "../include/xivres/stream.h"
+#include "../include/xivres/util.thread_pool.h"
 
 void xivres::stream::read_fully(std::streamoff offset, void* buf, std::streamsize length) const {
 	if (read(offset, buf, length) != length) {
@@ -55,32 +56,29 @@ std::unique_ptr<xivres::stream> xivres::partial_view_stream::substream(std::stre
 
 #ifdef _WINDOWS_
 
-struct xivres::file_stream::Data {
+struct xivres::file_stream::data {
 	const std::filesystem::path m_path;
 	const HANDLE m_hFile;
-	HANDLE m_hDummyEvent{};
+	util::thread_pool::scoped_tls<std::shared_ptr<void>> m_hDummyEvents{ [](std::shared_ptr<void>& h) {
+		const auto handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+		if (handle == nullptr)
+			throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+		h = { handle, [](HANDLE h) {CloseHandle(h); } };
+	} };
 
-	Data(std::filesystem::path path)
+	data(std::filesystem::path path)
 		: m_path(std::move(path))
 		, m_hFile(CreateFileW(m_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr)) {
 		if (m_hFile == INVALID_HANDLE_VALUE)
 			throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
-
-		m_hDummyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-		if (m_hDummyEvent == nullptr) {
-			auto err = std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
-			CloseHandle(m_hFile);
-			throw std::move(err);
-		}
 	}
 
-	Data(Data&&) = delete;
-	Data(const Data&) = delete;
-	Data& operator=(Data&&) = delete;
-	Data& operator=(const Data&) = delete;
+	data(data&&) = delete;
+	data(const data&) = delete;
+	data& operator=(data&&) = delete;
+	data& operator=(const data&) = delete;
 
-	~Data() {
-		CloseHandle(m_hDummyEvent);
+	~data() {
 		CloseHandle(m_hFile);
 	}
 
@@ -106,7 +104,7 @@ struct xivres::file_stream::Data {
 		} else {
 			DWORD readLength = 0;
 			OVERLAPPED ov{};
-			ov.hEvent = m_hDummyEvent;
+			ov.hEvent = m_hDummyEvents->get();
 			ov.Offset = static_cast<DWORD>(offset);
 			ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
 			if (!ReadFile(m_hFile, buf, static_cast<DWORD>(length), &readLength, &ov)) {
@@ -121,7 +119,7 @@ struct xivres::file_stream::Data {
 
 #else
 
-struct xivres::file_stream::Data {
+struct xivres::file_stream::data {
 	const std::filesystem::path m_path;
 	mutable std::mutex m_mutex;
 	mutable std::vector<std::ifstream> m_streams;
@@ -174,7 +172,7 @@ struct xivres::file_stream::Data {
 
 #endif
 
-xivres::file_stream::file_stream(std::filesystem::path path) : m_data(std::make_unique<Data>(std::move(path))) {
+xivres::file_stream::file_stream(std::filesystem::path path) : m_data(std::make_unique<data>(std::move(path))) {
 }
 
 xivres::file_stream::~file_stream() = default;
@@ -211,7 +209,12 @@ xivres::memory_stream& xivres::memory_stream::operator=(std::vector<uint8_t>&& b
 	return *this;
 }
 
-xivres::memory_stream::memory_stream(std::span<const uint8_t> view) : m_view(view) {
+xivres::memory_stream::memory_stream(std::span<uint8_t> view)
+	: m_view(std::span<const uint8_t>(&view[0], view.size())) {
+}
+
+xivres::memory_stream::memory_stream(std::span<const uint8_t> view)
+	: m_view(view) {
 }
 
 xivres::memory_stream::memory_stream(memory_stream&& r) noexcept

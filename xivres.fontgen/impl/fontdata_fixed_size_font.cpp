@@ -302,7 +302,7 @@ xivres::fontgen::game_fontdata_set xivres::installation::get_fontdata_set(font_t
 	std::vector<std::shared_ptr<texture::memory_mipmap_stream>> textures;
 	try {
 		for (int i = 1; ; i++)
-			textures.emplace_back(texture::memory_mipmap_stream::as_argb8888(*texture::stream(get_file(std::format(pcszTexturePathPattern, i))).mipmap_at(0, 0)));
+			textures.emplace_back(texture::memory_mipmap_stream::as_argb8888(*texture::stream(get_file(std::vformat(std::string_view(pcszTexturePathPattern), std::make_format_args(i)))).mipmap_at(0, 0)));
 	} catch (const std::out_of_range&) {
 		// do nothing
 	}

@@ -162,7 +162,7 @@ std::streamsize xivres::texture_passthrough_packer::translate_read(std::streamof
 		// 1. Find the first LOD block
 		relativeOffset += m_blockLocators[0].CompressedOffset;
 		auto it = std::ranges::lower_bound(m_blockLocators,
-			packed::mipmap_block_locator{.CompressedOffset = static_cast<uint32_t>(relativeOffset)},
+			packed::mipmap_block_locator{ .CompressedOffset = static_cast<uint32_t>(relativeOffset) },
 			[&](const auto& l, const auto& r) { return l.CompressedOffset < r.CompressedOffset; });
 		if (it == m_blockLocators.end() || relativeOffset < it->CompressedOffset)
 			--it;
@@ -261,7 +261,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 	unpacked().read_fully(sizeof texture::header + mipmapOffsets.size_bytes(), std::span(textureHeaderAndMipmapOffsets).subspan(sizeof texture::header + mipmapOffsets.size_bytes()));
 	const auto& texHeader = *reinterpret_cast<const texture::header*>(&textureHeaderAndMipmapOffsets[0]);
 
-	if (is_cancelled())
+	if (cancelled())
 		return nullptr;
 
 	std::vector<uint32_t> mipmapSizes(mipmapOffsets.size());
@@ -276,9 +276,9 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 
 	std::vector<std::vector<std::vector<block_data_t>>> blockDataList(mipmapSizes.size());
 
-	if (cores() <= 1) {
+	if (!multithreaded()) {
 		for (size_t mipmapIndex = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {
-			if (is_cancelled())
+			if (cancelled())
 				return nullptr;
 
 			const auto mipmapSize = mipmapSizes[mipmapIndex];
@@ -286,7 +286,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 			blockDataList[mipmapIndex].resize(repeatCount);
 
 			for (uint32_t repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
-				if (is_cancelled())
+				if (cancelled())
 					return nullptr;
 
 				const auto repeatedUnitOffset = mipmapOffset + mipmapSize * repeatIndex;
@@ -296,54 +296,51 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 				blockDataVector.resize(blockAlignment.Count);
 
 				blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-					compress_block(0, offset, length, blockDataVector[index]);
-					return !is_cancelled();
+					compress_block(offset, length, blockDataVector[index]);
+					return !cancelled();
 				}, repeatedUnitOffset);
 			}
 		}
-		
-	} else {
-		util::thread_pool pool(cores());
 
-		try {
-			for (size_t mipmapIndex = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {
-				if (is_cancelled())
+	} else {
+		util::thread_pool::task_waiter waiter;
+
+		for (size_t mipmapIndex = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {
+			if (cancelled())
+				return nullptr;
+
+			const auto mipmapSize = mipmapSizes[mipmapIndex];
+			const auto mipmapOffset = mipmapOffsets[mipmapIndex];
+			blockDataList[mipmapIndex].resize(repeatCount);
+
+			for (uint32_t repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
+				if (cancelled())
 					return nullptr;
 
-				const auto mipmapSize = mipmapSizes[mipmapIndex];
-				const auto mipmapOffset = mipmapOffsets[mipmapIndex];
-				blockDataList[mipmapIndex].resize(repeatCount);
+				const auto repeatedUnitOffset = mipmapOffset + mipmapSize * repeatIndex;
 
-				for (uint32_t repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
-					if (is_cancelled())
-						return nullptr;
+				const auto blockAlignment = align<uint32_t>(mipmapSize, packed::MaxBlockDataSize);
+				auto& blockDataVector = blockDataList[mipmapIndex][repeatIndex];
+				blockDataVector.resize(blockAlignment.Count);
 
-					const auto repeatedUnitOffset = mipmapOffset + mipmapSize * repeatIndex;
+				blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+					waiter.submit([this, offset, length, &blockData = blockDataVector[index]](util::thread_pool::task<void>& c) {
+						if (c.cancelled())
+							cancel();
+						if (!cancelled())
+							compress_block(offset, length, blockData);
+					});
 
-					const auto blockAlignment = align<uint32_t>(mipmapSize, packed::MaxBlockDataSize);
-					auto& blockDataVector = blockDataList[mipmapIndex][repeatIndex];
-					blockDataVector.resize(blockAlignment.Count);
-
-					blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-						pool.Submit([this, offset, length, &blockData = blockDataVector[index]](size_t threadIndex) {
-							if (!is_cancelled())
-								compress_block(threadIndex, offset, length, blockData);
-						});
-				
-						return !is_cancelled();
-					}, repeatedUnitOffset);
-				}
+					return !cancelled();
+				}, repeatedUnitOffset);
 			}
-
-			pool.SubmitDoneAndWait();
-		} catch (...) {
-			// pass
 		}
 
-		pool.SubmitDoneAndWait();
+		if (!cancelled())
+			waiter.wait_all();
 	}
 
-	if (is_cancelled())
+	if (cancelled())
 		return nullptr;
 
 	size_t entryBodyLength = textureHeaderAndMipmapOffsets.size();
@@ -384,11 +381,11 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 
 	auto blockOffsetCounter = static_cast<uint32_t>(std::span(textureHeaderAndMipmapOffsets).size_bytes());
 	for (size_t mipmapIndex = 0, subBlockCounter = 0, blockLocatorIndexCounter = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {
-		if (is_cancelled())
+		if (cancelled())
 			return nullptr;
 
 		for (uint32_t repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
-			if (is_cancelled())
+			if (cancelled())
 				return nullptr;
 
 			auto& loc = blockLocators[blockLocatorIndexCounter++];
@@ -399,7 +396,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 			loc.BlockCount = static_cast<uint32_t>(blockDataList[mipmapIndex][repeatIndex].size());
 
 			for (auto& blockData : blockDataList[mipmapIndex][repeatIndex]) {
-				if (is_cancelled())
+				if (cancelled())
 					return {};
 
 				auto& header = *reinterpret_cast<packed::block_header*>(&*resultDataPtr);

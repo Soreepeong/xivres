@@ -122,34 +122,31 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack() {
 	const auto blockAlignment = align<uint32_t>(rawStreamSize, packed::MaxBlockDataSize);
 	std::vector<block_data_t> blockDataList(blockAlignment.Count);
 
-	if (cores() <= 1) {
+	if (!multithreaded()) {
 		blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-			compress_block(0, offset, length, blockDataList[index]);
-			return !is_cancelled();
+			compress_block(offset, length, blockDataList[index]);
+			return !cancelled();
 		});
 		
 	} else {
-		util::thread_pool pool(cores());
+		util::thread_pool::task_waiter waiter;
 
-		try {
-			blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-				pool.Submit([this, offset, length, &blockData = blockDataList[index]](size_t threadIndex) {
-					if (!is_cancelled())
-						compress_block(threadIndex, offset, length, blockData);
-				});
-				
-				return !is_cancelled();
+		blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
+			waiter.submit([this, offset, length, &blockData = blockDataList[index]](util::thread_pool::task<void>& c) {
+				if (c.cancelled())
+					cancel();
+				if (!cancelled())
+					compress_block(offset, length, blockData);
 			});
-			
-			pool.SubmitDoneAndWait();
-		} catch (...) {
-			// pass
-		}
-			
-		pool.SubmitDoneAndWait();
+
+			return !cancelled();
+		});
+
+		if (!cancelled())
+			waiter.wait_all();
 	}
 
-	if (is_cancelled())
+	if (cancelled())
 		return nullptr;
 
 	const auto entryHeaderLength = static_cast<uint16_t>(align(0
@@ -173,7 +170,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack() {
 	auto resultDataPtr = result.begin() + entryHeaderLength;
 
 	blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-		if (is_cancelled())
+		if (cancelled())
 			return false;
 		auto& blockData = blockDataList[index];
 

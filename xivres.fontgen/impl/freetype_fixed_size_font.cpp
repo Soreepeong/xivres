@@ -35,7 +35,7 @@ public:
 		if (m_buf.empty())
 			return {};
 
-		return {reinterpret_cast<const T*>(&m_buf[0]), m_buf.size() / sizeof T};
+		return {reinterpret_cast<const T*>(&m_buf[0]), m_buf.size() / sizeof(T)};
 	}
 };
 

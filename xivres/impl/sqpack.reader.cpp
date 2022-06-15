@@ -263,10 +263,10 @@ std::shared_ptr<xivres::packed_stream> xivres::sqpack::reader::packed_at(const p
 	return packed_at(Entries[get_entry_index(pathSpec)]);
 }
 
-std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const entry_info& info, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {
+std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const entry_info& info, std::span<uint8_t> obfuscatedHeaderRewrite) const {
 	return std::make_shared<unpacked_stream>(packed_at(info), obfuscatedHeaderRewrite);
 }
 
-std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite /*= {}*/) const {
+std::shared_ptr<xivres::unpacked_stream> xivres::sqpack::reader::at(const path_spec& pathSpec, std::span<uint8_t> obfuscatedHeaderRewrite) const {
 	return std::make_shared<unpacked_stream>(packed_at(pathSpec), obfuscatedHeaderRewrite);
 }

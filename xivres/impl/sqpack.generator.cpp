@@ -563,23 +563,23 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 	std::vector<sqindex::data_locator> locators;
 
 	{
-		util::thread_pool<size_t, std::pair<entry_info*, std::vector<char>>> pool(cores);
-		for (size_t i = 0; i < entries.size(); ++i) {
-			pool.Submit(i, [this, entry = entries[i].get()]() {
-				return std::make_pair(entry, entry->Provider->read_vector<char>());
-			});
-		}
-
-		pool.SubmitDone();
-
+		util::thread_pool::task_waiter<std::pair<size_t, std::vector<char>>> waiter;
 		std::fstream dataFile;
-		for (size_t i = 0;; i++) {
-			const auto resultPair = pool.GetResult();
+
+		for (size_t i = 0;;) {
+			for (; i < entries.size() && waiter.pending() < (std::max<size_t>)(8, 2 * waiter.pool().concurrency()); ++i) {
+				waiter.submit([this, i, entry = entries[i].get()](util::thread_pool::task<std::pair<size_t, std::vector<char>>>& task) {
+					task.throw_if_cancelled();
+					return std::make_pair(i, entry->Provider->read_vector<char>());
+				});
+			}
+
+			const auto resultPair = waiter.get();
 			if (!resultPair)
 				break;
 
-			auto& entry = *resultPair->second.first;
-			auto& data = resultPair->second.second;
+			auto& entry = *entries[resultPair->first];
+			auto& data = resultPair->second;
 			ProgressCallback(i, entries.size());
 			const auto provider{std::move(entry.Provider)};
 			const auto entrySize = provider->size();

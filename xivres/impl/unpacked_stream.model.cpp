@@ -83,7 +83,7 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 	if (!length)
 		return 0;
 
-	block_decoder info(buf, length, offset);
+	block_decoder info(*this, buf, length, offset);
 	info.forward(util::span_cast<uint8_t>(1, &m_header));
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
@@ -91,10 +91,18 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
 	if (it != m_blocks.begin())
 		--it;
+
+	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
+	info.multithreaded(std::distance(it, itEnd) > 16);
+
+	const auto preloadFrom = it->BlockOffset;
+	const auto preloadTo = itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize: itEnd->BlockOffset;
+	const auto preloadStream = lazy_preloading_stream(m_stream, preloadFrom, preloadTo - preloadFrom);
+
 	for (; it != m_blocks.end(); ++it) {
 		if (info.skip_to(it->RequestOffsetPastHeader + sizeof m_header))
 			break;
-		if (info.forward(*m_stream, it->BlockOffset, it->PaddedChunkSize))
+		if (info.forward(preloadStream, it->BlockOffset, it->PaddedChunkSize))
 			break;
 	}
 	
