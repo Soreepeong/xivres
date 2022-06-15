@@ -304,6 +304,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 
 	} else {
 		util::thread_pool::task_waiter waiter;
+		preload();
 
 		for (size_t mipmapIndex = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {
 			if (cancelled())

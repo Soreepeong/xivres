@@ -141,7 +141,7 @@ namespace xivres {
 		const bool m_bMultithreaded;
 		bool m_bCancel = false;
 		
-		util::thread_pool::scoped_tls<std::pair<std::vector<uint8_t>, std::optional<util::zlib_deflater>>> m_threadLocals;
+		mutable std::optional<memory_stream> m_preloadedStream;
 
 	public:
 		compressing_packer(const stream& strm, int compressionLevel, bool multithreaded)
@@ -149,6 +149,11 @@ namespace xivres {
 			, m_nCompressionLevel(compressionLevel)
 			, m_bMultithreaded(multithreaded) {
 		}
+
+		compressing_packer(compressing_packer&&) = delete;
+		compressing_packer(const compressing_packer&) = delete;
+		compressing_packer& operator=(compressing_packer&&) = delete;
+		compressing_packer& operator=(const compressing_packer&) = delete;
 
 		virtual ~compressing_packer() = default;
 		
@@ -173,37 +178,16 @@ namespace xivres {
 		}
 		
 		[[nodiscard]] const stream& unpacked() const {
-			return m_stream;
+			return m_preloadedStream ? *m_preloadedStream : m_stream;
 		}
 
 		[[nodiscard]] int compression_level() const {
 			return m_nCompressionLevel;
 		}
 
-		void compress_block(uint32_t offset, uint32_t length, block_data_t& blockData) {
-			if (cancelled())
-				return;
+		void preload();
 
-			auto& [buffer, deflater] = *m_threadLocals;
-
-			buffer.clear();
-			buffer.resize(length);
-			if (const auto read = static_cast<size_t>(unpacked().read(offset, &buffer[0], length)); read != length)
-				std::fill_n(&buffer[read], length - read, 0);
-
-			blockData.DecompressedSize = static_cast<uint32_t>(length);
-			blockData.AllZero = std::ranges::all_of(buffer, [](const auto& c) { return !c; });
-			if (compression_level()) {
-				if (!deflater)
-					deflater.emplace(compression_level(), Z_DEFLATED, -15);
-				if (deflater->deflate(std::span(buffer)).size() < buffer.size()) {
-					blockData.Data = std::move(deflater->result());
-					blockData.Deflated = true;
-					return;
-				}
-			}
-			blockData.Data = std::move(buffer);
-		}
+		void compress_block(uint32_t offset, uint32_t length, block_data_t& blockData) const;
 	};
 
 	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<compressing_packer, TPacker>>>

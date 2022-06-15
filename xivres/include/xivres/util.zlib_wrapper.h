@@ -8,6 +8,8 @@
 #include <vector>
 #include <zlib.h>
 
+#include "util.thread_pool.h"
+
 namespace xivres::util {
 	class zlib_error : public std::runtime_error {
 	public:
@@ -33,11 +35,17 @@ namespace xivres::util {
 		zlib_inflater& operator=(const zlib_inflater&) = delete;
 		~zlib_inflater();
 
+		[[nodiscard]] bool is(int windowBits = 15, int defaultBufferSize = 16384) const {
+			return m_windowBits == windowBits && m_defaultBufferSize == defaultBufferSize;
+		}
+
 		std::span<uint8_t> operator()(std::span<const uint8_t> source);
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source, size_t maxSize);
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source, std::span<uint8_t> target);
+
+		static thread_pool::object_pool<util::zlib_inflater>::scoped_pooled_object pooled();
 	};
 
 	class zlib_deflater {
@@ -69,6 +77,16 @@ namespace xivres::util {
 		zlib_deflater& operator=(const zlib_deflater&) = delete;
 		~zlib_deflater();
 
+		[[nodiscard]] bool is(
+			int level = Z_DEFAULT_COMPRESSION,
+			int method = Z_DEFLATED,
+			int windowBits = 15,
+			int memLevel = 8,
+			int strategy = Z_DEFAULT_STRATEGY,
+			size_t defaultBufferSize = 16384) const {
+			return m_level == level && m_method == method && m_windowBits == windowBits && m_memLevel == memLevel && m_strategy == strategy && m_defaultBufferSize == defaultBufferSize;
+		}
+
 		std::span<uint8_t> deflate(std::span<const uint8_t> source);
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source);
@@ -76,6 +94,8 @@ namespace xivres::util {
 		[[nodiscard]] const std::span<uint8_t>& result() const;
 
 		[[nodiscard]] std::vector<uint8_t>& result();
+
+		static thread_pool::object_pool<util::zlib_deflater>::scoped_pooled_object pooled();
 	};
 }
 

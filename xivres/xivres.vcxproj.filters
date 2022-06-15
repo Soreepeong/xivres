@@ -286,5 +286,8 @@
     <ClCompile Include="impl\textools.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
+    <ClCompile Include="impl\util.thread_pool.cpp">
+      <Filter>Impl\util</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

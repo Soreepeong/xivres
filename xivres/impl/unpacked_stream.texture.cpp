@@ -2,7 +2,7 @@
 
 xivres::texture_unpacker::texture_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
 	: base_unpacker(header, std::move(strm)) {
-	uint64_t readOffset = sizeof packed::file_header;
+	auto readOffset = static_cast<std::streamoff>(sizeof packed::file_header);
 	const auto locators = m_stream->read_vector<packed::mipmap_block_locator>(readOffset, header.BlockCountOrVersion);
 	readOffset += std::span(locators).size_bytes();
 
@@ -34,7 +34,7 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 		return 0;
 
 	block_decoder info(*this, buf, length, offset);
-	info.forward(m_head);
+	info.forward_copy(m_head);
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
 
@@ -48,11 +48,17 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 
 	bool multithreaded = false;
 	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
-	info.multithreaded(multithreaded = multithreaded || std::distance(it, itEnd) > 1);
+	info.multithreaded(multithreaded = multithreaded || std::distance(it, itEnd) >= MinBlockCountForMultithreadedDecompression);
 
-	const auto preloadFrom = it->Subblocks.front().BlockOffset;
-	const auto preloadTo = itEnd == m_blocks.end() ? m_packedSize : itEnd->Subblocks.front().BlockOffset;
-	const auto preloadStream = lazy_preloading_stream(m_stream, preloadFrom, preloadTo - preloadFrom);
+	const auto preloadFrom = static_cast<std::streamoff>(it->Subblocks.front().BlockOffset);
+	const auto preloadTo = static_cast<std::streamoff>(itEnd == m_blocks.end() ? m_packedSize : itEnd->Subblocks.front().BlockOffset);
+	
+	auto pooledPreload = *m_preloads;
+	if (!pooledPreload)
+		pooledPreload.emplace();
+	auto& preload = *pooledPreload;
+	preload.resize(preloadTo - preloadFrom);
+	m_stream->read_fully(preloadFrom, std::span(preload));
 
 	for (; it != m_blocks.end() && !info.complete(); ++it) {
 		auto it2 = std::upper_bound(it->Subblocks.begin(), it->Subblocks.end(), info.current_offset());
@@ -60,23 +66,19 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 			--it2;
 
 		multithreaded = multithreaded || std::distance(it2, std::upper_bound(it2, it->Subblocks.end(), static_cast<uint32_t>(offset + length))) > 16;
-		multithreaded = multithreaded || (!it->Subblocks.back() && it->Subblocks.size() > 16);
+		multithreaded = multithreaded || (!it->Subblocks.back() && it->Subblocks.size() >= MinBlockCountForMultithreadedDecompression);
 		info.multithreaded(multithreaded);
 
 		while (it2 != it->Subblocks.end() && !info.complete()) {
-			if (!*it2)
-				throw std::runtime_error("Offset error");
-			
+			const auto blockSpan = std::span(preload).subspan(it2->BlockOffset - preloadFrom, it2->BlockSize);
+			const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&blockSpan[0]);
+			it2->DecompressedSize = static_cast<uint16_t>(blockHeader.DecompressedSize);
 			if (info.skip_to(it2->RequestOffset))
-				break;
-			info.forward(*m_stream, it2->BlockOffset, it2->BlockSize);
-			it2->DecompressedSize = info.MostRecentBlockHeader.DecompressedSize;
+				info.forward_sqblock(blockSpan);
 
 			auto prev = it2++;
-			if (it2 == it->Subblocks.end()) {
-				info.skip_to(it->request_offset_end());
+			if (it2 == it->Subblocks.end())
 				break;
-			}
 			it2->RequestOffset = prev->RequestOffset + prev->DecompressedSize;
 			it2->BlockOffset = prev->BlockOffset + prev->BlockSize;
 		}

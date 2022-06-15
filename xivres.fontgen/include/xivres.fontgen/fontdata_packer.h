@@ -33,8 +33,8 @@ namespace xivres::fontgen {
 		std::vector<target_plan> m_targetPlans;
 
 		std::map<const fixed_size_font*, std::shared_ptr<fixed_size_font>> m_baseFonts;
-		std::map<const fixed_size_font*, util::thread_pool::scoped_tls<std::shared_ptr<fixed_size_font>>> m_threadSafeBaseFonts;
-		std::vector<std::unique_ptr<util::thread_pool::scoped_tls<std::shared_ptr<fixed_size_font>>>> m_threadSafeSourceFonts;
+		std::map<const fixed_size_font*, util::thread_pool::object_pool<std::shared_ptr<fixed_size_font>>> m_threadSafeBaseFonts;
+		std::vector<std::unique_ptr<util::thread_pool::object_pool<std::shared_ptr<fixed_size_font>>>> m_threadSafeSourceFonts;
 
 		uint64_t m_nMaxProgress = 1;
 		uint64_t m_nCurrentProgress = 0;
@@ -45,10 +45,6 @@ namespace xivres::fontgen {
 		std::timed_mutex m_runningMtx;
 		std::string m_error;
 
-		const fixed_size_font& get_threadsafe_base_font(const fixed_size_font* font);
-
-		const fixed_size_font& get_threadsafe_source_font(size_t fontIndex);
-		
 		void prepare_threadsafe_source_fonts();
 
 		void prepare_target_font_basic_info();

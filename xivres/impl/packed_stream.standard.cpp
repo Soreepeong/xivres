@@ -130,6 +130,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack() {
 		
 	} else {
 		util::thread_pool::task_waiter waiter;
+		preload();
 
 		blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
 			waiter.submit([this, offset, length, &blockData = blockDataList[index]](util::thread_pool::task<void>& c) {

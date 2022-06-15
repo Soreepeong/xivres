@@ -46,7 +46,7 @@ bool xivres::base_unpacker::block_decoder::skip_to(size_t offset, bool dataFille
 	return complete();
 }
 
-bool xivres::base_unpacker::block_decoder::forward(std::span<uint8_t> data) {
+bool xivres::base_unpacker::block_decoder::forward_copy(std::span<const uint8_t> data) {
 	const auto dataSize = static_cast<std::streamsize>(data.size());
 
 	if (m_skipLength >= dataSize)
@@ -58,88 +58,47 @@ bool xivres::base_unpacker::block_decoder::forward(std::span<uint8_t> data) {
 	return skip(m_skipLength + available, true);
 }
 
-bool xivres::base_unpacker::block_decoder::forward(const stream& strm, const uint32_t blockOffset, const size_t knownBlockSize) {
-	auto& [buffer, inflater] = *m_unpacker.m_tls;
-	buffer.resize(knownBlockSize);
-
-	const auto data = std::span(&buffer[0], static_cast<size_t>(strm.read(blockOffset, &buffer[0], static_cast<std::streamsize>(knownBlockSize))));
-
-	if (data.empty())
-		throw bad_data_error("Empty block read");
-	
-	if (data.size() < sizeof MostRecentBlockHeader)
+bool xivres::base_unpacker::block_decoder::forward_sqblock(std::span<const uint8_t> data) {
+	if (data.size() < sizeof packed::block_header)
 		throw bad_data_error("Block read size < sizeof blockHeader");
 	
-	memcpy(&MostRecentBlockHeader, &buffer[0], sizeof MostRecentBlockHeader);
+	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
 
-	if (data.size() < MostRecentBlockHeader.total_block_size())
+	if (data.size() < blockHeader.total_block_size())
 		throw bad_data_error("Incomplete block read");
 
-	if (MostRecentBlockHeader.total_block_size() > buffer.size())
-		throw bad_data_error("sizeof blockHeader + blockHeader.CompressSize must be under 16K");
+	if (m_skipLength >= blockHeader.DecompressedSize)
+		return skip(blockHeader.DecompressedSize);
+	
+	if (!blockHeader.compressed())
+		return forward_copy(data.subspan(sizeof blockHeader, blockHeader.DecompressedSize));
 
-	if (m_skipLength >= MostRecentBlockHeader.DecompressedSize)
-		return skip(MostRecentBlockHeader.DecompressedSize);
+	const auto target = m_remaining.subspan(0, (std::min)(m_remaining.size_bytes(), static_cast<size_t>(blockHeader.DecompressedSize - m_skipLength)));
+	if (m_bMultithreaded)
+		m_waiter.submit([this, target, data, skip = m_skipLength](auto&) { decode_block_to(data, target, skip); });
+	else
+		decode_block_to(data, target, m_skipLength);
+	
+	return skip(m_skipLength + target.size_bytes(), true);
+}
 
-	const auto target = m_remaining.subspan(0, (std::min)(m_remaining.size_bytes(), static_cast<size_t>(MostRecentBlockHeader.DecompressedSize - m_skipLength)));
-	if (MostRecentBlockHeader.compressed()) {
-		if (sizeof MostRecentBlockHeader + MostRecentBlockHeader.CompressedSize > data.size_bytes())
-			throw bad_data_error("Failed to read block");
+void xivres::base_unpacker::block_decoder::decode_block_to(std::span<const uint8_t> data, std::span<uint8_t> target, size_t skip) const {
+	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
+	auto inflater = util::zlib_inflater::pooled();
+	if (!inflater || !inflater->is(-MAX_WBITS))
+		inflater.emplace(-MAX_WBITS);
 
-		if (m_bMultithreaded) {
-			m_waiter.submit([this, target, buffer_ = std::move(buffer), dataLength = data.size(), skip = m_skipLength](auto& c) mutable {
-				auto& [buffer, inflater] = *m_unpacker.m_tls;
-				buffer = std::move(buffer_);
-				const auto data = std::span(buffer).subspan(0, dataLength);
-
-				if (!inflater)
-					inflater.emplace(-MAX_WBITS);
-
-				const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
-				if (skip) {
-					const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
-					if (buf.size_bytes() != blockHeader.DecompressedSize)
-						throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-							*blockHeader.DecompressedSize, buf.size_bytes()));
-					std::copy_n(&buf[static_cast<size_t>(skip)],
-						target.size_bytes(),
-						target.begin());
-
-				} else {
-					const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);
-					if (buf.size_bytes() != target.size_bytes())
-						throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-							target.size_bytes(), buf.size_bytes()));
-				}
-			});
-
-		} else {
-			if (!inflater)
-				inflater.emplace(-MAX_WBITS);
-
-			const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
-			if (m_skipLength) {
-				const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
-				if (buf.size_bytes() != blockHeader.DecompressedSize)
-					throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-						*blockHeader.DecompressedSize, buf.size_bytes()));
-				std::copy_n(&buf[static_cast<size_t>(m_skipLength)],
-					target.size_bytes(),
-					target.begin());
-
-			} else {
-				const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);
-				if (buf.size_bytes() != target.size_bytes())
-					throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes",
-						target.size_bytes(), buf.size_bytes()));
-			}
-		}
+	if (skip) {
+		const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
+		if (buf.size_bytes() != blockHeader.DecompressedSize)
+			throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes", *blockHeader.DecompressedSize, buf.size_bytes()));
+		std::copy_n(&buf[static_cast<size_t>(skip)], target.size_bytes(), target.begin());
 
 	} else {
-		std::copy_n(&data[static_cast<size_t>(sizeof MostRecentBlockHeader + m_skipLength)], target.size(), target.begin());
+		const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);
+		if (buf.size_bytes() != target.size_bytes())
+			throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes", target.size_bytes(), buf.size_bytes()));
 	}
-
-	return skip(m_skipLength + target.size_bytes(), true);
 }
 
 std::unique_ptr<xivres::base_unpacker> xivres::base_unpacker::make_unique(std::shared_ptr<const packed_stream> strm, std::span<uint8_t> obfuscatedHeaderRewrite) {

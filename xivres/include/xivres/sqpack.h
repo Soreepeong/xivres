@@ -161,6 +161,10 @@ namespace xivres::sqpack::sqindex {
 		data_locator Locator;
 		LE<uint32_t> ConflictIndex;
 		char FullPath[0xF0];
+
+		[[nodiscard]] bool end_of_list() const {
+			return NameHash == EndOfList && PathHash == EndOfList && Locator.Value == 0 && ConflictIndex == EndOfList && FullPath[0] == 0;
+		}
 	};
 
 	struct full_hash_with_text_locator {
@@ -171,6 +175,10 @@ namespace xivres::sqpack::sqindex {
 		data_locator Locator;
 		LE<uint32_t> ConflictIndex;
 		char FullPath[0xF0];
+
+		[[nodiscard]] bool end_of_list() const {
+			return FullPathHash == EndOfList && Locator.Value == 0 && ConflictIndex == EndOfList && FullPath[0] == 0;
+		}
 	};
 
 	enum class sqindex_type : uint32_t {

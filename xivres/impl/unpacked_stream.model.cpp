@@ -4,7 +4,7 @@
 xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm)
 	: base_unpacker(header, std::move(strm)) {
 	const auto underlyingSize = m_stream->size();
-	uint64_t readOffset = sizeof packed::file_header;
+	auto readOffset = static_cast<std::streamoff>(sizeof packed::file_header);
 	const auto locator = m_stream->read_fully<packed::model_block_locator>(static_cast<std::streamoff>(readOffset));
 	const auto blockCount = static_cast<size_t>(locator.FirstBlockIndices.Index[2]) + locator.BlockCount.Index[2];
 
@@ -84,7 +84,7 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 		return 0;
 
 	block_decoder info(*this, buf, length, offset);
-	info.forward(util::span_cast<uint8_t>(1, &m_header));
+	info.forward_copy(util::span_cast<uint8_t>(1, &m_header));
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
 
@@ -93,16 +93,22 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 		--it;
 
 	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
-	info.multithreaded(std::distance(it, itEnd) > 16);
+	info.multithreaded(std::distance(it, itEnd) >= MinBlockCountForMultithreadedDecompression);
 
-	const auto preloadFrom = it->BlockOffset;
-	const auto preloadTo = itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize: itEnd->BlockOffset;
-	const auto preloadStream = lazy_preloading_stream(m_stream, preloadFrom, preloadTo - preloadFrom);
+	const auto preloadFrom = static_cast<std::streamoff>(it->BlockOffset);
+	const auto preloadTo = static_cast<std::streamoff>(itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize: itEnd->BlockOffset);
+
+	auto pooledPreload = *m_preloads;
+	if (!pooledPreload)
+		pooledPreload.emplace();
+	auto& preload = *pooledPreload;
+	preload.resize(preloadTo - preloadFrom);
+	m_stream->read_fully(preloadFrom, std::span(preload));
 
 	for (; it != m_blocks.end(); ++it) {
 		if (info.skip_to(it->RequestOffsetPastHeader + sizeof m_header))
 			break;
-		if (info.forward(preloadStream, it->BlockOffset, it->PaddedChunkSize))
+		if (info.forward_sqblock(std::span(preload).subspan(it->BlockOffset - preloadFrom, it->PaddedChunkSize)))
 			break;
 	}
 	

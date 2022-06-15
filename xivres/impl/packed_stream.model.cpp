@@ -12,7 +12,7 @@ xivres::model_passthrough_packer::model_passthrough_packer(std::shared_ptr<const
 std::streamsize xivres::model_passthrough_packer::size() {
 	const auto blockCount = 11 + align<uint64_t>(m_stream->size(), packed::MaxBlockDataSize).Count;
 	const auto headerSize = align(sizeof m_header + blockCount * sizeof m_blockDataSizes[0]).Alloc;
-	return headerSize + blockCount * packed::MaxBlockSize;
+	return static_cast<std::streamsize>(headerSize + blockCount * packed::MaxBlockSize);
 }
 
 void xivres::model_passthrough_packer::ensure_initialized() {
@@ -252,6 +252,8 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 
 	} else {
 		util::thread_pool::task_waiter waiter;
+		preload();
+
 		auto baseFileOffset = static_cast<uint32_t>(sizeof unpackedHeader);
 		const auto generateSet = [&](const uint32_t setSize) {
 			const auto alignedBlock = align<uint32_t, uint16_t>(setSize, packed::MaxBlockDataSize);

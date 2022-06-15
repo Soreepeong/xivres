@@ -96,18 +96,26 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 		(std::max)(Index1.hash_locators().size() + Index1.text_locators().size(), Index2.hash_locators().size() + Index2.text_locators().size())
 		+ Index1.index_header().TextLocatorSegment.Count
 	);
-	for (const auto& item : Index1.hash_locators())
+	for (const auto& item : Index1.hash_locators()) {
 		if (!item.Locator.IsSynonym)
 			offsets1.emplace_back(item.Locator, std::make_tuple(item.PathHash, item.NameHash, static_cast<const char*>(nullptr)));
-	for (const auto& item : Index1.text_locators())
+	}
+	for (const auto& item : Index1.text_locators()) {
+		if (item.end_of_list())
+			break;
 		offsets1.emplace_back(item.Locator, std::make_tuple(item.PathHash, item.NameHash, item.FullPath));
+	}
 
 	std::vector<std::pair<sqindex::data_locator, std::tuple<uint32_t, const char*>>> offsets2;
-	for (const auto& item : Index2.hash_locators())
+	for (const auto& item : Index2.hash_locators()) {
 		if (!item.Locator.IsSynonym)
 			offsets2.emplace_back(item.Locator, std::make_tuple(item.FullPathHash, static_cast<const char*>(nullptr)));
-	for (const auto& item : Index2.text_locators())
+	}
+	for (const auto& item : Index2.text_locators()) {
+		if (item.end_of_list())
+			break;
 		offsets2.emplace_back(item.Locator, std::make_tuple(item.FullPathHash, item.FullPath));
+	}
 
 	if (offsets1.size() != offsets2.size())
 		throw bad_data_error(".index and .index2 do not have the same number of files contained");

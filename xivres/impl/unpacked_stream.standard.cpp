@@ -29,16 +29,22 @@ std::streamsize xivres::standard_unpacker::read(std::streamoff offset, void* buf
 		--it;
 
 	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
-	info.multithreaded(std::distance(it, itEnd) > 16);
+	info.multithreaded(std::distance(it, itEnd) >= MinBlockCountForMultithreadedDecompression);
 
-	const auto preloadFrom = it->BlockOffset;
-	const auto preloadTo = itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().BlockSize : itEnd->BlockOffset;
-	const auto preloadStream = lazy_preloading_stream(m_stream, preloadFrom, preloadTo - preloadFrom);
+	const auto preloadFrom = static_cast<std::streamoff>(it->BlockOffset);
+	const auto preloadTo = static_cast<std::streamoff>(itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().BlockSize : itEnd->BlockOffset);
+
+	auto pooledPreload = *m_preloads;
+	if (!pooledPreload)
+		pooledPreload.emplace();
+	auto& preload = *pooledPreload;
+	preload.resize(preloadTo - preloadFrom);
+	m_stream->read_fully(preloadFrom, std::span(preload));
 
 	for (; it < m_blocks.end(); ++it) {
 		if (info.skip_to(it->RequestOffset))
 			break;
-		if (info.forward(preloadStream, it->BlockOffset, it->BlockSize))
+		if (info.forward_sqblock(std::span(preload).subspan(it->BlockOffset - preloadFrom, it->BlockSize)))
 			break;
 	}
 	

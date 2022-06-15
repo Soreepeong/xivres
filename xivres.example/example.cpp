@@ -26,36 +26,27 @@ static std::string test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> 
 	std::shared_ptr<stream> decoded;
 	const char* pcszLastStep = "Read packed original";
 	try {
-		const auto packedOriginal = packed->read_vector<uint8_t>();
-
 		pcszLastStep = "Decode packed original";
-		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, std::make_shared<memory_stream>(std::span(packedOriginal))));
-		auto dec2 = decoded;
-		if (decoded->size() == 0)
-			return {};
+		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, packed));
 		const auto decodedOriginal = decoded->read_vector<uint8_t>();
 
 		pcszLastStep = "Compress-pack decoded original";
-		packed = std::make_shared<compressing_packed_stream<TCompressingPacker>>(pathSpec, std::make_shared<memory_stream>(std::span(decodedOriginal)), Z_BEST_COMPRESSION, true);
-		const auto packedCompressed = packed->read_vector<uint8_t>();
+		packed = std::make_shared<compressing_packed_stream<TCompressingPacker>>(pathSpec, decoded, Z_BEST_COMPRESSION, true);
 
 		pcszLastStep = "Decode Compress-packed";
-		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, std::make_shared<memory_stream>(std::span(packedCompressed))));
-		const auto decodedCompressed = decoded->read_vector<uint8_t>();
-
-		if (decodedOriginal.size() != decodedCompressed.size() || memcmp(&decodedOriginal[0], &decodedCompressed[0], decodedCompressed.size()) != 0)
-			return "DIFF(Comp)";
+		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, packed));
 
 		pcszLastStep = "Passthrough-pack decoded original";
-		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, std::make_shared<memory_stream>(std::span(decodedOriginal)));
-		const auto packedPassthrough = packed->read_vector<uint8_t>();
+		packed = std::make_shared<passthrough_packed_stream<TPassthroughPacker>>(pathSpec, decoded);
 
 		pcszLastStep = "Decode Passthrough-packed";
-		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, std::make_shared<memory_stream>(std::span(packedPassthrough))));
+		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, packed));
+		
 		const auto decodedPassthrough = decoded->read_vector<uint8_t>();
-
-		if (decodedOriginal.size() != decodedPassthrough.size() || memcmp(&decodedOriginal[0], &decodedPassthrough[0], decodedPassthrough.size()) != 0)
-			return "DIFF(Pass)";
+		if (decodedOriginal.empty() && decodedPassthrough.empty())
+			void();
+		else if (decodedOriginal.size() != decodedPassthrough.size() || memcmp(&decodedOriginal[0], &decodedPassthrough[0], decodedPassthrough.size()) != 0)
+			return "DIFF";
 
 		return {};
 	} catch (const std::exception& e) {
@@ -63,7 +54,7 @@ static std::string test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> 
 	}
 }
 
-static void test_pack_unpack(const xivres::installation& gameReader) {
+static void test_pack_unpack(const xivres::installation& gameReader, bool decodeOnly) {
 	struct task_t {
 		const xivres::sqpack::reader::entry_info& EntryInfo;
 		xivres::packed::type Type;
@@ -72,7 +63,6 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 
 	xivres::util::thread_pool::task_waiter<task_t> waiter;
 	uint64_t nextPrintTickCount = 0;
-	const auto tend = GetTickCount64();
 
 	for (const auto packId : gameReader.get_sqpack_ids()) {
 		const auto& packfile = gameReader.get_sqpack(packId);
@@ -81,20 +71,23 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 			for (; waiter.pending() < std::max<size_t>(8, waiter.pool().concurrency()) && i < packfile.Entries.size(); i++) {
 				const auto& entry = packfile.Entries[i];
 
-				waiter.submit([i, &entry, &packfile, pathSpec = entry.PathSpec](auto&) {
+				waiter.submit([i, decodeOnly, &entry, &packfile, pathSpec = entry.PathSpec](auto&) {
 					task_t res{.EntryInfo = entry};
 					try {
 						auto packed = packfile.packed_at(pathSpec);
-						//auto unpacked = std::make_shared<xivres::all_stream>(std::make_shared<xivres::unpacked_stream>(packed));
-						//unpacked->read_vector<char>();
-						//return res;
-						switch (res.Type = packed->get_packed_type()) {
-							case xivres::packed::type::none: break;
-							case xivres::packed::type::placeholder: break;
-							case xivres::packed::type::standard: res.Result = test_pack_unpack_file<xivres::standard_passthrough_packer, xivres::standard_compressing_packer>(std::move(packed), pathSpec); break;
-							case xivres::packed::type::model: res.Result = test_pack_unpack_file<xivres::model_passthrough_packer, xivres::model_compressing_packer>(std::move(packed), pathSpec); break;
-							case xivres::packed::type::texture: res.Result = test_pack_unpack_file<xivres::texture_passthrough_packer, xivres::texture_compressing_packer>(std::move(packed), pathSpec); break;
-							default: break;
+						if (decodeOnly) {
+							auto unpacked = std::make_shared<xivres::unpacked_stream>(packed);
+							unpacked->read_vector<char>();
+							return res;
+						} else {
+							switch (res.Type = packed->get_packed_type()) {
+								case xivres::packed::type::none: break;
+								case xivres::packed::type::placeholder: break;
+								case xivres::packed::type::standard: res.Result = test_pack_unpack_file<xivres::standard_passthrough_packer, xivres::standard_compressing_packer>(std::move(packed), pathSpec); break;
+								case xivres::packed::type::model: res.Result = test_pack_unpack_file<xivres::model_passthrough_packer, xivres::model_compressing_packer>(std::move(packed), pathSpec); break;
+								case xivres::packed::type::texture: res.Result = test_pack_unpack_file<xivres::texture_passthrough_packer, xivres::texture_compressing_packer>(std::move(packed), pathSpec); break;
+								default: break;
+							}
 						}
 					} catch (const std::out_of_range& e) {
 						res.Result = e.what();
@@ -125,8 +118,6 @@ static void test_pack_unpack(const xivres::installation& gameReader) {
 			}
 		}
 	}
-	
-	std::cout << (GetTickCount64() - tend) << std::endl;
 
 	std::cout << std::endl;
 }
@@ -162,9 +153,6 @@ static void test_sqpack_generator(const xivres::installation& gameReader) {
 	// std::ranges::sort(sqpackIds, [&gameReader](const uint32_t l, const uint32_t r) { return gameReader.get_sqpack(l).TotalDataSize > gameReader.get_sqpack(r).TotalDataSize; });
 	xivres::util::thread_pool::task_waiter waiter;
 	for (const auto p : sqpackIds) {
-		while (waiter.pending() >= 2)
-			waiter.wait_one();
-
 		waiter.submit([&gameReader, p](auto&) {
 			try {
 				const auto& packfile = gameReader.get_sqpack(p);
@@ -177,7 +165,6 @@ static void test_sqpack_generator(const xivres::installation& gameReader) {
 					try {
 						auto packed = packfile.packed_at(entry);
 						std::shared_ptr<xivres::stream> unpacked = std::make_shared<xivres::unpacked_stream>(packed);
-						unpacked = std::make_shared<xivres::lazy_preloading_stream>(unpacked);
 						switch (packed->get_packed_type()) {
 							case xivres::packed::type::standard:
 								packed = std::make_shared<xivres::compressing_packed_stream<xivres::standard_compressing_packer>>(entry.PathSpec, std::move(unpacked), Z_BEST_COMPRESSION, 1);
@@ -261,11 +248,15 @@ void test_range_read(const xivres::installation& gameReader) {
 	specs.emplace_back(0x8813b068, 0xfd63781b, 0x5d4fda62, 0x01, 0x00, 0x00);
 
 	xivres::util::thread_pool::task_waiter waiter;
-	xivres::util::thread_pool::scoped_tls<std::vector<char>> bufs([](std::vector<char>& v) { v.resize(1048576); });
+	xivres::util::thread_pool::object_pool<std::vector<char>> bufs;
 
 	for (const auto& spec : specs) {
 		waiter.submit([&gameReader, &spec, &bufs](auto&) {
-			auto& buf = *bufs;
+			auto pooledBuf = *bufs;
+			if (!pooledBuf)
+				pooledBuf.emplace(1048576);
+			auto& buf = *pooledBuf;
+
 			const auto packed0 = gameReader.get_file_packed(spec);
 			if (packed0->get_packed_type() != xivres::packed::type::model)
 				return;
@@ -338,23 +329,25 @@ void test_range_read(const xivres::installation& gameReader) {
 }
 
 int main() {
+	const auto tend = GetTickCount64();
 	try {
 		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 		system("chcp 65001 > NUL");
 
 		xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+
 		// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
 		// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
 		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
 
 		// test_range_read(gameReader);
-		// test_pack_unpack(gameReader);
-		test_sqpack_generator(gameReader);
+		test_pack_unpack(gameReader, true);
+		// test_sqpack_generator(gameReader);
 		// test_ogg_decode_encode(gameReader);
 		// test_excel(gameReader);
 
-		std::cout << "Success\n";
+		std::cout << "Success: took " << (GetTickCount64() - tend) << "ms" << std::endl;
 	} catch (const std::exception& e) {
 		std::cout << e.what() << std::endl;
 		throw;

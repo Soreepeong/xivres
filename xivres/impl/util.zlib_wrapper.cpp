@@ -89,6 +89,11 @@ void xivres::util::zlib_inflater::initialize_inflation() {
 		throw zlib_error(res);
 }
 
+xivres::util::thread_pool::object_pool<xivres::util::zlib_inflater>::scoped_pooled_object xivres::util::zlib_inflater::pooled() {
+	static thread_pool::object_pool<util::zlib_inflater> s_pool;
+	return *s_pool;
+}
+
 std::vector<uint8_t>& xivres::util::zlib_deflater::result() {
 	m_buffer.resize(m_latestResult.size());
 	return m_buffer;
@@ -149,4 +154,9 @@ void xivres::util::zlib_deflater::initialize_deflation() {
 		res = deflateReset(&m_zstream);
 	if (res != Z_OK)
 		throw zlib_error(res);
+}
+
+xivres::util::thread_pool::object_pool<xivres::util::zlib_deflater>::scoped_pooled_object xivres::util::zlib_deflater::pooled() {
+	static thread_pool::object_pool<util::zlib_deflater> s_pool;
+	return *s_pool;
 }

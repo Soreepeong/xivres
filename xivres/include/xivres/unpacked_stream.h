@@ -10,8 +10,30 @@ namespace xivres {
 
 	class base_unpacker {
 	protected:
-		util::thread_pool::scoped_tls<std::vector<uint8_t>> m_tlsPreload;
-		util::thread_pool::scoped_tls<std::pair<std::vector<uint8_t>, std::optional<util::zlib_inflater>>> m_tls;
+		/*
+		 * Value   Time taken to decode everything (ms)
+		 * 2       43937
+		 * 4       40781
+		 * 8       39594
+		 * 16      36547
+		 * 24      34782
+		 * 32      34297
+		 * 40      34234
+		 * 48      33875
+		 * 64      33500
+		 * 96      33328
+		 * 128     32828
+		 * 192     32532
+		 * 256     32484
+		 * 512     32125
+		 * 1024    31953
+		 * 2048    32156
+		 * 4096    32203
+		 * 8192    32110
+		 */
+		static constexpr size_t MinBlockCountForMultithreadedDecompression = 1024;
+
+		util::thread_pool::object_pool<std::vector<uint8_t>> m_preloads;
 
 		class block_decoder {
 			static constexpr auto ReadBufferMaxSize = 16384;
@@ -26,9 +48,12 @@ namespace xivres {
 			uint32_t m_currentOffset;
 
 		public:
-			packed::block_header MostRecentBlockHeader;
-
-			block_decoder(base_unpacker& stream, void* buf, std::streamsize length, std::streampos offset);
+			block_decoder(base_unpacker& unpacker, void* buf, std::streamsize length, std::streampos offset);
+			block_decoder(block_decoder&&) = delete;
+			block_decoder(const block_decoder&) = delete;
+			block_decoder& operator=(block_decoder&&) = delete;
+			block_decoder& operator=(const block_decoder&) = delete;
+			~block_decoder() = default;
 
 			void multithreaded(bool m) { m_bMultithreaded = m; }
 
@@ -36,15 +61,18 @@ namespace xivres {
 
 			bool skip_to(size_t offset, bool dataFilled = false);
 
-			bool forward(std::span<uint8_t> data);
+			bool forward_copy(std::span<const uint8_t> data);
 
-			bool forward(const stream& strm, uint32_t blockOffset, size_t knownBlockSize = ReadBufferMaxSize);
+			bool forward_sqblock(std::span<const uint8_t> data);
 
 			[[nodiscard]] uint32_t current_offset() const { return m_currentOffset; }
 
 			[[nodiscard]] bool complete() const { return m_remaining.empty(); }
 
 			[[nodiscard]] std::streamsize filled() { m_waiter.wait_all(); return static_cast<std::streamsize>(m_target.size() - m_remaining.size()); }
+
+		private:
+			void decode_block_to(std::span<const uint8_t> data, std::span<uint8_t> target, size_t skip) const;
 		};
 
 		const uint32_t m_size, m_packedSize;

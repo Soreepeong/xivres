@@ -59,12 +59,7 @@ std::unique_ptr<xivres::stream> xivres::partial_view_stream::substream(std::stre
 struct xivres::file_stream::data {
 	const std::filesystem::path m_path;
 	const HANDLE m_hFile;
-	util::thread_pool::scoped_tls<std::shared_ptr<void>> m_hDummyEvents{ [](std::shared_ptr<void>& h) {
-		const auto handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-		if (handle == nullptr)
-			throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
-		h = { handle, [](HANDLE h) {CloseHandle(h); } };
-	} };
+	mutable util::thread_pool::object_pool<std::shared_ptr<void>> m_hDummyEvents;
 
 	data(std::filesystem::path path)
 		: m_path(std::move(path))
@@ -102,9 +97,16 @@ struct xivres::file_stream::data {
 			return static_cast<std::streamsize>(totalRead);
 
 		} else {
+			auto hDummyEvent = *m_hDummyEvents;
+			if (!hDummyEvent) {
+				const auto handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+				if (handle == nullptr)
+					throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+				hDummyEvent.emplace(handle, [](HANDLE h) { CloseHandle(h); });
+			}
 			DWORD readLength = 0;
 			OVERLAPPED ov{};
-			ov.hEvent = m_hDummyEvents->get();
+			ov.hEvent = hDummyEvent->get();
 			ov.Offset = static_cast<DWORD>(offset);
 			ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
 			if (!ReadFile(m_hFile, buf, static_cast<DWORD>(length), &readLength, &ov)) {
