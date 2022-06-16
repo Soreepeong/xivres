@@ -16,10 +16,15 @@ std::streamsize xivres::model_passthrough_packer::size() {
 }
 
 void xivres::model_passthrough_packer::ensure_initialized() {
+	std::unique_lock lock(m_mtx, std::defer_lock);
+
 	if (*m_header.Entry.DecompressedSize)
 		return;
 
-	const auto lock = std::lock_guard(m_mtx);
+	{
+		const auto _ = util::thread_pool::pool::instance().release_working_status();
+		lock.lock();
+	}
 	if (*m_header.Entry.DecompressedSize)
 		return;
 
@@ -262,8 +267,8 @@ std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 			setBlockDataList.resize(alignedBlock.Count);
 
 			alignedBlock.iterate_chunks_breakable([&](size_t blockIndex, uint32_t offset, uint32_t length) {
-				waiter.submit([this, offset, length, &blockData = setBlockDataList[blockIndex]](util::thread_pool::task<void>& c) {
-					if (c.cancelled())
+				waiter.submit([this, offset, length, &blockData = setBlockDataList[blockIndex]](auto& task) {
+					if (task.cancelled())
 						cancel();
 					if (!cancelled())
 						compress_block(offset, length, blockData);

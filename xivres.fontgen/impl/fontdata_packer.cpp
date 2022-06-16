@@ -246,7 +246,7 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(pSuccesses->size()))));
 
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		waiter.submit([this, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](util::thread_pool::task<void>& task) {
+		waiter.submit([this, divideUnit, pSuccesses, nBase, pCurrentTargetBuffer](auto& task) {
 			for (size_t i = nBase; i < pSuccesses->size() && !m_bCancelRequested; i += divideUnit) {
 				task.throw_if_cancelled();
 				++m_nCurrentProgress;
@@ -277,7 +277,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(m_targetPlans.size()))));
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		waiter.submit([this, divideUnit, nBase](util::thread_pool::task<void>& task) {
+		waiter.submit([this, divideUnit, nBase](auto& task) {
 			for (size_t i = nBase; i < m_targetPlans.size() && !m_bCancelRequested; i += divideUnit) {
 				++m_nCurrentProgress;
 				task.throw_if_cancelled();

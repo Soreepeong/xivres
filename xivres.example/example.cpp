@@ -80,7 +80,7 @@ static void test_pack_unpack(const xivres::installation& gameReader, bool decode
 						auto packed = packfile.packed_at(pathSpec);
 						if (decodeOnly) {
 							auto unpacked = std::make_shared<xivres::unpacked_stream>(packed);
-							unpacked->read_vector<char>();
+							(void)unpacked->read_vector<char>();
 							return res;
 						} else {
 							switch (res.Type = packed->get_packed_type()) {

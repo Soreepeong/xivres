@@ -325,8 +325,8 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 				blockDataVector.resize(blockAlignment.Count);
 
 				blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {
-					waiter.submit([this, offset, length, &blockData = blockDataVector[index]](util::thread_pool::task<void>& c) {
-						if (c.cancelled())
+					waiter.submit([this, offset, length, &blockData = blockDataVector[index]](auto& task) {
+						if (task.cancelled())
 							cancel();
 						if (!cancelled())
 							compress_block(offset, length, blockData);

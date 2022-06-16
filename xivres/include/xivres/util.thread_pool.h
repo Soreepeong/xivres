@@ -1,6 +1,7 @@
 #ifndef XIVRES_INTERNAL_THREADPOOL_H_
 #define XIVRES_INTERNAL_THREADPOOL_H_
 
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -25,27 +26,34 @@ namespace xivres::util::thread_pool {
 		cancelled_error() : runtime_error("Execution cancelled.") {}
 	};
 
-	class untyped_task {
-	public:
-		const std::vector<uint64_t> InvokePath;
+	struct invoke_path_type {
+		static constexpr size_t StackSize = 7;
+		uint16_t Stack[StackSize]{};
+		uint16_t Depth{};
+
+		friend auto operator<=>(const invoke_path_type&, const invoke_path_type&) = default;
+	};
+
+	class base_task {
+		friend class pool;
 
 	protected:
+		invoke_path_type m_invokePath;
 		pool& m_pool;
 		bool m_bCancelled;
 
 	public:
-		untyped_task(std::vector<uint64_t> invokePath, pool& pool)
-			: InvokePath(std::move(invokePath))
-			, m_pool(pool)
+		base_task(pool& pool)
+			: m_pool(pool)
 			, m_bCancelled(false) {
 		}
 
-		untyped_task(untyped_task&&) = delete;
-		untyped_task(const untyped_task&) = delete;
-		untyped_task& operator=(untyped_task&&) = delete;
-		untyped_task& operator=(const untyped_task&) = delete;
+		base_task(base_task&&) = delete;
+		base_task(const base_task&) = delete;
+		base_task& operator=(base_task&&) = delete;
+		base_task& operator=(const base_task&) = delete;
 
-		virtual ~untyped_task() = default;
+		virtual ~base_task() = default;
 
 		virtual void operator()() = 0;
 
@@ -60,20 +68,21 @@ namespace xivres::util::thread_pool {
 				throw cancelled_error();
 		}
 
-		bool operator<(const untyped_task& r) const;
+		bool operator<(const base_task& r) const;
 
 	protected:
-		[[nodiscard]] on_dtor release_working_status() const;
+		template<typename TFn>
+		decltype(std::declval<TFn>()()) release_working_status(const TFn& fn);
 	};
 
 	template<typename R>
-	class task : public untyped_task {
+	class task : public base_task {
 		std::packaged_task<R(task<R>&)> m_task;
 		std::future<R> m_future;
 
 	public:
-		task(std::vector<uint64_t> invokePath, pool& pool, std::function<R(task<R>&)> fn)
-			: untyped_task(std::move(invokePath), pool)
+		task(pool& pool, std::function<R(task<R>&)> fn)
+			: base_task(pool)
 			, m_task(std::move(fn))
 			, m_future(m_task.get_future()) {
 		}
@@ -87,20 +96,17 @@ namespace xivres::util::thread_pool {
 		}
 
 		void wait() const {
-			const auto releaseWorkingStatus = release_working_status();
-			return m_future.wait();
+			return release_working_status([&] { return m_future.wait(); });
 		}
 
 		template <class Rep, class Per>
 		std::future_status wait_for(const std::chrono::duration<Rep, Per>& relTime) const {
-			const auto releaseWorkingStatus = release_working_status();
-			return m_future.wait_for(relTime);
+			return release_working_status([&] { return m_future.wait_for(relTime); });
 		}
 
 		template <class Clock, class Dur>
 		std::future_status wait_until(const std::chrono::time_point<Clock, Dur>& absTime) const {
-			const auto releaseWorkingStatus = release_working_status();
-			return m_future.wait_until(absTime);
+			return release_working_status([&] { return m_future.wait_until(absTime); });
 		}
 
 		[[nodiscard]] R get() {
@@ -211,32 +217,34 @@ namespace xivres::util::thread_pool {
 	object_pool<std::vector<uint8_t>>::scoped_pooled_object pooled_byte_buffer();
 
 	struct untyped_task_shared_ptr_comparator {
-		bool operator()(const std::shared_ptr<untyped_task>& l, const std::shared_ptr<untyped_task>& r) {
+		bool operator()(const std::shared_ptr<base_task>& l, const std::shared_ptr<base_task>& r) {
 			return *l < *r;
 		}
 	};
 
 	class pool {
-		friend class untyped_task;
+		friend class base_task;
 
 		struct thread_info {
 			std::thread Thread;
-			std::vector<untyped_task*> TaskStack;
+			std::shared_ptr<base_task> Task;
 		};
 		std::map<std::thread::id, thread_info> m_mapThreads;
+		std::shared_ptr<std::shared_mutex> m_pmtxThread;
+		std::condition_variable_any m_cvThread;
 		size_t m_nConcurrency;
 		std::atomic_size_t m_nWaitingThreads;
 		size_t m_nFreeThreads;
 		bool m_bQuitting;
 
+		std::chrono::nanoseconds m_durMaxThreadInactivity{ 5000000000LL };  // 5 seconds
+
 		uint64_t m_nTaskCounter = 0;
-		std::priority_queue<std::shared_ptr<untyped_task>, std::vector<std::shared_ptr<untyped_task>>, untyped_task_shared_ptr_comparator> m_pqTasks;
+		std::priority_queue<std::shared_ptr<base_task>, std::vector<std::shared_ptr<base_task>>, untyped_task_shared_ptr_comparator> m_pqTasks;
 		std::shared_ptr<std::mutex> m_pmtxTask;
 		std::condition_variable m_cvTask;
 
 	public:
-		listener_manager<pool, void, untyped_task*> OnTaskComplete;
-
 		pool(size_t nConcurrentExecutions = (std::numeric_limits<size_t>::max)());
 
 		pool(pool&&) = delete;
@@ -250,6 +258,16 @@ namespace xivres::util::thread_pool {
 
 		static pool& current();
 
+		template<class Rep, class Period>
+		void max_thread_inactivity(std::chrono::duration<Rep, Period> dur) {
+			m_durMaxThreadInactivity = dur;
+			m_cvTask.notify_all();
+		}
+
+		std::chrono::nanoseconds max_thread_inactivity() const {
+			return m_durMaxThreadInactivity;
+		}
+
 		void concurrency(size_t newConcurrency);
 
 		[[nodiscard]] size_t concurrency() const;
@@ -258,69 +276,79 @@ namespace xivres::util::thread_pool {
 		std::shared_ptr<task<TReturn>> submit(std::function<TReturn(task<TReturn>&)> fn) {
 			std::unique_lock lock(*m_pmtxTask);
 
-			std::vector<uint64_t> invokePath;
-			if (const auto it = m_mapThreads.find(std::this_thread::get_id()); it != m_mapThreads.end()) {
-				const auto& parentTask = it->second.TaskStack.back();
-				invokePath.reserve(parentTask->InvokePath.size() + 1);
-				invokePath.insert(invokePath.end(), parentTask->InvokePath.begin(), parentTask->InvokePath.end());
-			}
+			auto pTask = std::make_shared<task<TReturn>>(*this, std::move(fn));
 
-			invokePath.emplace_back(m_nTaskCounter++);
+			invoke_path_type& invokePath = pTask->m_invokePath;
+			if (const auto it = m_mapThreads.find(std::this_thread::get_id()); it != m_mapThreads.end())
+				invokePath = it->second.Task->m_invokePath;
+			invokePath.Stack[invokePath.Depth] = static_cast<uint16_t>(m_nTaskCounter++);
+			if (invokePath.Depth < invoke_path_type::StackSize)
+				invokePath.Depth++;
 
-			auto t = std::make_shared<task<TReturn>>(std::move(invokePath), *this, std::move(fn));
-			m_pqTasks.emplace(t);
+			m_pqTasks.emplace(pTask);
 			lock.unlock();
 
-			m_cvTask.notify_one();
-
-			if (m_nFreeThreads == 0 && m_mapThreads.size() - m_nWaitingThreads < m_nConcurrency) {
-				lock.lock();
-				if (!m_pqTasks.empty())
-					new_worker();
-				lock.unlock();
-			}
-
-			return t;
+			dispatch_task_to_worker();
+			return pTask;
 		}
 
 		[[nodiscard]] on_dtor release_working_status();
 
-	private:
-		void worker(const size_t threadIndex);
+		template<typename TFn>
+		decltype(std::declval<TFn>()()) release_working_status(const TFn& fn) {
+			std::shared_lock lock(*m_pmtxThread);
+			if (!m_mapThreads.contains(std::this_thread::get_id())) {
+				lock.unlock();
+				return fn();
+			}
+			lock.unlock();
 
-		void new_worker();
+			m_nWaitingThreads += 1;
+			dispatch_task_to_worker();
+			if constexpr (std::is_same_v<decltype(fn()), void>) {
+				fn();
+				m_nWaitingThreads -= 1;
+			} else {
+				auto res = fn();
+				m_nWaitingThreads -= 1;
+				return res;
+			}
+		}
+
+	private:
+		void worker_body();
+
+		void dispatch_task_to_worker();
+
+		bool take_task(std::shared_ptr<base_task>& pTask) {
+			if (m_mapThreads.size() - m_nWaitingThreads >= m_nConcurrency || m_pqTasks.empty())
+				return false;
+
+			pTask = std::move(const_cast<std::shared_ptr<base_task>&>(m_pqTasks.top()));
+			m_pqTasks.pop();
+			return true;
+		}
 	};
 
-	inline on_dtor untyped_task::release_working_status() const {
-		return m_pool.release_working_status();
+	template<typename TFn>
+	inline decltype(std::declval<TFn>()()) base_task::release_working_status(const TFn& fn) {
+		return m_pool.release_working_status(fn);
 	}
 
 	template<typename TReturn = void>
 	class task_waiter {
-		using TPackagedTask = task<TReturn>;
+		using TPackagedTask = task<void>;
 
 		pool& m_pool;
 		std::mutex m_mtx;
 		std::map<void*, std::shared_ptr<TPackagedTask>> m_mapPending;
 
-		std::deque<std::shared_ptr<TPackagedTask>> m_dqFinished;
+		std::deque<TReturn> m_dqFinished;
 		std::condition_variable m_cvFinished;
 
-		on_dtor::multi m_dtors;
-
 	public:
-		listener_manager<pool, void, TPackagedTask*> OnTaskComplete;
-
 		task_waiter(pool& pool = pool::current())
 			: m_pool(pool) {
-			m_dtors += m_pool.OnTaskComplete([this](untyped_task* pTask) {
-				std::lock_guard lock(m_mtx);
-				if (const auto it = m_mapPending.find(pTask); it != m_mapPending.end()) {
-					m_dqFinished.emplace_back(std::move(it->second));
-					m_cvFinished.notify_one();
-					m_mapPending.erase(it);
-				}
-			});
 		}
 
 		task_waiter(task_waiter&&) = delete;
@@ -329,15 +357,14 @@ namespace xivres::util::thread_pool {
 		task_waiter& operator=(const task_waiter&) = delete;
 
 		~task_waiter() {
+			if (m_mapPending.empty())
+				return;
+
 			std::unique_lock lock(m_mtx);
 			for (auto& task : m_mapPending | std::views::values)
 				task->cancel();
 
-			auto release = m_pool.release_working_status();
-			m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); });
-
-			lock.unlock();
-			m_dtors.clear();
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
 		}
 
 		[[nodiscard]] size_t pending() {
@@ -349,53 +376,114 @@ namespace xivres::util::thread_pool {
 			return m_pool;
 		}
 
-		void operator+=(std::shared_ptr<TPackagedTask> task) {
+		void submit(std::function<TReturn(base_task&)> fn) {
 			std::lock_guard lock(m_mtx);
-			if (task->finished()) {
-				m_dqFinished.emplace_back(std::move(task));
+			auto newTask = m_pool.submit<void>([this, fn = std::move(fn)](task<void>& currentTask) {
+				auto r = fn(currentTask);
+
+				std::lock_guard lock(m_mtx);
+				m_mapPending.erase(&currentTask);
+				m_dqFinished.emplace_back(std::move(r));
 				m_cvFinished.notify_one();
-			} else {
-				m_mapPending.emplace(task.get(), std::move(task));
-			}
-		}
-		
-		void submit(std::function<TReturn(task<TReturn>&)> fn) {
-			*this += m_pool.submit<TReturn>(std::move(fn));
+			});
+			m_mapPending.emplace(newTask.get(), std::move(newTask));
 		}
 
-		template<typename = std::enable_if_t<!std::is_same_v<TReturn, void>>>
 		[[nodiscard]] std::optional<TReturn> get() {
+			if (m_mapPending.empty() && m_dqFinished.empty())
+				return std::nullopt;
+
 			std::unique_lock lock(m_mtx);
 			if (m_mapPending.empty() && m_dqFinished.empty())
 				return std::nullopt;
 
-			auto release = m_pool.release_working_status();
-			m_cvFinished.wait(lock, [this]() { return !m_dqFinished.empty(); });
-			auto pTask = std::move(m_dqFinished.front());
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return !m_dqFinished.empty(); }); });
+			auto obj = std::move(m_dqFinished.front());
 			m_dqFinished.pop_front();
 			lock.unlock();
 
-			return pTask->get();
+			return obj;
+		}
+	};
+
+	template<>
+	class task_waiter<void> {
+		using TPackagedTask = task<void>;
+
+		pool& m_pool;
+		std::mutex m_mtx;
+		std::map<void*, std::shared_ptr<TPackagedTask>> m_mapPending;
+		std::condition_variable m_cvFinished;
+		size_t m_finishCounter = 0;
+		size_t m_notifyOnAnyFinish = 0;
+
+	public:
+		task_waiter(pool& pool = pool::current())
+			: m_pool(pool) {
 		}
 
-		[[nodiscard]] bool wait_one() {
+		task_waiter(task_waiter&&) = delete;
+		task_waiter(const task_waiter&) = delete;
+		task_waiter& operator=(task_waiter&&) = delete;
+		task_waiter& operator=(const task_waiter&) = delete;
+
+		~task_waiter() {
+			if (m_mapPending.empty())
+				return;
+
 			std::unique_lock lock(m_mtx);
-			if (m_mapPending.empty() && m_dqFinished.empty())
+			for (auto& task : m_mapPending | std::views::values)
+				task->cancel();
+
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
+		}
+
+		[[nodiscard]] size_t pending() {
+			std::lock_guard lock(m_mtx);
+			return m_mapPending.size();
+		}
+
+		[[nodiscard]] pool& pool() const {
+			return m_pool;
+		}
+
+		void submit(std::function<void(base_task&)> fn) {
+			std::lock_guard lock(m_mtx);
+			auto newTask = m_pool.submit<void>([this, fn = std::move(fn)](base_task& currentTask) {
+				fn(currentTask);
+
+				std::lock_guard lock(m_mtx);
+				m_mapPending.erase(&currentTask);
+				m_finishCounter++;
+				if (m_notifyOnAnyFinish || m_mapPending.empty())
+					m_cvFinished.notify_one();
+			});
+			m_mapPending.emplace(newTask.get(), std::move(newTask));
+		}
+
+		[[nodiscard]] bool get() {
+			if (m_mapPending.empty())
 				return false;
 
-			auto release = m_pool.release_working_status();
-			m_cvFinished.wait(lock, [this]() { return !m_dqFinished.empty(); });
-			auto pTask = std::move(m_dqFinished.front());
-			m_dqFinished.pop_front();
-			lock.unlock();
+			std::unique_lock lock(m_mtx);
+			if (m_mapPending.empty())
+				return false;
 
-			pTask->get();
+			m_notifyOnAnyFinish += 1;
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this, baseCounter = m_finishCounter]() { return m_finishCounter != baseCounter; }); });
+			m_notifyOnAnyFinish -= 1;
 			return true;
 		}
 
 		void wait_all() {
-			while (wait_one())
-				void();
+			if (m_mapPending.empty())
+				return;
+
+			std::unique_lock lock(m_mtx);
+			if (m_mapPending.empty())
+				return;
+
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
 		}
 	};
 }

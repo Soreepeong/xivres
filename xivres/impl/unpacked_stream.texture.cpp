@@ -34,12 +34,10 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 		return 0;
 
 	block_decoder info(*this, buf, length, offset);
-	info.forward_copy(m_head);
-	if (info.complete() || m_blocks.empty())
+	if (info.forward_copy(m_head))
 		return info.filled();
 
-	const auto streamSize = m_blocks.back().request_offset_end();
-	if (info.current_offset() >= streamSize)
+	if (info.current_offset() >= size())
 		return info.filled();
 
 	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
@@ -58,10 +56,7 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 		pooledPreload.emplace();
 	auto& preload = *pooledPreload;
 	preload.resize(preloadTo - preloadFrom);
-	{
-		const auto _ = util::thread_pool::pool::current().release_working_status();
-		m_stream->read_fully(preloadFrom, std::span(preload));
-	}
+	util::thread_pool::pool::current().release_working_status([&] { m_stream->read_fully(preloadFrom, std::span(preload)); });
 
 	for (; it != m_blocks.end() && !info.complete(); ++it) {
 		auto it2 = std::upper_bound(it->Subblocks.begin(), it->Subblocks.end(), info.current_offset());
@@ -81,7 +76,7 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 			if (info.forward_sqblock(blockSpan))
 				break;
 
-			auto prev = it2++;
+			const auto prev = it2++;
 			if (it2 == it->Subblocks.end())
 				break;
 			it2->RequestOffset = prev->RequestOffset + prev->DecompressedSize;

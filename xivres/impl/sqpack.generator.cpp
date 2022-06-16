@@ -568,7 +568,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 		for (size_t i = 0;;) {
 			for (; i < entries.size() && waiter.pending() < (std::max<size_t>)(8, 2 * waiter.pool().concurrency()); ++i) {
-				waiter.submit([this, i, entry = entries[i].get()](util::thread_pool::task<std::pair<size_t, std::vector<char>>>& task) {
+				waiter.submit([this, i, entry = entries[i].get()](util::thread_pool::base_task& task) {
 					task.throw_if_cancelled();
 					return std::make_pair(i, entry->Provider->read_vector<char>());
 				});

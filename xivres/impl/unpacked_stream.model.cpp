@@ -103,10 +103,7 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 		pooledPreload.emplace();
 	auto& preload = *pooledPreload;
 	preload.resize(preloadTo - preloadFrom);
-	{
-		const auto _ = util::thread_pool::pool::current().release_working_status();
-		m_stream->read_fully(preloadFrom, std::span(preload));
-	}
+	util::thread_pool::pool::current().release_working_status([&] { m_stream->read_fully(preloadFrom, std::span(preload)); });
 
 	for (; it != m_blocks.end(); ++it) {
 		if (info.skip_to(it->RequestOffsetPastHeader + sizeof m_header))

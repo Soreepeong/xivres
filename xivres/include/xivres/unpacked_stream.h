@@ -12,11 +12,10 @@ namespace xivres {
 	protected:
 		/*
 		 * Value   Time taken to decode everything (ms)
-		 * 32      48969
-		 * 512     37594
-		 * 768     37266
-		 * 1024    36828
-		 * 2048    37000
+		 * 256     37593
+		 * 512     36250
+		 * 768     35453
+		 * 1024    36438
 		 */
 		static constexpr size_t MinBlockCountForMultithreadedDecompression = 768;
 
