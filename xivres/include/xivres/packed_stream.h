@@ -68,6 +68,10 @@ namespace xivres {
 			}
 			return m_entryType;
 		}
+
+		std::shared_ptr<const stream> base_stream() const {
+			return m_stream;
+		}
 	};
 
 	class untyped_passthrough_packer {

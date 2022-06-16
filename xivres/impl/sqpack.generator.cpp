@@ -9,14 +9,6 @@
 #include "../include/xivres/packed_stream.standard.h"
 #include "../include/xivres/packed_stream.texture.h"
 
-std::vector<xivres::packed_stream*> xivres::sqpack::generator::add_result::all_success() const {
-	std::vector<packed_stream*> res;
-	res.insert(res.end(), Added.begin(), Added.end());
-	res.insert(res.end(), Replaced.begin(), Replaced.end());
-	res.insert(res.end(), SkippedExisting.begin(), SkippedExisting.end());
-	return res;
-}
-
 xivres::packed_stream* xivres::sqpack::generator::add_result::any() const {
 	if (!Added.empty())
 		return Added[0];
@@ -25,6 +17,30 @@ xivres::packed_stream* xivres::sqpack::generator::add_result::any() const {
 	if (!SkippedExisting.empty())
 		return SkippedExisting[0];
 	return nullptr;
+}
+
+std::vector<xivres::packed_stream*> xivres::sqpack::generator::add_result::all_success() const {
+	std::vector<packed_stream*> res;
+	res.insert(res.end(), Added.begin(), Added.end());
+	res.insert(res.end(), Replaced.begin(), Replaced.end());
+	res.insert(res.end(), SkippedExisting.begin(), SkippedExisting.end());
+	return res;
+}
+
+xivres::sqpack::generator::entry_info* xivres::sqpack::generator::sqpack_views::find_entry(const path_spec& pathSpec) const {
+	if (const auto it = HashOnlyEntries.find(pathSpec); it != HashOnlyEntries.end())
+		return it->second.get();
+	if (const auto it = FullPathEntries.find(pathSpec); it != FullPathEntries.end())
+		return it->second.get();
+	return nullptr;
+}
+
+xivres::sqpack::generator::entry_info& xivres::sqpack::generator::sqpack_views::get_entry(const path_spec& pathSpec) const {
+	if (const auto it = HashOnlyEntries.find(pathSpec); it != HashOnlyEntries.end())
+		return *it->second;
+	if (const auto it = FullPathEntries.find(pathSpec); it != FullPathEntries.end())
+		return *it->second;
+	throw std::out_of_range("File not found");
 }
 
 xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::operator+=(add_result&& r) {
@@ -552,10 +568,10 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 	std::map<std::pair<uint32_t, uint32_t>, std::vector<entry_info*>> pairHashes;
 	std::map<uint32_t, std::vector<entry_info*>> fullHashes;
-	std::map<entry_info*, path_spec> entrypath_specs;
+	std::map<entry_info*, path_spec> entryPathSpecs;
 	for (const auto& entry : entries) {
 		const auto& pathSpec = entry->Provider->path_spec();
-		entrypath_specs.emplace(entry.get(), pathSpec);
+		entryPathSpecs.emplace(entry.get(), pathSpec);
 		pairHashes[std::make_pair(pathSpec.path_hash(), pathSpec.name_hash())].emplace_back(entry.get());
 		fullHashes[pathSpec.full_path_hash()].emplace_back(entry.get());
 	}
@@ -665,7 +681,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entrypath_specs[entry].path();
+				const auto& path = entryPathSpecs[entry].path();
 				strncpy_s(conflictEntries1.back().FullPath, path.c_str(), path.size());
 			}
 		}
@@ -692,7 +708,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entrypath_specs[entry].path();
+				const auto& path = entryPathSpecs[entry].path();
 				strncpy_s(conflictEntries2.back().FullPath, path.c_str(), path.size());
 			}
 		}

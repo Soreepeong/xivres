@@ -546,7 +546,7 @@ static const xivres::installation& get_installation() {
 	}
 
 	size_t counter = 0;
-	for (const auto [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ {16 * 1048576, 1024}, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
+	for (const auto [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ { 16 * 1048576, 8192 }, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
 		auto& allocations = s_allocations[sqpkId][space];
 
 		std::shared_ptr<xivres::hotswap_packed_stream> stream;
@@ -653,9 +653,9 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 		}
 
 		if (!stream) {
-			const auto originalExists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(pathSpec) != (std::numeric_limits<size_t>::max)();
+			auto pEntryInView = pViews->find_entry(pathSpec);
 			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
-				if (originalExists) {
+				if (pEntryInView) {
 					auto use = false;
 
 					for (const auto& cond : additionalInstallation.OverrideResources) {

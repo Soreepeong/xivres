@@ -10,9 +10,31 @@ namespace xivres::sqpack {
 	class reader {
 	public:
 		template<typename HashLocatorT, typename TextLocatorT> 
-		class sqindex_type {
+		struct sqindex_type {
 		public:
 			const std::vector<uint8_t> Data;
+
+			sqindex_type(std::vector<uint8_t> data, bool strictVerify)
+				: Data(std::move(data)) {
+
+				if (strictVerify) {
+					header().verify_or_throw(file_type::SqIndex);
+					index_header().verify_or_throw(sqindex::sqindex_type::Index);
+					if (index_header().HashLocatorSegment.Size % sizeof HashLocatorT)
+						throw bad_data_error("HashLocators has an invalid size alignment");
+					if (index_header().TextLocatorSegment.Size % sizeof TextLocatorT)
+						throw bad_data_error("TextLocators has an invalid size alignment");
+					if (index_header().UnknownSegment3.Size % sizeof sqindex::segment_3_entry)
+						throw bad_data_error("Segment3 has an invalid size alignment");
+					index_header().HashLocatorSegment.Sha1.verify(hash_locators(), "HashLocatorSegment has invalid data SHA-1");
+					index_header().TextLocatorSegment.Sha1.verify(text_locators(), "TextLocatorSegment has invalid data SHA-1");
+					index_header().UnknownSegment3.Sha1.verify(segment_3(), "UnknownSegment3 has invalid data SHA-1");
+				}
+			}
+
+			sqindex_type(const stream& strm, bool strictVerify)
+				: sqindex_type(strm.read_vector<uint8_t>(), strictVerify) {
+			}
 
 			[[nodiscard]] const header& header() const {
 				return *reinterpret_cast<const sqpack::header*>(&Data[0]);
@@ -46,31 +68,12 @@ namespace xivres::sqpack {
 					return *res;
 				throw std::out_of_range(std::format("Entry {} not found", fullPath));
 			}
-
-		protected:
-			friend class reader;
-
-			sqindex_type(const stream& strm, bool strictVerify)
-				: Data(strm.read_vector<uint8_t>()) {
-
-				if (strictVerify) {
-					header().verify_or_throw(file_type::SqIndex);
-					index_header().verify_or_throw(sqindex::sqindex_type::Index);
-					if (index_header().HashLocatorSegment.Size % sizeof HashLocatorT)
-						throw bad_data_error("HashLocators has an invalid size alignment");
-					if (index_header().TextLocatorSegment.Size % sizeof TextLocatorT)
-						throw bad_data_error("TextLocators has an invalid size alignment");
-					if (index_header().UnknownSegment3.Size % sizeof sqindex::segment_3_entry)
-						throw bad_data_error("Segment3 has an invalid size alignment");
-					index_header().HashLocatorSegment.Sha1.verify(hash_locators(), "HashLocatorSegment has invalid data SHA-1");
-					index_header().TextLocatorSegment.Sha1.verify(text_locators(), "TextLocatorSegment has invalid data SHA-1");
-					index_header().UnknownSegment3.Sha1.verify(segment_3(), "UnknownSegment3 has invalid data SHA-1");
-				}
-			}
 		};
 
-		class sqindex_1_type : public sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator> {
-		public:
+		struct sqindex_1_type : sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator> {
+			sqindex_1_type(std::vector<uint8_t> data, bool strictVerify);
+			sqindex_1_type(const stream& strm, bool strictVerify);
+
 			[[nodiscard]] std::span<const sqindex::path_hash_locator> pair_hash_locators() const;
 
 			[[nodiscard]] std::span<const sqindex::pair_hash_locator> find_pair_hash_locators_for_path(uint32_t pathHash) const;
@@ -82,34 +85,22 @@ namespace xivres::sqpack {
 			
 			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t pathHash, uint32_t nameHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t pathHash, uint32_t nameHash) const;
-
-		protected:
-			friend class reader;
-
-			sqindex_1_type(const stream& strm, bool strictVerify);
 		};
 
-		class sqindex_2_type : public sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator> {
-		public:
+		struct sqindex_2_type : sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator> {
+			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::sqindex_type;
+
 			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::find_data_locator;
 			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::data_locator;
 			
 			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t fullPathHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t fullPathHash) const;
-
-		protected:
-			friend class reader;
-
-			sqindex_2_type(const stream& strm, bool strictVerify);
 		};
 
 		struct sqdata_type {
 			header Header{};
 			sqdata::header DataHeader{};
 			std::shared_ptr<stream> Stream;
-
-		private:
-			friend class reader;
 
 			sqdata_type(std::shared_ptr<stream> strm, const uint32_t datIndex, bool strictVerify);
 		};

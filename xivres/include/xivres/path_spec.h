@@ -63,7 +63,8 @@ namespace xivres {
 			, m_partId(partId)
 			, m_pathHash(pathHash)
 			, m_nameHash(nameHash)
-			, m_fullPathHash(fullPathHash) {}
+			, m_fullPathHash(fullPathHash) {
+		}
 
 		path_spec(const char* fullPath) : path_spec(std::string(fullPath)) {}
 

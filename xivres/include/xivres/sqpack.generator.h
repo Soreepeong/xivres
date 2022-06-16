@@ -41,6 +41,9 @@ namespace xivres::sqpack {
 			std::vector<entry_info*> Entries;
 			std::map<path_spec, std::unique_ptr<entry_info>, path_spec::AllHashComparator> HashOnlyEntries;
 			std::map<path_spec, std::unique_ptr<entry_info>, path_spec::FullPathComparator> FullPathEntries;
+
+			[[nodiscard]] entry_info* find_entry(const path_spec& pathSpec) const;
+			[[nodiscard]] entry_info& get_entry(const path_spec& pathSpec) const;
 		};
 
 		class sqpack_view_entry_cache {

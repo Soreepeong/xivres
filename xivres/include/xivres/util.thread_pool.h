@@ -72,7 +72,7 @@ namespace xivres::util::thread_pool {
 
 	protected:
 		template<typename TFn>
-		decltype(std::declval<TFn>()()) release_working_status(const TFn& fn);
+		decltype(std::declval<TFn>()()) release_working_status(const TFn& fn) const;
 	};
 
 	template<typename R>
@@ -109,8 +109,47 @@ namespace xivres::util::thread_pool {
 			return release_working_status([&] { return m_future.wait_until(absTime); });
 		}
 
-		[[nodiscard]] R get() {
+		[[nodiscard]] R& get() {
 			return m_future.get();
+		}
+	};
+
+	template<>
+	class task<void> : public base_task {
+		std::packaged_task<void(task<void>&)> m_task;
+		std::future<void> m_future;
+
+	public:
+		task(pool& pool, std::function<void(task<void>&)> fn)
+			: base_task(pool)
+			, m_task(std::move(fn))
+			, m_future(m_task.get_future()) {
+		}
+
+		void operator()() override {
+			m_task(*this);
+		}
+
+		[[nodiscard]] bool finished() const override {
+			return m_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+		}
+
+		void wait() const {
+			return release_working_status([&] { return m_future.wait(); });
+		}
+
+		template <class Rep, class Per>
+		std::future_status wait_for(const std::chrono::duration<Rep, Per>& relTime) const {
+			return release_working_status([&] { return m_future.wait_for(relTime); });
+		}
+
+		template <class Clock, class Dur>
+		std::future_status wait_until(const std::chrono::time_point<Clock, Dur>& absTime) const {
+			return release_working_status([&] { return m_future.wait_until(absTime); });
+		}
+
+		void get() {
+			m_future.get();
 		}
 	};
 
@@ -331,7 +370,7 @@ namespace xivres::util::thread_pool {
 	};
 
 	template<typename TFn>
-	inline decltype(std::declval<TFn>()()) base_task::release_working_status(const TFn& fn) {
+	inline decltype(std::declval<TFn>()()) base_task::release_working_status(const TFn& fn) const {
 		return m_pool.release_working_status(fn);
 	}
 

@@ -45,7 +45,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			return TRUE;
 		
 		case DLL_PROCESS_DETACH:
-			MH_Uninitialize();
+			TerminateProcess(GetCurrentProcess(), 0);
 			return TRUE;
 	}
 
