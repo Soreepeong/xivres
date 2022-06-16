@@ -331,6 +331,77 @@ void test_range_read(const xivres::installation& gameReader) {
 	waiter.wait_all();
 }
 
+std::string test_voiceman(const xivres::installation& installation, const xivres::path_spec& pathSpec) {
+	if (pathSpec.category_id() != 0x03)
+		return {};
+
+	const auto scdName = pathSpec.path().substr(pathSpec.path().rfind('/') + 1);
+	if (!scdName.starts_with("vo_"))
+		return {};
+
+	auto parentDirName = pathSpec.path().substr(pathSpec.path().rfind('/', pathSpec.path().size() - scdName.size() - 2) + 1);
+	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
+
+	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
+		return {};
+
+	// vo_<dirname>_<key>_<gender>_<language>.scd
+	std::string sheetKeyPrefix;
+	std::string excelName;
+
+	if (parentDirName.starts_with("VOICEMAN_")) {
+		sheetKeyPrefix = std::format("TEXT_{}_{}_", parentDirName, scdName.substr(18, 6));
+		excelName = std::format("cut_scene/{}/voiceman_{}", scdName.substr(12, 3), scdName.substr(12, 5));
+		
+	} else {
+		auto parentDirNameLower = parentDirName;
+		for (auto& c : parentDirNameLower)
+			if (c < 128)
+				c = std::tolower(c);
+		
+		const auto exl = xivres::excel::exl::reader(installation);
+		for (const auto& name : exl.name_to_id_map() | std::views::keys) {
+			if (!name.starts_with("quest/"))
+				continue;
+
+			auto nameLower = name;
+			for (auto& c : nameLower)
+				if (c < 128)
+					c = std::tolower(c);
+
+			if (!nameLower.contains(parentDirNameLower))
+				continue;
+
+			excelName = name;
+			sheetKeyPrefix = std::format("TEXT_{}_{}_", name.substr(10), scdName.substr(13, 6));
+			break;
+		}
+		if (excelName.empty())
+			return {};
+	}
+
+	for (auto& c : sheetKeyPrefix)
+		c = std::toupper(c);
+	
+	const auto dialogueSheet = installation.get_excel(excelName);
+	
+	for (auto i = 0; i < dialogueSheet.get_exh_reader().get_pages().size(); i++) {
+		for (const auto& row : dialogueSheet.get_exd_reader(i)) {
+			const auto& key = row[0][0].String.escaped();
+			if (!key.starts_with(sheetKeyPrefix))
+				continue;
+
+			const auto characterName = key.substr(sheetKeyPrefix.size());
+			if (characterName != "TATARU" && characterName != "HYTHLODAEUS" && characterName != "FEOUL")
+				return {};
+
+			return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_')) + "_en.scd";
+		}
+	}
+	
+	return {};
+}
+
 int main() {
 	const auto tend = GetTickCount64();
 	try {
@@ -338,6 +409,10 @@ int main() {
 		system("chcp 65001 > NUL");
 
 		xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+
+		std::cout << test_voiceman(gameReader, "cut/ffxiv/sound/MANFST/MANFST005/vo_MANFST005_200260_m_en.scd") << std::endl;
+		std::cout << test_voiceman(gameReader, "cut/ffxiv/sound/MANSEA/MANSEA005/vo_MANSEA005_000010_m_ja.scd") << std::endl;
+		std::cout << test_voiceman(gameReader, "cut/ex3/sound/voicem/voiceman_05000/vo_voiceman_05000_000010_m_ja.scd") << std::endl;
 
 		// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
@@ -349,7 +424,7 @@ int main() {
 		// preview(xivres::texture::stream(gameReader.get_file("common/font/font1.tex")));
 
 		// test_range_read(gameReader);
-		test_pack_unpack(gameReader, true);
+		// test_pack_unpack(gameReader, true);
 		// test_sqpack_generator(gameReader);
 		// test_ogg_decode_encode(gameReader);
 		// test_excel(gameReader);

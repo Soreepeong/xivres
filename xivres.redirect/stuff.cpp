@@ -1,4 +1,5 @@
 #include "pch.h"
+#include <xivres/excel.h>
 #include <xivres/installation.h>
 #include <xivres/packed_stream.hotswap.h>
 #include <xivres/packed_stream.model.h>
@@ -395,12 +396,15 @@ struct xivres_redirect_config_t {
 	};
 
 	bool LogReplacedPaths = false;
+	bool LogDialogueCharacterNames = false;
 	std::vector<log_pattern_filter_t> LogPathFilters;
 	std::vector<additional_game_root_t> AdditionalRoots;
 	std::vector<replacement_rule_t> PathReplacements;
+	std::map<std::string, std::string> ForcedCharacterLanguages;
 
 	friend void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
 		obj.LogReplacedPaths = j.value<bool>("logReplacedPaths", false);
+		obj.LogDialogueCharacterNames = j.value<bool>("logDialogueCharacterNames", false);
 
 		if (const auto it = j.find("logPathFilters"); it == j.end())
 			obj.LogPathFilters.clear();
@@ -466,6 +470,23 @@ struct xivres_redirect_config_t {
 			for (const auto& item : *it)
 				obj.PathReplacements.emplace_back(item.get<replacement_rule_t>());
 		}
+
+		if (const auto it = j.find("forcedCharacterLanguages"); it == j.end())
+			obj.ForcedCharacterLanguages.clear();
+		else {
+			if (!it->is_object())
+				throw std::runtime_error("forcedCharacterLanguages must be an object mapping string(character name) to string(language code)");
+
+			obj.ForcedCharacterLanguages.clear();
+			for (const auto& [k, v] : it->items()) {
+				std::string characterName = k;
+				for (auto& c : characterName) {
+					if (c < 128)
+						c = std::tolower(c);
+				}
+				obj.ForcedCharacterLanguages.emplace(std::move(characterName), v.get<std::string>());
+			}
+		}
 	}
 };
 
@@ -496,6 +517,11 @@ static const xivres::installation& get_installation() {
 			s_installation.emplace(get_game_dir());
 	}
 	return *s_installation;
+}
+
+static const xivres::excel::exl::reader& get_exl() {
+	static const auto s_reader = xivres::excel::exl::reader(get_installation());
+	return s_reader;
 }
 
 [[nodiscard]] const xivres::sqpack::generator::sqpack_views* get_sqpack_view(sqpack_id_t sqpkId) {
@@ -546,7 +572,7 @@ static const xivres::installation& get_installation() {
 	}
 
 	size_t counter = 0;
-	for (const auto [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ { 16 * 1048576, 8192 }, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
+	for (const auto& [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ { 16 * 1048576, 8192 }, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
 		auto& allocations = s_allocations[sqpkId][space];
 
 		std::shared_ptr<xivres::hotswap_packed_stream> stream;
@@ -566,6 +592,93 @@ static const xivres::installation& get_installation() {
 
 	ptr = std::make_unique<xivres::sqpack::generator::sqpack_views>(gen.export_to_views(false));
 	return ptr.get();
+}
+
+std::string force_voiceman_language_for_character(const xivres::path_spec& pathSpec) {
+	if (pathSpec.category_id() != 0x03)
+		return {};
+
+	const auto scdName = pathSpec.path().substr(pathSpec.path().rfind('/') + 1);
+	if (!scdName.starts_with("vo_"))
+		return {};
+
+	auto parentDirName = pathSpec.path().substr(pathSpec.path().rfind('/', pathSpec.path().size() - scdName.size() - 2) + 1);
+	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
+
+	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
+		return {};
+
+	// vo_<dirname>_<key>_<gender>_<language>.scd
+	std::string sheetKeyPrefix;
+	std::string excelName;
+
+	if (parentDirName.starts_with("VOICEMAN_")) {
+		sheetKeyPrefix = std::format("TEXT_{}_{}_", parentDirName, scdName.substr(18, 6));
+		excelName = std::format("cut_scene/{}/voiceman_{}", scdName.substr(12, 3), scdName.substr(12, 5));
+		
+	} else {
+		auto parentDirNameLower = parentDirName;
+		for (auto& c : parentDirNameLower)
+			if (c < 128)
+				c = std::tolower(c);
+
+		for (const auto& name : get_exl().name_to_id_map() | std::views::keys) {
+			if (!name.starts_with("quest/"))
+				continue;
+
+			auto nameLower = name;
+			for (auto& c : nameLower)
+				if (c < 128)
+					c = std::tolower(c);
+
+			if (!nameLower.contains(parentDirNameLower))
+				continue;
+
+			excelName = name;
+			sheetKeyPrefix = std::format("TEXT_{}_{}_", name.substr(10), scdName.substr(13, 6));
+			break;
+		}
+		if (excelName.empty())
+			return {};
+	}
+
+	for (auto& c : sheetKeyPrefix)
+		c = std::toupper(c);
+
+	static xivres::excel::reader s_dialogueSheet;
+	static std::string s_prevExcelName;
+	if (s_prevExcelName != excelName) {
+		s_dialogueSheet = get_installation().get_excel(excelName);
+		s_prevExcelName = excelName;
+	}
+	
+	for (auto i = 0; i < s_dialogueSheet.get_exh_reader().get_pages().size(); i++) {
+		for (const auto& row : s_dialogueSheet.get_exd_reader(i)) {
+			const auto& key = row[0][0].String.escaped();
+			if (!key.starts_with(sheetKeyPrefix))
+				continue;
+
+			auto characterName = key.substr(sheetKeyPrefix.size());
+			for (auto& c : characterName) {
+				if (c < 128)
+					c = std::tolower(c);
+			}
+
+			if (s_config.LogDialogueCharacterNames)
+				OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
+					"[LogDialogueCharacterNames] name={} path={}\n", characterName, pathSpec.path()
+				)).c_str());
+
+			if (auto it = s_config.ForcedCharacterLanguages.find(characterName); it != s_config.ForcedCharacterLanguages.end())
+				return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+			else if (it = s_config.ForcedCharacterLanguages.find(""); it != s_config.ForcedCharacterLanguages.end())
+				return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+			else
+				return {};
+		}
+	}
+	
+	return {};
 }
 
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
@@ -590,10 +703,10 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	std::shared_ptr<xivres::packed_stream> stream;
 
 	for (const auto& filter : s_config.LogPathFilters) {
-		if (srell::regex_search(pathSpec.path(), filter.regex())) {
+		if (regex_search(pathSpec.path(), filter.regex())) {
 			if (filter.Include) {
 				OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
-					"cat=0x{:08x} res=0x{:08x} hash=0x{:08x} {}\n", categoryId, resourceType, resourceHash, pszPath
+					"[LogPathFilters] cat=0x{:08x} res=0x{:08x} hash=0x{:08x} path={}\n", categoryId, resourceType, resourceHash, pszPath
 				)).c_str());
 			}
 			break;
@@ -606,9 +719,8 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			return s_find_existing_resource_handle_original(p1, categoryId, resourceType, resourceHash);
 
 		std::string transformed = pszPath;
-		auto changed = false;
 		for (const auto& rule : s_config.PathReplacements) {
-			auto n = srell::regex_replace(transformed, rule.regex(), rule.To);
+			auto n = regex_replace(transformed, rule.regex(), rule.To);
 			if (n != transformed) {
 				transformed = std::move(n);
 				if (rule.Stop)
@@ -616,13 +728,18 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			}
 		}
 
+		if (resourceType == 'scd') {
+			if (auto t = force_voiceman_language_for_character(pathSpec); !t.empty())
+				transformed = std::move(t);
+		}
+
 		if (transformed != pszPath) {
 			xivres::path_spec transformedPathSpec(transformed);
 			auto exists = false;
 			if (!exists) exists = s_availableReplacementStreams.contains(transformedPathSpec);
-			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) == (std::numeric_limits<size_t>::max)();
+			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
 			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
-				if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) == (std::numeric_limits<size_t>::max)();
+				if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
 			}
 
 			if (exists) {
@@ -640,7 +757,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 
 				if (s_config.LogReplacedPaths)
 					OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
-						"Replaced path: {} => {}\n", pszPath, transformed
+						"[LogReplacedPaths] {} => {}\n", pszPath, transformed
 					)).c_str());
 
 				pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
