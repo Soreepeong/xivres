@@ -45,7 +45,7 @@ namespace xivres::util {
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source, std::span<uint8_t> target);
 
-		static thread_pool::object_pool<util::zlib_inflater>::scoped_pooled_object pooled();
+		static thread_pool::object_pool<zlib_inflater>::scoped_pooled_object pooled();
 	};
 
 	class zlib_deflater {
@@ -95,7 +95,7 @@ namespace xivres::util {
 
 		[[nodiscard]] std::vector<uint8_t>& result();
 
-		static thread_pool::object_pool<util::zlib_deflater>::scoped_pooled_object pooled();
+		static thread_pool::object_pool<zlib_deflater>::scoped_pooled_object pooled();
 	};
 }
 

@@ -27,6 +27,18 @@ xivres::util::thread_pool::pool& xivres::util::thread_pool::pool::current() {
 	return instance();
 }
 
+void xivres::util::thread_pool::pool::throw_if_current_task_cancelled() {
+	if (const auto pTask = instance().current_task())
+		pTask->throw_if_cancelled(); 
+}
+
+xivres::util::thread_pool::base_task* xivres::util::thread_pool::pool::current_task() const {
+	std::shared_lock lock(*m_pmtxThread);
+	if (const auto it = m_mapThreads.find(std::this_thread::get_id()); it != m_mapThreads.end())
+		return it->second.Task.get();
+	return nullptr;
+}
+
 void xivres::util::thread_pool::pool::concurrency(size_t newConcurrency) {
 	std::lock_guard lock(*m_pmtxTask);
 	m_nConcurrency = newConcurrency;

@@ -24,7 +24,7 @@ namespace xivres::util::unicode {
 	size_t decode(EncodingTag<wchar_t>, char32_t& out, const wchar_t* in, size_t nRemainingBytes, bool strict);
 
 	template<typename T>
-	inline size_t decode(char32_t& out, const T* in, size_t nRemainingBytes, bool strict = true) {
+	inline size_t decode(char32_t& out, const T* in, size_t nRemainingBytes, bool strict = false) {
 		return decode(EncodingTag<T>(), out, in, nRemainingBytes, strict);
 	}
 
@@ -35,12 +35,12 @@ namespace xivres::util::unicode {
 	size_t encode(EncodingTag<wchar_t>, wchar_t* ptr, char32_t c, bool strict);
 
 	template<typename T>
-	size_t encode(T* ptr, char32_t c, bool strict = true) {
+	size_t encode(T* ptr, char32_t c, bool strict = false) {
 		return encode(EncodingTag<T>(), ptr, c, strict);
 	}
 
 	template<class TTo>
-	TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = true) {
+	TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = false) {
 		const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, c, strict);
 		const auto baseIndex = out.size();
 		out.resize(baseIndex + encLen);
@@ -49,7 +49,7 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo>
-	TTo convert_from_codepoint(char32_t c, bool strict = true) {
+	TTo convert_from_codepoint(char32_t c, bool strict = false) {
 		TTo out{};
 		return convert_from_codepoint(out, c, strict);
 	}
@@ -57,26 +57,29 @@ namespace xivres::util::unicode {
 	const char32_t* codepoint_name(char32_t c);
 
 	template<class TTo>
-	inline TTo& represent_codepoint(TTo& out, char32_t c, bool strict = true) {
+	TTo& represent_codepoint(TTo& out, char32_t c, bool strict = false) {
 		if (const auto name = codepoint_name(c))
 			return convert<TTo>(out, name);
 		return convert_from_codepoint<TTo>(out, c, strict);
 	}
 
 	template<class TTo>
-	TTo represent_codepoint(char32_t c, bool strict = true) {
+	TTo represent_codepoint(char32_t c, bool strict = false) {
 		TTo out{};
 		return represent_codepoint(out, c, strict);
 	}
 
+	char32_t lower(char32_t in);
+	char32_t upper(char32_t in);
+
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>>
-	TTo& convert(TTo& out, const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
+	TTo& convert(TTo& out, const std::basic_string_view<TFromElem, TFromTraits>& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		out.reserve(out.size() + in.size() * 4 / sizeof(in[0]) / sizeof(out[0]));
 
 		char32_t c{};
 		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && ((decLen = unicode::decode(c, &in[decIdx], in.size() - decIdx, strict))); decIdx += decLen) {
 			const auto encIdx = out.size();
-			const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, c, strict);
+			const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, pfnCharMap ? pfnCharMap(c) : c, strict);
 			out.resize(encIdx + encLen);
 			unicode::encode(&out[encIdx], c, strict);
 		}
@@ -85,63 +88,48 @@ namespace xivres::util::unicode {
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>, class TFromAlloc = std::allocator<TFromElem>>
-	TTo& convert(TTo& out, const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
-		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), strict);
+	TTo& convert(TTo& out, const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
+		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), pfnCharMap, strict);
 	}
 
 	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
+	TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
-		return convert(out, std::basic_string_view<TFromElem>(in, length), strict);
+		return convert(out, std::basic_string_view<TFromElem>(in, length), pfnCharMap, strict);
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>>
-	TTo convert(const std::basic_string_view<TFromElem, TFromTraits>& in, bool strict = true) {
+	TTo convert(const std::basic_string_view<TFromElem, TFromTraits>& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		TTo out{};
-		return convert(out, in, strict);
+		return convert(out, in, pfnCharMap, strict);
 	}
 
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>, class TFromAlloc = std::allocator<TFromElem>>
-	TTo convert(const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, bool strict = true) {
+	TTo convert(const std::basic_string<TFromElem, TFromTraits, TFromAlloc>& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		TTo out{};
-		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), strict);
+		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), pfnCharMap, strict);
 	}
 
 	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), bool strict = true) {
+	TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
 		TTo out{};
-		return convert(out, std::basic_string_view<TFromElem>(in, length), strict);
+		return convert(out, std::basic_string_view<TFromElem>(in, length), pfnCharMap, strict);
 	}
 
-	template<>
-	inline const std::u8string& convert(const std::u8string& in, bool strict) {
-		return in;
-	}
+	inline const std::u8string& convert(const std::u8string& in) { return in; }
 
-	template<>
-	inline const std::u16string& convert(const std::u16string& in, bool strict) {
-		return in;
-	}
+	inline const std::u16string& convert(const std::u16string& in) { return in; }
 
-	template<>
-	inline const std::u32string& convert(const std::u32string& in, bool strict) {
-		return in;
-	}
+	inline const std::u32string& convert(const std::u32string& in) { return in; }
 
-	template<>
-	inline const std::string& convert(const std::string& in, bool strict) {
-		return in;
-	}
+	inline const std::string& convert(const std::string& in) { return in; }
 
-	template<>
-	inline const std::wstring& convert(const std::wstring& in, bool strict) {
-		return in;
-	}
+	inline const std::wstring& convert(const std::wstring& in) { return in; }
 
 	namespace blocks {
 		enum purpose_flags : uint64_t {

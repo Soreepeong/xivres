@@ -1,7 +1,6 @@
 #ifndef XIVRES_INTERNAL_THREADPOOL_H_
 #define XIVRES_INTERNAL_THREADPOOL_H_
 
-#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -183,14 +182,14 @@ namespace xivres::util::thread_pool {
 		public:
 			scoped_pooled_object() : m_parent(nullptr) {}
 
-			scoped_pooled_object(scoped_pooled_object&& r)
-				: m_parent(r.m_parent)
-				, m_objects(std::move(r.m_object)) {
+			scoped_pooled_object(scoped_pooled_object&& r) noexcept
+				: m_objects(std::move(r.m_object))
+				, m_parent(r.m_parent) {
 				r.m_parent = nullptr;
 				r.m_object.reset();
 			}
 
-			scoped_pooled_object& operator=(scoped_pooled_object&& r) {
+			scoped_pooled_object& operator=(scoped_pooled_object&& r) noexcept {
 				if (this == &r)
 					return *this;
 
@@ -256,7 +255,7 @@ namespace xivres::util::thread_pool {
 	object_pool<std::vector<uint8_t>>::scoped_pooled_object pooled_byte_buffer();
 
 	struct untyped_task_shared_ptr_comparator {
-		bool operator()(const std::shared_ptr<base_task>& l, const std::shared_ptr<base_task>& r) {
+		bool operator()(const std::shared_ptr<base_task>& l, const std::shared_ptr<base_task>& r) const {
 			return *l < *r;
 		}
 	};
@@ -296,6 +295,10 @@ namespace xivres::util::thread_pool {
 		static pool& instance();
 
 		static pool& current();
+		
+		static void throw_if_current_task_cancelled();
+
+		base_task* current_task() const;
 
 		template<class Rep, class Period>
 		void max_thread_inactivity(std::chrono::duration<Rep, Period> dur) {
@@ -322,7 +325,7 @@ namespace xivres::util::thread_pool {
 				invokePath = it->second.Task->m_invokePath;
 			invokePath.Stack[invokePath.Depth] = static_cast<uint16_t>(m_nTaskCounter++);
 			if (invokePath.Depth < invoke_path_type::StackSize)
-				invokePath.Depth++;
+				++invokePath.Depth;
 
 			m_pqTasks.emplace(pTask);
 			lock.unlock();
@@ -334,13 +337,10 @@ namespace xivres::util::thread_pool {
 		[[nodiscard]] on_dtor release_working_status();
 
 		template<typename TFn>
+		// ReSharper disable once CppNotAllPathsReturnValue
 		decltype(std::declval<TFn>()()) release_working_status(const TFn& fn) {
-			std::shared_lock lock(*m_pmtxThread);
-			if (!m_mapThreads.contains(std::this_thread::get_id())) {
-				lock.unlock();
+			if (!current_task())
 				return fn();
-			}
-			lock.unlock();
 
 			m_nWaitingThreads += 1;
 			dispatch_task_to_worker();

@@ -3,12 +3,14 @@
 #include <srell.hpp>
 #include <string>
 #include <vector>
+#include <minizip/zip.h>
 #include <nlohmann/json.hpp>
 
 #include "equipment_and_gimmick_parameter.h"
 #include "equipment_deformer_parameter.h"
 #include "ex_skeleton_table.h"
 #include "image_change_data.h"
+#include "packed_stream.h"
 
 namespace xivres::textools {
 	struct mod_pack {
@@ -218,5 +220,47 @@ namespace xivres::textools {
 		[[nodiscard]] bool has_gimmick_parameter_edits() const;
 		void apply_gimmick_parameter_edits(gimmmick_parameter_file& gmp) const;
 		void apply_ex_skeleton_table_edits(ex_skeleton_table_file& est) const;
+	};
+	
+	class simple_ttmp2_writer {
+		std::filesystem::path m_path;
+		std::filesystem::path m_pathTemp;
+		zlib_filefunc64_def m_zffunc;
+		zipFile m_zf = nullptr;
+		std::optional<mod_pack_json> m_ttmpl;
+		std::optional<z_stream> m_zstream;
+
+		struct ttmpd_data {
+			std::optional<z_stream> Z;
+			bool Complete;
+			uint32_t Crc32;
+			uint64_t Size;
+		};
+		std::optional<ttmpd_data> m_packed;
+		bool m_errorState = false;
+		
+	public:
+		simple_ttmp2_writer() = default;
+		simple_ttmp2_writer(std::filesystem::path path);
+		simple_ttmp2_writer(simple_ttmp2_writer&& r) noexcept { swap(r, *this); }
+		simple_ttmp2_writer(const simple_ttmp2_writer&) = delete;
+		simple_ttmp2_writer& operator=(simple_ttmp2_writer&& r) noexcept { swap(r, *this); return *this; }
+		simple_ttmp2_writer& operator=(const simple_ttmp2_writer&) = delete;
+		~simple_ttmp2_writer() {
+			close(true);
+		}
+
+		friend void swap(simple_ttmp2_writer& l, simple_ttmp2_writer& r) noexcept;
+
+		[[nodiscard]] mod_pack_json& ttmpl() { return *m_ttmpl; }
+		[[nodiscard]] const mod_pack_json& ttmpl() const { return *m_ttmpl; }
+
+		void begin_packed(int compressionLevel = Z_BEST_COMPRESSION);
+		void add_packed(const packed_stream& stream);
+		void end_packed();
+		void add_file(const std::string& path, const stream& stream, int compressionLevel = Z_BEST_COMPRESSION, const std::string& comment = {});
+
+		void open(std::filesystem::path path);
+		void close(bool revert = false, const std::string& comment = {});
 	};
 }

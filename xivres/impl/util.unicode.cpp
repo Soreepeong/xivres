@@ -7447,6 +7447,18 @@ const char32_t* xivres::util::unicode::codepoint_name(char32_t c) {
 	}
 }
 
+char32_t xivres::util::unicode::lower(char32_t in) {
+	if ('A' <= in && in <= 'Z')
+		return in - 'A' + 'a';
+	return in;
+}
+
+char32_t xivres::util::unicode::upper(char32_t in) {
+	if ('a' <= in && in <= 'z')
+		return in - 'a' + 'A';
+	return in;
+}
+
 std::span<const xivres::util::unicode::blocks::block_definition> xivres::util::unicode::blocks::all_blocks() {
 	/*
 	 * http://www.util.unicode.org/charts/
