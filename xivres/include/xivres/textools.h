@@ -223,19 +223,20 @@ namespace xivres::textools {
 	};
 	
 	class simple_ttmp2_writer {
+		struct ttmpd_data {
+			std::unique_ptr<std::mutex> WriteMtx;
+			std::optional<z_stream> Z;
+			bool Complete;
+			uint32_t Crc32;
+			uint64_t Size;
+		};
+		
 		std::filesystem::path m_path;
 		std::filesystem::path m_pathTemp;
 		zlib_filefunc64_def m_zffunc;
 		zipFile m_zf = nullptr;
 		std::optional<mod_pack_json> m_ttmpl;
 		std::optional<z_stream> m_zstream;
-
-		struct ttmpd_data {
-			std::optional<z_stream> Z;
-			bool Complete;
-			uint32_t Crc32;
-			uint64_t Size;
-		};
 		std::optional<ttmpd_data> m_packed;
 		bool m_errorState = false;
 		
@@ -255,7 +256,7 @@ namespace xivres::textools {
 		[[nodiscard]] mod_pack_json& ttmpl() { return *m_ttmpl; }
 		[[nodiscard]] const mod_pack_json& ttmpl() const { return *m_ttmpl; }
 
-		void begin_packed(int compressionLevel = Z_BEST_COMPRESSION);
+		void begin_packed(int compressionLevel = Z_NO_COMPRESSION);
 		void add_packed(const packed_stream& stream);
 		void end_packed();
 		void add_file(const std::string& path, const stream& stream, int compressionLevel = Z_BEST_COMPRESSION, const std::string& comment = {});

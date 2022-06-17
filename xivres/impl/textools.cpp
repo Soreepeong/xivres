@@ -421,10 +421,13 @@ void xivres::textools::swap(simple_ttmp2_writer& l, simple_ttmp2_writer& r) noex
 	std::swap(l.m_zf, r.m_zf);
 	std::swap(l.m_ttmpl, r.m_ttmpl);
 	std::swap(l.m_zstream, r.m_zstream);
+	std::swap(l.m_packed, r.m_packed);
 	std::swap(l.m_errorState, r.m_errorState);
 }
 
 void xivres::textools::simple_ttmp2_writer::begin_packed(int compressionLevel) {
+	if (!m_zf)
+		throw std::logic_error("No file is open");
 	if (m_packed)
 		throw std::logic_error("Packing has already begun");
 
@@ -441,7 +444,7 @@ void xivres::textools::simple_ttmp2_writer::begin_packed(int compressionLevel) {
 		nullptr, 0, 1))
 		throw std::runtime_error(std::format("zipOpenNewFileInZip3_64 error({})", err));
 
-	m_packed.emplace(std::nullopt, false, crc32_z(0, nullptr, 0), 0);
+	m_packed.emplace(std::make_unique<std::mutex>(), std::nullopt, false, crc32_z(0, nullptr, 0), 0);
 	if (compressionLevel != Z_NO_COMPRESSION) {
 		m_packed->Z.emplace();
 		if (const auto res = deflateInit2(&*m_packed->Z, compressionLevel, Z_DEFLATED, -MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY); res != Z_OK)
@@ -451,11 +454,15 @@ void xivres::textools::simple_ttmp2_writer::begin_packed(int compressionLevel) {
 
 void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stream) {
 	constexpr uint32_t bufferSize = 65536;
+	if (!m_zf)
+		throw std::logic_error("No file is open");
 	if (!m_packed)
 		throw std::logic_error("Packing has not started yet");
 	if (m_packed->Complete)
 		throw std::logic_error("Packing has already ended");
 
+	const auto lock = std::lock_guard(*m_packed->WriteMtx); 
+	
 	try {
 		auto& mods_json = m_ttmpl->SimpleModsList.emplace_back();
 		mods_json.Name = stream.path_spec().path();
@@ -466,8 +473,6 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 		mods_json.ModSize = stream.size();
 		mods_json.IsDefault = true;
 
-		if (stream.size() % 0x80)
-			__debugbreak();
 		m_packed->Size += stream.size();
 
 		auto pooledBuffer = util::thread_pool::pooled_byte_buffer();
@@ -511,9 +516,6 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 			}
 		}
 
-		if (m_packed->Z && m_packed->Z->avail_in)
-			__debugbreak();
-
 	} catch (...) {
 		m_errorState = true;
 		throw;
@@ -523,6 +525,8 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 void xivres::textools::simple_ttmp2_writer::end_packed() {
 	constexpr uint32_t bufferSize = 65536;
 	
+	if (!m_zf)
+		throw std::logic_error("No file is open");
 	if (!m_packed)
 		throw std::logic_error("Packing has not started yet");
 	if (m_packed->Complete)
@@ -562,6 +566,9 @@ void xivres::textools::simple_ttmp2_writer::end_packed() {
 }
 
 void xivres::textools::simple_ttmp2_writer::add_file(const std::string& path, const stream& stream, int compressionLevel, const std::string& comment) {
+	if (!m_zf)
+		throw std::logic_error("No file is open");
+	
 	constexpr uint32_t bufferSize = 65536;
 	zip_fileinfo zi{};
 
@@ -700,16 +707,17 @@ void xivres::textools::simple_ttmp2_writer::close(bool revert, const std::string
 		rename(m_pathTemp, m_path);
 	}
 
+	if (m_zstream)
+		deflateEnd(&*m_zstream);
+	if (m_packed && m_packed->Z)
+		deflateEnd(&*m_packed->Z);
+	
 	m_path.clear();
 	m_pathTemp.clear();
 	m_zffunc = {};
 	m_zf = nullptr;
 	m_ttmpl.reset();
-	if (m_zstream)
-		deflateEnd(&*m_zstream);
 	m_zstream.reset();
-	if (m_packed && m_packed->Z)
-		deflateEnd(&*m_packed->Z);
 	m_packed.reset();
 	m_errorState = false;
 }
