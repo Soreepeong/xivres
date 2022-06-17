@@ -6,7 +6,7 @@
 
 #include "include/xivres/util.unicode.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <minizip/iowin32.h>
 #else
 #include <minizip/ioapi.h>
@@ -461,8 +461,9 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 	if (m_packed->Complete)
 		throw std::logic_error("Packing has already ended");
 
-	const auto lock = std::lock_guard(*m_packed->WriteMtx); 
-	
+	std::unique_lock lock(*m_packed->WriteMtx, std::defer_lock);
+	util::thread_pool::pool::current().release_working_status([&lock] { lock.lock(); });
+
 	try {
 		auto& mods_json = m_ttmpl->SimpleModsList.emplace_back();
 		mods_json.Name = stream.path_spec().path();
@@ -476,10 +477,14 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 		m_packed->Size += stream.size();
 
 		auto pooledBuffer = util::thread_pool::pooled_byte_buffer();
+		if (!pooledBuffer)
+			pooledBuffer.emplace();
 		auto& buffer = *pooledBuffer;
 		buffer.resize(bufferSize);
 
 		auto pooledBuffer2 = util::thread_pool::pooled_byte_buffer();
+		if (!pooledBuffer2)
+			pooledBuffer2.emplace();
 		auto& buffer2 = *pooledBuffer2;
 		buffer2.resize(bufferSize);
 
@@ -524,7 +529,7 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 
 void xivres::textools::simple_ttmp2_writer::end_packed() {
 	constexpr uint32_t bufferSize = 65536;
-	
+
 	if (!m_zf)
 		throw std::logic_error("No file is open");
 	if (!m_packed)
@@ -535,6 +540,8 @@ void xivres::textools::simple_ttmp2_writer::end_packed() {
 	try {
 		if (m_packed->Z) {
 			auto pooledBuffer2 = util::thread_pool::pooled_byte_buffer();
+			if (!pooledBuffer2)
+				pooledBuffer2.emplace();
 			auto& buffer2 = *pooledBuffer2;
 			buffer2.resize(bufferSize);
 
@@ -555,10 +562,10 @@ void xivres::textools::simple_ttmp2_writer::end_packed() {
 					throw std::runtime_error(std::format("zipWriteInFileInZip error({})", err));
 			} while (m_packed->Z->avail_out == 0);
 		}
-		
+
 		zipCloseFileInZipRaw64(m_zf, m_packed->Size, m_packed->Crc32);
 		m_packed->Complete = true;
-		
+
 	} catch (...) {
 		m_errorState = true;
 		throw;
@@ -568,7 +575,7 @@ void xivres::textools::simple_ttmp2_writer::end_packed() {
 void xivres::textools::simple_ttmp2_writer::add_file(const std::string& path, const stream& stream, int compressionLevel, const std::string& comment) {
 	if (!m_zf)
 		throw std::logic_error("No file is open");
-	
+
 	constexpr uint32_t bufferSize = 65536;
 	zip_fileinfo zi{};
 
@@ -587,10 +594,14 @@ void xivres::textools::simple_ttmp2_writer::add_file(const std::string& path, co
 
 	try {
 		auto pooledBuffer = util::thread_pool::pooled_byte_buffer();
+		if (!pooledBuffer)
+			pooledBuffer.emplace();
 		auto& buffer = *pooledBuffer;
 		buffer.resize(bufferSize);
 
 		auto pooledBuffer2 = util::thread_pool::pooled_byte_buffer();
+		if (!pooledBuffer2)
+			pooledBuffer2.emplace();
 		auto& buffer2 = *pooledBuffer2;
 		buffer2.resize(bufferSize);
 
@@ -653,7 +664,7 @@ void xivres::textools::simple_ttmp2_writer::open(std::filesystem::path path) {
 
 	m_path = std::move(path);
 	m_pathTemp = m_path;
-#ifdef WIN32
+#ifdef _WIN32
 	m_pathTemp.replace_filename(std::format(L"{}.{:X}.tmp", m_pathTemp.filename().c_str(), std::chrono::steady_clock::now().time_since_epoch().count()));
 	fill_win32_filefunc64W(&m_zffunc);
 #else
@@ -680,14 +691,14 @@ void xivres::textools::simple_ttmp2_writer::close(bool revert, const std::string
 		for (auto& mods_json : m_ttmpl->SimpleModsList) {
 			if (mods_json.ModPack)
 				continue;
-			
+
 			auto& mod_pack = mods_json.ModPack.emplace();
 			mod_pack.Name = m_ttmpl->Name;
 			mod_pack.Author = m_ttmpl->Author;
 			mod_pack.Version = m_ttmpl->Version;
 			mod_pack.Url = m_ttmpl->Url;
 		}
-		
+
 		auto jsonobj = nlohmann::json::object();
 		to_json(jsonobj, *m_ttmpl);
 		const auto ttmpls = jsonobj.dump(1, '\t');
@@ -711,7 +722,7 @@ void xivres::textools::simple_ttmp2_writer::close(bool revert, const std::string
 		deflateEnd(&*m_zstream);
 	if (m_packed && m_packed->Z)
 		deflateEnd(&*m_packed->Z);
-	
+
 	m_path.clear();
 	m_pathTemp.clear();
 	m_zffunc = {};

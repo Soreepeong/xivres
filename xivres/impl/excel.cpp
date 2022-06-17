@@ -221,6 +221,17 @@ const xivres::excel::exd::row::buffer& xivres::excel::exd::reader::operator[](ui
 	return {&get_sqpack(0x0a0000), name};
 }
 
+std::string xivres::installation::get_version(uint8_t expac) const {
+	file_stream stream;
+	if (expac == 0)
+		stream = m_gamePath / "ffxivgame.ver";
+	else
+		stream = m_gamePath / std::format("sqpack/ex{}/ex{}.ver", expac, expac); 
+	std::string res(stream.size(), '\0');
+	stream.read_fully(0, std::span(res));
+	return res;
+}
+
 xivres::excel::reader& xivres::excel::reader::operator=(reader&& r) noexcept {
 	if (this == &r)
 		return *this;

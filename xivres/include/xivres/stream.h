@@ -114,10 +114,11 @@ namespace xivres {
 		std::unique_ptr<data> m_data;
 
 	public:
+		file_stream();
 		file_stream(std::filesystem::path path);
-		file_stream(file_stream&&) = delete;
+		file_stream(file_stream&&) noexcept;
+		file_stream& operator=(file_stream&&) noexcept;
 		file_stream(const file_stream&) = delete;
-		file_stream& operator=(file_stream&&) = delete;
 		file_stream& operator=(const file_stream&) = delete;
 		~file_stream() override;
 
@@ -135,7 +136,7 @@ namespace xivres {
 		memory_stream(const memory_stream& r);
 		memory_stream(const stream& r);
 		memory_stream(std::vector<uint8_t> buffer);
-		memory_stream(std::span<uint8_t> view);
+		memory_stream(std::span<const char> view);
 		memory_stream(std::span<const uint8_t> view);
 		memory_stream& operator=(std::vector<uint8_t>&& buf) noexcept;
 		memory_stream& operator=(const std::vector<uint8_t>& buf);
@@ -148,6 +149,8 @@ namespace xivres {
 
 		[[nodiscard]] bool owns_data() const;
 		std::span<const uint8_t> as_span(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const;
+
+		friend void swap(memory_stream& l, memory_stream& r) noexcept;
 	};
 }
 

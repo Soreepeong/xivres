@@ -370,7 +370,7 @@ namespace xivres::util::thread_pool {
 	};
 
 	template<typename TFn>
-	inline decltype(std::declval<TFn>()()) base_task::release_working_status(const TFn& fn) const {
+	decltype(std::declval<TFn>()()) base_task::release_working_status(const TFn& fn) const {
 		return m_pool.release_working_status(fn);
 	}
 
@@ -382,7 +382,7 @@ namespace xivres::util::thread_pool {
 		std::mutex m_mtx;
 		std::map<void*, std::shared_ptr<TPackagedTask>> m_mapPending;
 
-		std::deque<TReturn> m_dqFinished;
+		std::deque<std::future<TReturn>> m_dqFinished;
 		std::condition_variable m_cvFinished;
 
 	public:
@@ -403,7 +403,7 @@ namespace xivres::util::thread_pool {
 			for (auto& task : m_mapPending | std::views::values)
 				task->cancel();
 
-			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this] { return m_mapPending.empty(); }); });
 		}
 
 		[[nodiscard]] size_t pending() {
@@ -418,111 +418,111 @@ namespace xivres::util::thread_pool {
 		void submit(std::function<TReturn(base_task&)> fn) {
 			std::lock_guard lock(m_mtx);
 			auto newTask = m_pool.submit<void>([this, fn = std::move(fn)](task<void>& currentTask) {
-				auto r = fn(currentTask);
+				std::packaged_task<TReturn(base_task&)> task(fn);
+				task(currentTask);
 
 				std::lock_guard lock(m_mtx);
 				m_mapPending.erase(&currentTask);
-				m_dqFinished.emplace_back(std::move(r));
+				m_dqFinished.emplace_back(task.get_future());
 				m_cvFinished.notify_one();
 			});
 			m_mapPending.emplace(newTask.get(), std::move(newTask));
 		}
 
-		[[nodiscard]] std::optional<TReturn> get() {
-			if (m_mapPending.empty() && m_dqFinished.empty())
-				return std::nullopt;
+		[[nodiscard]] auto get() {
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
 
 			std::unique_lock lock(m_mtx);
-			if (m_mapPending.empty() && m_dqFinished.empty())
-				return std::nullopt;
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
 
-			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return !m_dqFinished.empty(); }); });
+			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this] { return !m_dqFinished.empty(); }); });
+			auto obj = std::move(m_dqFinished.front());
+			m_dqFinished.pop_front();
+			lock.unlock();
+			
+			if constexpr (std::is_void_v<TReturn>)
+				return true;
+			else
+				return std::optional<TReturn>(obj.get());
+		}
+
+		template<class Rep, class Period, typename = std::enable_if_t<!std::is_void_v<TReturn>>>
+		[[nodiscard]] auto get(const std::chrono::duration<Rep, Period>& waitDuration) {
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
+
+			std::unique_lock lock(m_mtx);
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
+
+			m_pool.release_working_status([&] { m_cvFinished.wait_for(lock, waitDuration, [this] { return !m_dqFinished.empty(); }); });
+			if (m_dqFinished.empty())
+				return std::nullopt;
 			auto obj = std::move(m_dqFinished.front());
 			m_dqFinished.pop_front();
 			lock.unlock();
 
-			return obj;
-		}
-	};
-
-	template<>
-	class task_waiter<void> {
-		using TPackagedTask = task<void>;
-
-		pool& m_pool;
-		std::mutex m_mtx;
-		std::map<void*, std::shared_ptr<TPackagedTask>> m_mapPending;
-		std::condition_variable m_cvFinished;
-		size_t m_finishCounter = 0;
-		size_t m_notifyOnAnyFinish = 0;
-
-	public:
-		task_waiter(pool& pool = pool::current())
-			: m_pool(pool) {
+			if constexpr (std::is_void_v<TReturn>)
+				return true;
+			else
+				return std::optional<TReturn>(obj.get());
 		}
 
-		task_waiter(task_waiter&&) = delete;
-		task_waiter(const task_waiter&) = delete;
-		task_waiter& operator=(task_waiter&&) = delete;
-		task_waiter& operator=(const task_waiter&) = delete;
-
-		~task_waiter() {
-			if (m_mapPending.empty())
-				return;
+		template <class Clock, class Duration, typename = std::enable_if_t<!std::is_void_v<TReturn>>>
+		[[nodiscard]] auto get(const std::chrono::time_point<Clock, Duration>& waitUntil) {
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
 
 			std::unique_lock lock(m_mtx);
-			for (auto& task : m_mapPending | std::views::values)
-				task->cancel();
+			if (m_mapPending.empty() && m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
 
-			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
-		}
+			m_pool.release_working_status([&] { m_cvFinished.wait_until(lock, waitUntil, [this] { return !m_dqFinished.empty(); }); });
+			if (m_dqFinished.empty()) {
+				if constexpr (std::is_void_v<TReturn>)
+					return false;
+				else
+					return std::optional<TReturn>();
+			}
+			auto obj = std::move(m_dqFinished.front());
+			m_dqFinished.pop_front();
+			lock.unlock();
 
-		[[nodiscard]] size_t pending() {
-			std::lock_guard lock(m_mtx);
-			return m_mapPending.size();
-		}
-
-		[[nodiscard]] pool& pool() const {
-			return m_pool;
-		}
-
-		void submit(std::function<void(base_task&)> fn) {
-			std::lock_guard lock(m_mtx);
-			auto newTask = m_pool.submit<void>([this, fn = std::move(fn)](base_task& currentTask) {
-				fn(currentTask);
-
-				std::lock_guard lock(m_mtx);
-				m_mapPending.erase(&currentTask);
-				m_finishCounter++;
-				if (m_notifyOnAnyFinish || m_mapPending.empty())
-					m_cvFinished.notify_one();
-			});
-			m_mapPending.emplace(newTask.get(), std::move(newTask));
-		}
-
-		[[nodiscard]] bool get() {
-			if (m_mapPending.empty())
-				return false;
-
-			std::unique_lock lock(m_mtx);
-			if (m_mapPending.empty())
-				return false;
-
-			m_notifyOnAnyFinish += 1;
-			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this, baseCounter = m_finishCounter]() { return m_finishCounter != baseCounter; }); });
-			m_notifyOnAnyFinish -= 1;
-			return true;
+			if constexpr (std::is_void_v<TReturn>)
+				return true;
+			else
+				return std::optional<TReturn>(obj.get());
 		}
 
 		void wait_all() {
-			if (m_mapPending.empty())
-				return;
-
-			std::unique_lock lock(m_mtx);
-			if (m_mapPending.empty())
-				return;
-
-			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this]() { return m_mapPending.empty(); }); });
+			while (get())
+				void();
 		}
 	};
 }

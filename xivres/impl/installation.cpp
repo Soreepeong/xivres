@@ -1,6 +1,11 @@
 #include "../include/xivres/installation.h"
 #include "../include/xivres/util.thread_pool.h"
 
+#ifdef _WIN32
+#define WIN32_MEAN_AND_LEAN
+#include <Windows.h>
+#endif
+
 #include <ranges>
 
 xivres::installation::installation(std::filesystem::path gamePath)
@@ -67,3 +72,82 @@ void xivres::installation::preload_all_sqpacks() const {
 		waiter.submit([this, key](auto&) { void(get_sqpack(key)); });
 	waiter.wait_all();
 }
+
+#ifdef _WIN32
+
+static std::wstring read_registry_as_wstring(const wchar_t* lpSubKey, const wchar_t* lpValueName, int mode = 0) {
+	if (mode == 0) {
+		auto res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_32KEY);
+		if (res1.empty())
+			res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_64KEY);
+		return res1;
+	}
+	HKEY hKey;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+		lpSubKey,
+		0, KEY_READ | mode, &hKey))
+			return {};
+
+	const auto hKeyFreer = std::unique_ptr<std::remove_pointer_t<HKEY>, decltype(&RegCloseKey)>(hKey, &RegCloseKey);
+
+	DWORD buflen = 0;
+	if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, nullptr, &buflen))
+		return {};
+
+	std::wstring buf;
+	buf.resize(buflen + 1);
+	if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, reinterpret_cast<LPBYTE>(&buf[0]), &buflen))
+		return {};
+
+	buf.erase(std::ranges::find(buf, L'\0'), buf.end());
+
+	return buf;
+}
+
+std::filesystem::path xivres::installation::find_installation_global() {
+	if (const auto reg = read_registry_as_wstring(LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{2B41E132-07DF-4925-A3D3-F2D1765CCDFE})", L"DisplayIcon"); !reg.empty()) {
+		// C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\boot\ffxivboot.exe
+		auto path = std::filesystem::path(reg).parent_path().parent_path() / "game";
+		if (exists(path))
+			return path;
+	}
+
+	for (const auto steamAppId : {
+			39210,  // paid
+			312060,  // free trial
+		}) {
+		if (const auto reg = read_registry_as_wstring(std::format(LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App {})", steamAppId).c_str(), L"InstallLocation"); !reg.empty()) {
+			auto path = std::filesystem::path(reg) / "game";
+			if (exists(path))
+				return path;
+		}
+	}
+	
+	return {};
+}
+
+std::filesystem::path xivres::installation::find_installation_china() {
+	if (const auto reg = read_registry_as_wstring(LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\FFXIV)", L"DisplayIcon"); !reg.empty()) {
+		// C:\Program Files (x86)\SNDA\FFXIV\uninst.exe
+		auto path = std::filesystem::path(reg).parent_path() / "game";
+		if (exists(path))
+			return path;
+	}
+	
+	return {};
+}
+
+std::filesystem::path xivres::installation::find_installation_korea() {
+	if (const auto reg = read_registry_as_wstring(LR"(SOFTWARE\Classes\ff14kr\shell\open\command)", L""); !reg.empty()) {
+		// "C:\Program Files (x86)\FINAL FANTASY XIV - KOREA\boot\FFXIV_Boot.exe" "%1"
+		if (int nArgs; const auto ppszArgs = CommandLineToArgvW(reg.c_str(), &nArgs)) {
+			const auto freer = std::unique_ptr<std::remove_pointer_t<decltype(ppszArgs)>, decltype(&LocalFree)>(ppszArgs, &LocalFree);
+			auto path = std::filesystem::path(ppszArgs[0]).parent_path().parent_path() / "game";
+			if (exists(path))
+				return path;
+		}
+	}
+	
+	return {};
+}
+#endif

@@ -60,12 +60,12 @@ xivres::util::on_dtor xivres::util::thread_pool::pool::release_working_status() 
 
 	m_nWaitingThreads += 1;
 	dispatch_task_to_worker();
-	return { [this]() { m_nWaitingThreads -= 1; } };
+	return { [this] { m_nWaitingThreads -= 1; } };
 }
 
 void xivres::util::thread_pool::pool::worker_body() {
-	std::shared_ptr<std::mutex> pmtxTask(m_pmtxTask);
-	std::shared_ptr<std::shared_mutex> pmtxThread(m_pmtxThread);
+	std::shared_ptr pmtxTask(m_pmtxTask);
+	std::shared_ptr pmtxThread(m_pmtxThread);
 	std::unique_lock taskLock(*pmtxTask);
 	std::unique_lock threadLock(*pmtxThread);
 
@@ -76,15 +76,15 @@ void xivres::util::thread_pool::pool::worker_body() {
 	while (true) {
 		if (!take_task(pTask)) {
 			const auto waitFrom = std::chrono::steady_clock::now();
-			m_nWaitingThreads++;
 			m_nFreeThreads++;
+			++m_nWaitingThreads;
 			while (!take_task(pTask)) {
 				if (m_bQuitting)
 					break;
 				if (m_cvTask.wait_until(taskLock, waitFrom + m_durMaxThreadInactivity) == std::cv_status::timeout)
 					break;
 			}
-			m_nWaitingThreads--;
+			--m_nWaitingThreads;
 			m_nFreeThreads--;
 			if (!pTask)
 				break;

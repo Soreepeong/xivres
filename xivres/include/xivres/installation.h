@@ -47,11 +47,21 @@ namespace xivres {
 
 		[[nodiscard]] excel::reader get_excel(const std::string& name) const;
 
+		[[nodiscard]] std::string get_version(uint8_t expac) const;
+
 		fontgen::game_fontdata_set get_fontdata_set(font_type gameFontType, std::span<const fontgen::game_fontdata_definition> gameFontdataDefinitions, const char* pcszTexturePathPattern) const;
 
 		fontgen::game_fontdata_set get_fontdata_set(font_type fontType = font_type::font) const;
 
 		void preload_all_sqpacks() const;
+
+#ifdef _WIN32
+		static std::filesystem::path find_installation_global();
+		
+		static std::filesystem::path find_installation_china();
+		
+		static std::filesystem::path find_installation_korea();
+#endif
 	};
 }
 
