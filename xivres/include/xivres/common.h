@@ -4,6 +4,8 @@
 #include <functional>
 #include <stdexcept>
 
+#include <nlohmann/json_fwd.hpp>
+
 namespace xivres {
 	// when used as game launch parameter, subtract by one.
 	enum class game_language : uint16_t {
@@ -16,6 +18,8 @@ namespace xivres {
 		Korean = 7,
 	};
 
+	void to_json(nlohmann::json& j, const game_language& value);
+	void from_json(const nlohmann::json& j, game_language& newValue);
 	const char* game_language_code(game_language);
 
 	static constexpr uint32_t EntryAlignment = 128;

@@ -106,8 +106,11 @@ namespace xivres::util::unicode {
 
 		char32_t c{};
 		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && ((decLen = decode(c, &in[decIdx], in.size() - decIdx, strict))); decIdx += decLen) {
+			if (pfnCharMap)
+				c = pfnCharMap(c);
+			
 			const auto encIdx = out.size();
-			const auto encLen = encode<typename TTo::value_type>(nullptr, pfnCharMap ? pfnCharMap(c) : c, strict);
+			const auto encLen = encode<typename TTo::value_type>(nullptr, c, strict);
 			out.resize(encIdx + encLen);
 			encode(&out[encIdx], c, strict);
 		}
