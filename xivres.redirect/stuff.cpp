@@ -725,7 +725,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			xivres::path_spec transformedPathSpec(transformed);
 			auto exists = false;
 			if (!exists) exists = s_availableReplacementStreams.contains(transformedPathSpec);
-			if (!exists) exists = get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
+			if (!exists) exists = !!pViews->find_entry(transformedPathSpec);
 			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
 				if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
 			}
