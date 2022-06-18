@@ -10,7 +10,6 @@
 #include <xivres/sqpack.reader.h>
 #include <xivres/textools.h>
 #include <xivres/sound.h>
-#include <xivres/util.on_dtor.h>
 #include <xivres/util.thread_pool.h>
 #include <xivres/util.unicode.h>
 #include <xivres/xivstring.h>
@@ -29,15 +28,15 @@ class oplocking_file_stream : public xivres::default_base_stream {
 	mutable std::thread m_thOplockWaiter;
 
 	mutable REQUEST_OPLOCK_INPUT_BUFFER m_inOplock = {
-	  REQUEST_OPLOCK_CURRENT_VERSION,
-	  sizeof(m_inOplock),
-	  OPLOCK_LEVEL_CACHE_READ | OPLOCK_LEVEL_CACHE_HANDLE,
-	  REQUEST_OPLOCK_INPUT_FLAG_REQUEST,
+		REQUEST_OPLOCK_CURRENT_VERSION,
+		sizeof(m_inOplock),
+		OPLOCK_LEVEL_CACHE_READ | OPLOCK_LEVEL_CACHE_HANDLE,
+		REQUEST_OPLOCK_INPUT_FLAG_REQUEST,
 	};
 
 	mutable REQUEST_OPLOCK_OUTPUT_BUFFER m_outOplock = {
-	  REQUEST_OPLOCK_CURRENT_VERSION,
-	  sizeof(m_outOplock),
+		REQUEST_OPLOCK_CURRENT_VERSION,
+		sizeof(m_outOplock),
 	};
 
 	template<typename T>
@@ -78,10 +77,12 @@ public:
 
 		open();
 	}
+
 	oplocking_file_stream(oplocking_file_stream&&) = delete;
 	oplocking_file_stream(const oplocking_file_stream&) = delete;
 	oplocking_file_stream& operator=(oplocking_file_stream&&) = delete;
 	oplocking_file_stream& operator=(const oplocking_file_stream&) = delete;
+
 	~oplocking_file_stream() override {
 		CancelIoEx(m_hFile.get(), &m_ovOplock);
 		if (m_thOplockWaiter.joinable())
@@ -148,7 +149,7 @@ public:
 		} else {
 			DWORD readLength = 0;
 			OVERLAPPED ov{};
-			std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(CloseHandle)*> hEvent(throw_if_value(CreateEventW(nullptr, FALSE, FALSE, nullptr), HANDLE{}), &CloseHandle);
+			const auto hEvent = std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(CloseHandle)*>(throw_if_value(CreateEventW(nullptr, FALSE, FALSE, nullptr), HANDLE{}), &CloseHandle);
 			ov.hEvent = hEvent.get();
 			ov.Offset = static_cast<DWORD>(offset);
 			ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
@@ -168,21 +169,17 @@ class lazy_packing_oplocking_file_system : public xivres::packed_stream {
 	xivres::packed::type m_packedType = xivres::packed::type::placeholder;
 
 	mutable std::shared_ptr<oplocking_file_stream> m_oplockingStream;
-	mutable std::shared_ptr<xivres::packed_stream> m_packedStream;
+	mutable std::shared_ptr<packed_stream> m_packedStream;
 
 public:
 	lazy_packing_oplocking_file_system(xivres::path_spec pathSpec, std::filesystem::path path)
-		: xivres::packed_stream(std::move(pathSpec))
+		: packed_stream(std::move(pathSpec))
 		, m_path(std::move(path)) {
 
-		std::wstring ext = m_path.extension().wstring();
-		for (auto& c : ext)
-			if (c < 128)
-				c = std::tolower(c);
-
-		if (ext == L".tex" || ext == L".atex")
+		const auto ext = xivres::util::unicode::convert<std::string>(m_path.extension().wstring(), xivres::util::unicode::lower);
+		if (ext == ".tex" || ext == ".atex")
 			m_packedType = xivres::packed::type::texture;
-		else if (ext == L".mdl")
+		else if (ext == ".mdl")
 			m_packedType = xivres::packed::type::model;
 		else
 			m_packedType = xivres::packed::type::standard;
@@ -255,6 +252,7 @@ decltype(DETOUR_resolve_string_indirection)* s_resolve_string_indirection_origin
 
 union sqpack_id_t {
 	uint32_t FullId;
+
 	struct {
 		uint32_t CategoryId : 16;
 		uint32_t PartId : 8;
@@ -263,21 +261,25 @@ union sqpack_id_t {
 
 	sqpack_id_t() : FullId(0xFFFFFFFF) {}
 	sqpack_id_t(uint32_t fullId) : FullId(fullId) {}
-	sqpack_id_t(uint32_t categoryId, uint32_t expacId, uint32_t partId) : CategoryId(categoryId), PartId(partId), ExpacId(expacId) {}
+
+	sqpack_id_t(uint32_t categoryId, uint32_t expacId, uint32_t partId) : CategoryId(categoryId)
+		, PartId(partId)
+		, ExpacId(expacId) {
+	}
 
 	static sqpack_id_t from_filename_int(uint32_t n) {
 		return { n >> 16, (n >> 8) & 0xFF, n & 0xFF };
 	}
 
-	std::string exname() const {
-		return ExpacId == 0 ? "ffxiv" : std::format("ex{}", ExpacId);
+	[[nodiscard]] std::string exname() const {
+		return static_cast<uint32_t>(ExpacId) == 0 ? "ffxiv" : std::format("ex{}", ExpacId);
 	}
 
-	uint32_t packid() const {
-		return (CategoryId << 16) | (ExpacId << 8) | PartId;
+	[[nodiscard]] uint32_t packid() const {
+		return (static_cast<uint32_t>(CategoryId) << 16) | (static_cast<uint32_t>(ExpacId) << 8) | static_cast<uint32_t>(PartId);
 	}
 
-	std::string name() const {
+	[[nodiscard]] std::string name() const {
 		return std::format("{:06x}", packid());
 	}
 
@@ -315,19 +317,19 @@ struct xivres_redirect_config_t {
 				obj.m_pathRegexCompiled.resize(obj.m_paths.size());
 			}
 
-			const srell::u8cregex& regex(size_t pathIndex) const {
+			[[nodiscard]] const srell::u8cregex& regex(size_t pathIndex) const {
 				auto& slot = m_pathRegexCompiled.at(pathIndex);
 				if (!slot)
 					slot.emplace(m_paths.at(pathIndex), srell::regex_constants::icase);
 				return *slot;
 			}
 
-			bool matches_any(uint32_t resourceType, const std::string& s) const {
+			[[nodiscard]] bool matches_any(uint32_t resourceType, const std::string& s) const {
 				if (!std::ranges::any_of(m_types, [&](const auto& resType) { return resType == resourceType; }))
 					return false;
 
 				for (size_t i = 0; i < m_pathRegexCompiled.size(); ++i) {
-					if (srell::regex_search(s, regex(i)))
+					if (regex_search(s, regex(i)))
 						return true;
 				}
 				return false;
@@ -336,7 +338,7 @@ struct xivres_redirect_config_t {
 
 		std::vector<override_resource_t> OverrideResources;
 
-		const std::string& installation_path() const {
+		[[nodiscard]] const std::string& installation_path() const {
 			return m_sInstallationPath;
 		}
 
@@ -345,7 +347,7 @@ struct xivres_redirect_config_t {
 			m_pInstallation.reset();
 		}
 
-		const xivres::installation& get_installation() const {
+		[[nodiscard]] const xivres::installation& get_installation() const {
 			if (!m_pInstallation)
 				m_pInstallation = std::make_unique<xivres::installation>(m_sInstallationPath);
 			return *m_pInstallation;
@@ -365,7 +367,7 @@ struct xivres_redirect_config_t {
 		std::string To;
 		bool Stop = false;
 
-		const srell::u8cregex& regex() const {
+		[[nodiscard]] const srell::u8cregex& regex() const {
 			return *m_regexFrom;
 		}
 
@@ -384,7 +386,7 @@ struct xivres_redirect_config_t {
 		std::string Pattern;
 		bool Include = true;
 
-		const srell::u8cregex& regex() const {
+		[[nodiscard]] const srell::u8cregex& regex() const {
 			return *m_regex;
 		}
 
@@ -397,6 +399,8 @@ struct xivres_redirect_config_t {
 
 	bool LogReplacedPaths = false;
 	bool LogDialogueCharacterNames = false;
+	std::vector<std::string> TtmpRoots;
+	std::vector<std::string> RawFileRoots;
 	std::vector<log_pattern_filter_t> LogPathFilters;
 	std::vector<additional_game_root_t> AdditionalRoots;
 	std::vector<replacement_rule_t> PathReplacements;
@@ -405,6 +409,8 @@ struct xivres_redirect_config_t {
 	friend void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
 		obj.LogReplacedPaths = j.value<bool>("logReplacedPaths", false);
 		obj.LogDialogueCharacterNames = j.value<bool>("logDialogueCharacterNames", false);
+		obj.TtmpRoots = j.value<std::vector<std::string>>("ttmpRoots", std::vector<std::string>());
+		obj.RawFileRoots = j.value<std::vector<std::string>>("rawFileRoots", std::vector<std::string>());
 
 		if (const auto it = j.find("logPathFilters"); it == j.end())
 			obj.LogPathFilters.clear();
@@ -429,7 +435,7 @@ struct xivres_redirect_config_t {
 
 			std::map<std::string, size_t> pathOrder;
 			for (size_t i = 0; i < it->size(); i++) {
-				additional_game_root_t rootObj = it->at(i).get<additional_game_root_t>();
+				auto rootObj = it->at(i).get<additional_game_root_t>();
 
 				auto root = std::filesystem::path(xivres::util::unicode::convert<std::wstring>(rootObj.installation_path()));
 				if (!exists(root))
@@ -479,12 +485,9 @@ struct xivres_redirect_config_t {
 
 			obj.ForcedCharacterLanguages.clear();
 			for (const auto& [k, v] : it->items()) {
-				std::string characterName = k;
-				for (auto& c : characterName) {
-					if (c < 128)
-						c = std::tolower(c);
-				}
-				obj.ForcedCharacterLanguages.emplace(std::move(characterName), v.get<std::string>());
+				obj.ForcedCharacterLanguages.emplace(
+					xivres::util::unicode::convert<std::string>(k, &xivres::util::unicode::lower),
+					v.get<std::string>());
 			}
 		}
 	}
@@ -572,7 +575,7 @@ static const xivres::excel::exl::reader& get_exl() {
 	}
 
 	size_t counter = 0;
-	for (const auto& [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ { 16 * 1048576, 8192 }, {128 * 1048576, 256}, {0x7FFFFFFF, 16} }) {
+	for (const auto& [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{ {16 * 1048576, 2048}, {128 * 1048576, 256}, {0x7FFFFFFF, 8} }) {
 		auto& allocations = s_allocations[sqpkId][space];
 
 		std::shared_ptr<xivres::hotswap_packed_stream> stream;
@@ -598,11 +601,11 @@ std::string force_voiceman_language_for_character(const xivres::path_spec& pathS
 	if (pathSpec.category_id() != 0x03)
 		return {};
 
-	const auto scdName = pathSpec.path().substr(pathSpec.path().rfind('/') + 1);
+	const auto scdName = pathSpec.text().substr(pathSpec.text().rfind('/') + 1);
 	if (!scdName.starts_with("vo_"))
 		return {};
 
-	auto parentDirName = pathSpec.path().substr(pathSpec.path().rfind('/', pathSpec.path().size() - scdName.size() - 2) + 1);
+	auto parentDirName = pathSpec.text().substr(pathSpec.text().rfind('/', pathSpec.text().size() - scdName.size() - 2) + 1);
 	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
 
 	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
@@ -615,22 +618,14 @@ std::string force_voiceman_language_for_character(const xivres::path_spec& pathS
 	if (parentDirName.starts_with("VOICEMAN_")) {
 		sheetKeyPrefix = std::format("TEXT_{}_{}_", parentDirName, scdName.substr(18, 6));
 		excelName = std::format("cut_scene/{}/voiceman_{}", scdName.substr(12, 3), scdName.substr(12, 5));
-		
-	} else {
-		auto parentDirNameLower = parentDirName;
-		for (auto& c : parentDirNameLower)
-			if (c < 128)
-				c = std::tolower(c);
 
+	} else {
+		const auto parentDirNameLower = xivres::util::unicode::convert<std::string>(parentDirName, &xivres::util::unicode::lower);
 		for (const auto& name : get_exl().name_to_id_map() | std::views::keys) {
 			if (!name.starts_with("quest/"))
 				continue;
 
-			auto nameLower = name;
-			for (auto& c : nameLower)
-				if (c < 128)
-					c = std::tolower(c);
-
+			const auto nameLower = xivres::util::unicode::convert<std::string>(name, &xivres::util::unicode::lower);
 			if (!nameLower.contains(parentDirNameLower))
 				continue;
 
@@ -642,8 +637,7 @@ std::string force_voiceman_language_for_character(const xivres::path_spec& pathS
 			return {};
 	}
 
-	for (auto& c : sheetKeyPrefix)
-		c = std::toupper(c);
+	sheetKeyPrefix = xivres::util::unicode::convert<std::string>(sheetKeyPrefix, &xivres::util::unicode::upper);
 
 	static xivres::excel::reader s_dialogueSheet;
 	static std::string s_prevExcelName;
@@ -651,33 +645,28 @@ std::string force_voiceman_language_for_character(const xivres::path_spec& pathS
 		s_dialogueSheet = get_installation().get_excel(excelName);
 		s_prevExcelName = excelName;
 	}
-	
-	for (auto i = 0; i < s_dialogueSheet.get_exh_reader().get_pages().size(); i++) {
+
+	for (size_t i = 0; i < s_dialogueSheet.get_exh_reader().get_pages().size(); i++) {
 		for (const auto& row : s_dialogueSheet.get_exd_reader(i)) {
 			const auto& key = row[0][0].String.escaped();
 			if (!key.starts_with(sheetKeyPrefix))
 				continue;
 
-			auto characterName = key.substr(sheetKeyPrefix.size());
-			for (auto& c : characterName) {
-				if (c < 128)
-					c = std::tolower(c);
-			}
-
+			const auto characterName = xivres::util::unicode::convert<std::string>(key.substr(sheetKeyPrefix.size()), &xivres::util::unicode::lower);
 			if (s_config.LogDialogueCharacterNames)
 				OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
-					"[LogDialogueCharacterNames] name={} path={}\n", characterName, pathSpec.path()
+					"[LogDialogueCharacterNames] name={} path={}\n", characterName, pathSpec.text()
 				)).c_str());
 
 			if (auto it = s_config.ForcedCharacterLanguages.find(characterName); it != s_config.ForcedCharacterLanguages.end())
-				return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+				return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
 			else if (it = s_config.ForcedCharacterLanguages.find(""); it != s_config.ForcedCharacterLanguages.end())
-				return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+				return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
 			else
 				return {};
 		}
 	}
-	
+
 	return {};
 }
 
@@ -700,10 +689,9 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	sqpack_id_t sqpkId(categoryId);
 	xivres::path_spec pathSpec(pszPath);
 	std::shared_lock lock(s_modAccessMtx);
-	std::shared_ptr<xivres::packed_stream> stream;
 
 	for (const auto& filter : s_config.LogPathFilters) {
-		if (regex_search(pathSpec.path(), filter.regex())) {
+		if (regex_search(pathSpec.text(), filter.regex())) {
 			if (filter.Include) {
 				OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
 					"[LogPathFilters] cat=0x{:08x} res=0x{:08x} hash=0x{:08x} path={}\n", categoryId, resourceType, resourceHash, pszPath
@@ -716,7 +704,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 	try {
 		const auto pViews = get_sqpack_view(sqpkId);
 		if (!pViews)
-			return s_find_existing_resource_handle_original(p1, categoryId, resourceType, resourceHash);
+			throw std::runtime_error(std::format("SqPack {} not found", sqpkId.name()));
 
 		std::string transformed = pszPath;
 		for (const auto& rule : s_config.PathReplacements) {
@@ -764,6 +752,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 			}
 		}
 
+		std::shared_ptr<xivres::packed_stream> stream;
 		if (!stream) {
 			if (const auto it = s_availableReplacementStreams.find(pathSpec); it != s_availableReplacementStreams.end())
 				stream = it->second;
@@ -776,7 +765,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 					auto use = false;
 
 					for (const auto& cond : additionalInstallation.OverrideResources) {
-						if (cond.matches_any(resourceType, pathSpec.path())) {
+						if (cond.matches_any(resourceType, pathSpec.text())) {
 							use = true;
 							break;
 						}
@@ -807,7 +796,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 					if (auto base = (*it)->base_stream(); base && base->path_spec() == pathSpec) {
 						exists = true;
 						auto slot = std::move(*it);
-						pszPath = const_cast<char*>(slot->path_spec().path().c_str());
+						pszPath = const_cast<char*>(slot->path_spec().text().c_str());
 						slots.erase(it);
 						slots.emplace_front(std::move(slot));
 						break;
@@ -817,44 +806,38 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 					break;
 
 				std::shared_ptr<xivres::hotswap_packed_stream> slot = std::move(slots.back());
-				slot->swap_stream(stream);
-				pszPath = const_cast<char*>(slot->path_spec().path().c_str());
+				slot->swap_stream(std::move(stream));
+				pszPath = const_cast<char*>(slot->path_spec().text().c_str());
 				slots.pop_back();
 				slots.emplace_front(std::move(slot));
 				break;
 			}
 		}
-	} catch (const std::out_of_range&) {
-		// pass
+	} catch (const std::exception& e) {
+		OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
+			"[detour_find_existing_resource_handle_original] ERROR: ({}, 0x{:08X}, 0x{:08X}, 0x{:08X}) => {}\n", p1, categoryId, resourceType, resourceHash, e.what()
+		)).c_str());
 	}
 
 	return s_find_existing_resource_handle_original(p1, categoryId, resourceType, resourceHash);
 }
 
 const char* DETOUR_resolve_string_indirection(const char* p) {
-	static const auto SeStringTester = [](const char* ptr) {
-		try {
-			void(xivres::xivstring(ptr).parsed());
-			return true;
-		} catch (...) {
-			return false;
-		}
-	};
-
 	__try {
 		return s_resolve_string_indirection_original(p);
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
 		// pass
 	}
+
 	__try {
-		auto p2 = s_resolve_string_indirection_original(p - 0x0e);
-		if (SeStringTester(p2))
+		const auto p2 = s_resolve_string_indirection_original(p - 0x0e);
+		if (xivres::xivstring::is_valid(p2))
 			return p2;
 	} __except (EXCEPTION_EXECUTE_HANDLER) {
 		// pass
 	}
 
-	if (SeStringTester(p + 0x02))
+	if (xivres::xivstring::is_valid(p + 0x02))
 		return p + 0x02;
 
 	return "<error>";
@@ -910,7 +893,7 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 			return hFile;
 
 		default:
-			if (sqpkType < 0 || sqpkType >= pViews->Data.size()) {
+			if (sqpkType < 0 || sqpkType >= static_cast<int>(pViews->Data.size())) {
 				CloseHandle(hFile);
 				return INVALID_HANDLE_VALUE;
 			}
@@ -920,8 +903,6 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 			s_virtualFilePointers[hFile] = 0;
 			return hFile;
 	}
-
-	return hFile;
 }
 
 BOOL WINAPI DETOUR_SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove, PLARGE_INTEGER lpNewFilePointer, DWORD dwMoveMethod) {
@@ -958,7 +939,7 @@ BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesT
 	if (s_sqpackStreams.contains(hFile)) {
 		std::shared_lock lock(s_handleMtx);
 		if (const auto it = s_sqpackStreams.find(hFile); it != s_sqpackStreams.end()) {
-			auto ptr = s_virtualFilePointers[hFile];
+			const auto ptr = s_virtualFilePointers[hFile];
 			const auto& stream = *it->second;
 			lock.unlock();
 			const auto read = stream.read(ptr, lpBuffer, nNumberOfBytesToRead);
@@ -983,14 +964,14 @@ BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
 }
 
 static std::span<char> get_clean_exe_span() {
-	static std::vector<char> buf = []() {
-		std::shared_ptr<void> hFile(CreateFileW((get_game_dir() / "ffxiv_dx11.exe").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr), &CloseHandle);
+	static std::vector<char> s_buf = [] {
+		const auto hFile = std::shared_ptr<void>(CreateFileW((get_game_dir() / "ffxiv_dx11.exe").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr), &CloseHandle);
 		std::vector<char> buf(GetFileSize(hFile.get(), nullptr));
 		if (DWORD rd; !ReadFile(hFile.get(), &buf[0], static_cast<DWORD>(buf.size()), &rd, nullptr) || rd != buf.size())
 			throw std::runtime_error(std::format("Failed to read file: {}", GetLastError()));
 		return buf;
 	}();
-	return { buf };
+	return { s_buf };
 }
 
 static std::pair<std::span<const char>, ptrdiff_t> get_clean_text_section() {
@@ -998,21 +979,6 @@ static std::pair<std::span<const char>, ptrdiff_t> get_clean_text_section() {
 	const auto& dosHeader = *reinterpret_cast<IMAGE_DOS_HEADER*>(&buf[0]);
 	const auto& ntHeader64 = *reinterpret_cast<IMAGE_NT_HEADERS64*>(&buf[dosHeader.e_lfanew]);
 	const auto sectionHeaders = std::span(IMAGE_FIRST_SECTION(&ntHeader64), ntHeader64.FileHeader.NumberOfSections);
-	const auto realBase = reinterpret_cast<char*>(GetModuleHandleW(nullptr));
-	const auto imageBase = reinterpret_cast<char*>(ntHeader64.OptionalHeader.ImageBase);
-	const auto& rva2sec = [&](size_t rva) -> IMAGE_SECTION_HEADER& {
-		for (auto& sectionHeader2 : sectionHeaders) {
-			if (sectionHeader2.VirtualAddress <= rva && rva < sectionHeader2.VirtualAddress + sectionHeader2.Misc.VirtualSize)
-				return sectionHeader2;
-		}
-		throw std::runtime_error("rva");
-	};
-	const auto& va2rva = [&](void* va) {
-		return reinterpret_cast<char*>(va) - imageBase;
-	};
-	const auto& va2sec = [&](void* va) -> IMAGE_SECTION_HEADER& {
-		return rva2sec(reinterpret_cast<char*>(va) - imageBase);
-	};
 	for (const auto& sectionHeader : sectionHeaders) {
 		const auto section = std::span(&buf[sectionHeader.PointerToRawData], sectionHeader.SizeOfRawData);
 		if (strncmp(reinterpret_cast<const char*>(sectionHeader.Name), ".text", IMAGE_SIZEOF_SHORT_NAME) != 0)
@@ -1030,7 +996,7 @@ static void* find_existing_resource_handle_finder() {
 		.look_in(section)
 		.look_for_hex("48 8b 4f ?? 4c 8b cd 4d 8b c4 49 8b d5 e8")
 		.find_one();
-	auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
+	const auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
 		(res.data() + res.size() - get_clean_exe_span().data());
 	return p + *reinterpret_cast<int*>(p) + 4;
 }
@@ -1047,7 +1013,7 @@ static std::vector<void*> find_rsv_indirection_resolvers() {
 	return res;
 }
 
-void update_raw_dirs(const std::filesystem::path& rawDir) {
+void update_raw_dirs(const std::filesystem::path& rawDir, std::mutex& mtx) {
 	std::vector<std::filesystem::path> directoriesToCheckForMapping;
 	if (!exists(rawDir))
 		return;
@@ -1068,8 +1034,11 @@ void update_raw_dirs(const std::filesystem::path& rawDir) {
 			}
 
 			const auto pathSpec = xivres::path_spec(file.path().wstring().substr(innerRootPathLength + 1));
-			auto& stream = s_availableReplacementStreams[pathSpec];
-			stream = std::make_shared<lazy_packing_oplocking_file_system>(pathSpec, file.path());
+			auto stream = std::make_shared<lazy_packing_oplocking_file_system>(pathSpec, file.path());
+
+			std::unique_lock replacementLock(mtx, std::defer_lock);
+			xivres::util::thread_pool::pool::current().release_working_status([&replacementLock] {replacementLock.lock(); });
+			s_availableReplacementStreams[pathSpec] = std::move(stream);
 		}
 		for (const auto& mapBasePath : directoriesToCheckForMapping) {
 			const auto mapDefinitionPath = mapBasePath / "mapping.json";
@@ -1093,8 +1062,11 @@ void update_raw_dirs(const std::filesystem::path& rawDir) {
 							continue;
 
 						const auto pathSpec = xivres::path_spec(sourceDir + file.path().wstring().substr(targetDirPathLength + 1));
-						auto& stream = s_availableReplacementStreams[pathSpec];
-						stream = std::make_shared<lazy_packing_oplocking_file_system>(pathSpec, file.path());
+						auto stream = std::make_shared<lazy_packing_oplocking_file_system>(pathSpec, file.path());
+
+						std::unique_lock replacementLock(mtx, std::defer_lock);
+						xivres::util::thread_pool::pool::current().release_working_status([&replacementLock] {replacementLock.lock(); });
+						s_availableReplacementStreams[pathSpec] = std::move(stream);
 					}
 				}
 			} catch (const std::exception& e) {
@@ -1104,10 +1076,8 @@ void update_raw_dirs(const std::filesystem::path& rawDir) {
 	}
 }
 
-void update_ttmp_files(const std::filesystem::path& ttmpDir) {
+void update_ttmp_files(const std::vector<std::filesystem::path>& ttmpDirs, std::mutex& mtx) {
 	std::vector<std::filesystem::path> directoriesToCheckForMapping;
-	if (!exists(ttmpDir))
-		return;
 
 	std::map<xivres::path_spec, xivres::image_change_data::file> imc;
 	std::map<std::pair<xivres::textools::metafile::item_types, uint32_t>, xivres::equipment_deformer_parameter_file> eqdp;
@@ -1116,254 +1086,364 @@ void update_ttmp_files(const std::filesystem::path& ttmpDir) {
 	std::map<xivres::textools::metafile::est_types, xivres::ex_skeleton_table_file> est;
 
 	std::vector<std::filesystem::path> paths;
-	for (const auto& path : std::filesystem::recursive_directory_iterator(ttmpDir, std::filesystem::directory_options::follow_directory_symlink | std::filesystem::directory_options::skip_permission_denied)) {
-		if (path.is_directory())
-			continue;
-		if (path.path().extension() != L".mpl")
-			continue;
-		paths.emplace_back(path.path());
-	}
-	std::ranges::sort(paths);
 
-	for (const auto& path : paths) {
-		const auto ttmpdPath = std::filesystem::path(path).replace_filename("TTMPD.mpd");
-		if (!exists(ttmpdPath))
-			continue;
-
-		auto disable = false;
-		for (auto p = path, parent = p.parent_path(); !disable && p != parent; p = parent, parent = p.parent_path())
-			disable = exists(parent / "disable");
-		if (disable)
+	for (const auto& ttmpDir : ttmpDirs) {
+		if (!exists(ttmpDir))
 			continue;
 
 		try {
-			std::vector<nlohmann::json> json;
-			try {
-				std::ifstream in(path, std::ios::binary);
-				while (true) {
-					json.emplace_back();
-					in >> json.back();
-				}
-			} catch (const std::exception& e) {
-				if (json.size() == 1)
-					throw e;
-				json.pop_back();
-			}
-
-			xivres::textools::mod_pack_json ttmpl;
-			if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
-				ttmpl = json[0].get<xivres::textools::mod_pack_json>();
-			else {
-				for (const auto& j : json)
-					ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mods_json>());
-			}
-
-			const auto choicesFile = std::filesystem::path(path).replace_filename("choices.json");
-			nlohmann::json choices;
-			if (exists(choicesFile))
-				std::ifstream(choicesFile, std::ios::binary) >> choices;
-
-			auto choicesFixed = false;
-
-			if (!choices.is_array()) {
-				choices = nlohmann::json::array();
-				choicesFixed = true;
-			}
-
-			for (; choices.size() > ttmpl.ModPackPages.size(); choicesFixed = true)
-				choices.erase(choices.size() - 1);
-			for (; choices.size() < ttmpl.ModPackPages.size(); choicesFixed = true)
-				choices.emplace_back(nlohmann::json::array());
-			for (size_t pageObjectIndex = 0; pageObjectIndex < ttmpl.ModPackPages.size(); ++pageObjectIndex) {
-				const auto& modGroups = ttmpl.ModPackPages[pageObjectIndex].ModGroups;
-				if (modGroups.empty())
+			for (const auto& path : std::filesystem::recursive_directory_iterator(ttmpDir, std::filesystem::directory_options::follow_directory_symlink | std::filesystem::directory_options::skip_permission_denied)) {
+				if (path.is_directory())
 					continue;
+				if (path.path().extension() != L".mpl")
+					continue;
+				paths.emplace_back(path.path());
+			}
+		} catch (const std::exception& e) {
+			OutputDebugStringW(std::format(LR"(Error processing ttmp directory {}: {})" "\n", ttmpDir.c_str(), xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+		}
+	}
 
-				auto& pageChoices = choices.at(pageObjectIndex);
-				if (!pageChoices.is_array()) {
-					pageChoices = nlohmann::json::array();
+	if (paths.empty())
+		return;
+
+	xivres::util::thread_pool::task_waiter waiter;
+	std::mutex metaMtx;
+
+	std::ranges::sort(paths);
+	for (const auto& path : paths) {
+		waiter.submit([&](auto&) {
+			const auto ttmpdPath = std::filesystem::path(path).replace_filename("TTMPD.mpd");
+			if (!exists(ttmpdPath))
+				return;
+
+			auto disable = false;
+			for (auto p = path, parent = p.parent_path(); !disable && p != parent; p = parent, parent = p.parent_path())
+				disable = exists(parent / "disable");
+			if (disable)
+				return;
+
+			try {
+				std::vector<nlohmann::json> json;
+				try {
+					std::ifstream in(path, std::ios::binary);
+					while (true) {
+						json.emplace_back();
+						in >> json.back();
+					}
+				} catch (const std::exception&) {
+					if (json.size() == 1)
+						throw;
+					json.pop_back();
+				}
+
+				xivres::textools::mod_pack_json ttmpl;
+				if (json.size() == 1 && (json[0].find("SimpleModsList") != json[0].end() || json[0].find("ModPackPages") != json[0].end()))
+					ttmpl = json[0].get<xivres::textools::mod_pack_json>();
+				else {
+					for (const auto& j : json)
+						ttmpl.SimpleModsList.emplace_back(j.get<xivres::textools::mods_json>());
+				}
+
+				const auto choicesFile = std::filesystem::path(path).replace_filename("choices.json");
+				nlohmann::json choices;
+				if (exists(choicesFile))
+					std::ifstream(choicesFile, std::ios::binary) >> choices;
+
+				auto choicesFixed = false;
+
+				if (!choices.is_array()) {
+					choices = nlohmann::json::array();
 					choicesFixed = true;
 				}
 
-				for (; pageChoices.size() > modGroups.size(); choicesFixed = true)
-					pageChoices.erase(pageChoices.size() - 1);
-
-				for (size_t modGroupIndex = 0; modGroupIndex < modGroups.size(); ++modGroupIndex) {
-					const auto& modGroup = modGroups[modGroupIndex];
+				for (; choices.size() > ttmpl.ModPackPages.size(); choicesFixed = true)
+					choices.erase(choices.size() - 1);
+				for (; choices.size() < ttmpl.ModPackPages.size(); choicesFixed = true)
+					choices.emplace_back(nlohmann::json::array());
+				for (size_t pageObjectIndex = 0; pageObjectIndex < ttmpl.ModPackPages.size(); ++pageObjectIndex) {
+					const auto& modGroups = ttmpl.ModPackPages[pageObjectIndex].ModGroups;
 					if (modGroups.empty())
 						continue;
 
-					while (pageChoices.size() <= modGroupIndex) {
-						choicesFixed = true;
-						pageChoices.emplace_back(modGroup.SelectionType == "Multi" ? nlohmann::json::array() : nlohmann::json::array({ 0 }));
-					}
-
-					auto& modGroupChoice = pageChoices.at(modGroupIndex);
-					if (!modGroupChoice.is_array()) {
-						modGroupChoice = nlohmann::json::array({ modGroupChoice });
+					auto& pageChoices = choices.at(pageObjectIndex);
+					if (!pageChoices.is_array()) {
+						pageChoices = nlohmann::json::array();
 						choicesFixed = true;
 					}
 
-					for (auto& e : modGroupChoice) {
-						if (!e.is_number_unsigned()) {
-							e = 0;
+					for (; pageChoices.size() > modGroups.size(); choicesFixed = true)
+						pageChoices.erase(pageChoices.size() - 1);
+
+					for (size_t modGroupIndex = 0; modGroupIndex < modGroups.size(); ++modGroupIndex) {
+						const auto& modGroup = modGroups[modGroupIndex];
+						if (modGroups.empty())
+							continue;
+
+						while (pageChoices.size() <= modGroupIndex) {
 							choicesFixed = true;
-						} else if (e.get<size_t>() >= modGroup.OptionList.size()) {
-							e = modGroup.OptionList.size() - 1;
+							pageChoices.emplace_back(modGroup.SelectionType == "Multi" ? nlohmann::json::array() : nlohmann::json::array({ 0 }));
+						}
+
+						auto& modGroupChoice = pageChoices.at(modGroupIndex);
+						if (!modGroupChoice.is_array()) {
+							modGroupChoice = nlohmann::json::array({ modGroupChoice });
 							choicesFixed = true;
 						}
+
+						for (auto& e : modGroupChoice) {
+							if (!e.is_number_unsigned()) {
+								e = 0;
+								choicesFixed = true;
+							} else if (e.get<size_t>() >= modGroup.OptionList.size()) {
+								e = modGroup.OptionList.size() - 1;
+								choicesFixed = true;
+							}
+						}
+						modGroupChoice = modGroupChoice.get<std::set<size_t>>();
 					}
-					modGroupChoice = modGroupChoice.get<std::set<size_t>>();
-				}
-			}
-
-			if (choicesFixed)
-				std::ofstream(std::filesystem::path(choicesFile).replace_filename("choices.fixed.json"), std::ios::binary) << choices.dump(1, '\t');
-
-			std::shared_ptr<xivres::stream> ttmpd = std::make_shared<oplocking_file_stream>(ttmpdPath, true);
-			ttmpl.for_each([&](const xivres::textools::mods_json& entry) {
-				if (!entry.is_textools_metadata()) {
-					const auto pathSpec = xivres::path_spec(entry.FullPath);
-					auto& stream = s_availableReplacementStreams[pathSpec];
-					stream = std::make_shared<xivres::stream_as_packed_stream>(pathSpec, ttmpd->substream(static_cast<std::streamoff>(entry.ModOffset), static_cast<std::streamsize>(entry.ModSize)));
-					return;
 				}
 
-				if (!ttmpd)
-					ttmpd = std::make_shared<xivres::file_stream>(ttmpdPath);
+				if (choicesFixed) {
+					const auto fixedFile = std::filesystem::path(choicesFile).replace_filename("choices.fixed.json");
+					if (!exists(fixedFile))
+						std::ofstream(fixedFile, std::ios::binary) << choices.dump(1, '\t');
+				}
 
-				const auto metadata = xivres::textools::metafile(entry.FullPath, xivres::unpacked_stream(std::make_shared<xivres::stream_as_packed_stream>(entry.FullPath, ttmpd->substream(entry.ModOffset, entry.ModSize))));
-				metadata.apply_image_change_data_edits([&]() -> xivres::image_change_data::file& {
-					const auto& imcPath = metadata.TargetImcPath;
-					if (const auto it = imc.find(imcPath); it == imc.end())
-						return imc[imcPath] = xivres::image_change_data::file(*get_installation().get_file(metadata.SourceImcPath));
-					else
-						return it->second;
-				});
+				std::shared_ptr<xivres::stream> ttmpd = std::make_shared<oplocking_file_stream>(ttmpdPath, true);
+				ttmpl.for_each([&](const xivres::textools::mods_json& entry) {
+					if (!entry.is_textools_metadata()) {
+						const auto pathSpec = xivres::path_spec(entry.FullPath);
+						auto stream = std::make_shared<xivres::stream_as_packed_stream>(pathSpec, ttmpd->substream(static_cast<std::streamoff>(entry.ModOffset), static_cast<std::streamsize>(entry.ModSize)));
 
-				metadata.apply_equipment_deformer_parameter_edits([&](auto type, auto race) -> xivres::equipment_deformer_parameter_file& {
-					const auto key = std::make_pair(type, race);
-					if (const auto it = eqdp.find(key); it == eqdp.end()) {
-						auto& res = eqdp[key] = xivres::equipment_deformer_parameter_file(*get_installation().get_file(xivres::textools::metafile::equipment_deformer_parameter_path(type, race)));
-						res.expand_or_collapse(true);
-						return res;
+						std::unique_lock replacementLock(mtx, std::defer_lock);
+						xivres::util::thread_pool::pool::current().release_working_status([&replacementLock] {replacementLock.lock(); });
+						s_availableReplacementStreams[pathSpec] = std::move(stream);
+						return;
+					}
+
+					if (!ttmpd)
+						ttmpd = std::make_shared<xivres::file_stream>(ttmpdPath);
+
+					std::unique_lock metaLock(metaMtx, std::defer_lock);
+					xivres::util::thread_pool::pool::current().release_working_status([&metaLock] {metaLock.lock(); });
+
+					const auto metadata = xivres::textools::metafile(entry.FullPath, xivres::unpacked_stream(std::make_shared<xivres::stream_as_packed_stream>(entry.FullPath, ttmpd->substream(entry.ModOffset, entry.ModSize))));
+					metadata.apply_image_change_data_edits([&]() -> xivres::image_change_data::file& {
+						const auto& imcPath = metadata.TargetImcPath;
+						if (const auto it = imc.find(imcPath); it == imc.end())
+							return imc[imcPath] = xivres::image_change_data::file(*get_installation().get_file(metadata.SourceImcPath));
+						else
+							return it->second;
+					});
+
+					metadata.apply_equipment_deformer_parameter_edits([&](auto type, auto race) -> xivres::equipment_deformer_parameter_file& {
+						const auto key = std::make_pair(type, race);
+						if (const auto it = eqdp.find(key); it == eqdp.end()) {
+							auto& res = eqdp[key] = xivres::equipment_deformer_parameter_file(*get_installation().get_file(xivres::textools::metafile::equipment_deformer_parameter_path(type, race)));
+							res.expand_or_collapse(true);
+							return res;
+						} else
+							return it->second;
+					});
+
+					if (metadata.has_equipment_parameter_edits()) {
+						if (!eqp) {
+							eqp.emplace(*get_installation().get_file(xivres::textools::metafile::EqpPath));
+							*eqp = eqp->expand_or_collapse(true);
+						}
+						metadata.apply_equipment_parameter_edits(*eqp);
+					}
+
+					if (metadata.has_gimmick_parameter_edits()) {
+						if (!eqp) {
+							gmp.emplace(*get_installation().get_file(xivres::textools::metafile::GmpPath));
+							*gmp = gmp->expand_or_collapse(true);
+						}
+						metadata.apply_gimmick_parameter_edits(*gmp);
+					}
+
+					if (const auto it = est.find(metadata.EstType); it == est.end()) {
+						if (const auto estPath = xivres::textools::metafile::ex_skeleton_table_path(metadata.EstType))
+							metadata.apply_ex_skeleton_table_edits(est[metadata.EstType] = xivres::ex_skeleton_table_file(*get_installation().get_file(estPath)));
 					} else
-						return it->second;
-				});
+						metadata.apply_ex_skeleton_table_edits(it->second);
+				}, choices);
 
-				if (metadata.has_equipment_parameter_edits()) {
-					if (!eqp) {
-						eqp.emplace(*get_installation().get_file(xivres::textools::metafile::EqpPath));
-						*eqp = eqp->expand_or_collapse(true);
-					}
-					metadata.apply_equipment_parameter_edits(*eqp);
-				}
+			} catch (const std::exception& e) {
+				OutputDebugStringW(std::format(LR"(Error processing ttmpl "{}": {})" "\n", path.wstring(), xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+			}
+		});
+	}
 
-				if (metadata.has_gimmick_parameter_edits()) {
-					if (!eqp) {
-						gmp.emplace(*get_installation().get_file(xivres::textools::metafile::GmpPath));
-						*gmp = gmp->expand_or_collapse(true);
-					}
-					metadata.apply_gimmick_parameter_edits(*gmp);
-				}
+	waiter.wait_all();
 
-				if (const auto it = est.find(metadata.EstType); it == est.end()) {
-					if (const auto estPath = xivres::textools::metafile::ex_skeleton_table_path(metadata.EstType))
-						metadata.apply_ex_skeleton_table_edits(est[metadata.EstType] = xivres::ex_skeleton_table_file(*get_installation().get_file(estPath)));
-				} else
-					metadata.apply_ex_skeleton_table_edits(it->second);
-			}, choices);
-
-		} catch (const std::exception& e) {
-			OutputDebugStringW(std::format(LR"(Error processing ttmpl "{}": {})" "\n", path.wstring(), xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+	{
+		std::unique_lock replacementLock(mtx, std::defer_lock);
+		xivres::util::thread_pool::pool::current().release_working_status([&replacementLock] {replacementLock.lock(); });
+		for (const auto& [imcPath, file] : imc) {
+			const auto pathSpec = xivres::path_spec(imcPath);
+			s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
 		}
-	}
-
-	for (const auto& [imcPath, file] : imc) {
-		const auto pathSpec = xivres::path_spec(imcPath);
-		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
-	}
-	for (const auto& [spec, file] : eqdp) {
-		auto& [type, race] = spec;
-		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::equipment_deformer_parameter_path(type, race));
-		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
-	}
-	if (eqp) {
-		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::EqpPath);
-		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(eqp->data_bytes()));
-	}
-	if (gmp) {
-		const auto pathSpec = xivres::path_spec(xivres::textools::metafile::GmpPath);
-		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(gmp->data_bytes()));
-	}
-	for (const auto& [estType, file] : est) {
-		const auto pathSpec = xivres::textools::metafile::ex_skeleton_table_path(estType);
-		s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
+		for (const auto& [spec, file] : eqdp) {
+			auto& [type, race] = spec;
+			const auto pathSpec = xivres::path_spec(xivres::textools::metafile::equipment_deformer_parameter_path(type, race));
+			s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
+		}
+		if (eqp) {
+			const auto pathSpec = xivres::path_spec(xivres::textools::metafile::EqpPath);
+			s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(eqp->data_bytes()));
+		}
+		if (gmp) {
+			const auto pathSpec = xivres::path_spec(xivres::textools::metafile::GmpPath);
+			s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(gmp->data_bytes()));
+		}
+		for (const auto& [estType, file] : est) {
+			const auto pathSpec = xivres::textools::metafile::ex_skeleton_table_path(estType);
+			s_availableReplacementStreams[pathSpec] = std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>(pathSpec, std::make_shared<xivres::memory_stream>(file.data()));
+		}
 	}
 }
 
-void continuous_update_mod_dirs(HANDLE hReady) {
-	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hChangeNotification(
-		CreateFile(get_game_dir().c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr), &CloseHandle);
+struct path_update_monitor {
+	const bool IsDirectory;
+	const std::filesystem::path Path;
+	HANDLE Handle = INVALID_HANDLE_VALUE;
 
-	const auto ttmpDir = get_game_dir() / "ttmp";
-	const auto rawDir = get_game_dir() / "sqraw";
-	const auto configPath = get_game_dir() / "xivres.redirect.config.json";
+	std::thread Watcher;
+	bool Stopping = false;
 
-	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hOplockEvent(CreateEventW(nullptr, TRUE, TRUE, nullptr), &CloseHandle);
-	std::vector<char> buf(65536);
-	OVERLAPPED ov{};
-	ov.hEvent = hOplockEvent.get();
+	xivres::util::listener_manager<path_update_monitor, void, const std::filesystem::path&> OnChange;
 
-	const auto applyDelay = 200ULL;
-	for (uint64_t applyChangesAt = 0;;) {
-		if (WaitForSingleObject(ov.hEvent, 0) == WAIT_OBJECT_0) {
-			ResetEvent(ov.hEvent);
-			ReadDirectoryChangesW(hChangeNotification.get(), &buf[0], 65534, TRUE,
-				FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE,
-				nullptr, &ov, nullptr);
-		}
+	path_update_monitor(bool isDirectory, std::filesystem::path path)
+		: IsDirectory(isDirectory)
+		, Path(std::move(path)) {
+		Watcher = std::thread([this] {
+			std::vector<char> buf(65536);
 
-		bool changed = false;
-		if (applyChangesAt == (std::numeric_limits<uint64_t>::max)())
-			WaitForSingleObject(ov.hEvent, INFINITE);
-		else if (const auto now = GetTickCount64(); applyChangesAt > now)
-			WaitForSingleObject(ov.hEvent, static_cast<DWORD>((std::min)(applyChangesAt - now, 60000ULL)));
+			REQUEST_OPLOCK_INPUT_BUFFER inOplock = {
+				REQUEST_OPLOCK_CURRENT_VERSION,
+				sizeof(inOplock),
+				OPLOCK_LEVEL_CACHE_READ | OPLOCK_LEVEL_CACHE_HANDLE,
+				REQUEST_OPLOCK_INPUT_FLAG_REQUEST,
+			};
 
-		if (DWORD read; GetOverlappedResult(hChangeNotification.get(), &ov, &read, FALSE)) {
-			auto fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(&buf[0]);
-			for (;; fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(reinterpret_cast<char*>(fni) + fni->NextEntryOffset)) {
-				std::filesystem::path relativePath(std::wstring_view(fni->FileName, fni->FileNameLength / 2));
-				auto fullPath = get_game_dir() / relativePath;
+			REQUEST_OPLOCK_OUTPUT_BUFFER outOplock = {
+				REQUEST_OPLOCK_CURRENT_VERSION,
+				sizeof(outOplock),
+			};
 
-				if (_wcsnicmp(relativePath.c_str(), L"ttmp\\", 5) == 0) {
-					auto name = relativePath.filename().wstring();
-					for (auto& c : name)
-						if (c < 128)
-							c = std::tolower(c);
-					if (name == L"ttmpd.mpd" || name == L"ttmpl.mpl" || name == L"choices.json" || name == L"disable") {
-						applyChangesAt = GetTickCount64() + applyDelay;
-						OutputDebugStringW(std::format(L"FS Change [{}]: {}\n", fni->Action, relativePath.c_str()).c_str());
+			for (auto first = true; !Stopping; first = false) {
+				DWORD dwBytes;
+
+				while (!Stopping && Handle == INVALID_HANDLE_VALUE) {
+					if (IsDirectory)
+						Handle = CreateFile(Path.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
+					else
+						Handle = CreateFile(Path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+
+					if (Handle != INVALID_HANDLE_VALUE) {
+						if (!first)
+							OnChange(Path);
+						break;
+					} else {
+						if (GetLastError() == ERROR_ACCESS_DENIED && !IsDirectory)
+							Sleep(100);
+						else
+							Sleep(1000);
 					}
-				} else if (_wcsnicmp(relativePath.c_str(), L"sqraw\\", 6) == 0
-					|| relativePath == "xivres.redirect.config.json") {
-					applyChangesAt = GetTickCount64() + applyDelay;
-					OutputDebugStringW(std::format(L"FS Change [{}]: {}\n", fni->Action, relativePath.c_str()).c_str());
 				}
 
-				if (fni->NextEntryOffset == 0)
+				if (Stopping)
 					break;
+
+				if (IsDirectory) {
+					if (!ReadDirectoryChangesW(Handle, &buf[0], 65534, TRUE,
+						FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE,
+						&dwBytes, nullptr, nullptr)) {
+						break;
+					}
+
+					for (auto fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(&buf[0]); fni; fni = fni->NextEntryOffset ? reinterpret_cast<FILE_NOTIFY_INFORMATION*>(reinterpret_cast<char*>(fni) + fni->NextEntryOffset) : nullptr)
+						OnChange(Path / std::wstring_view(fni->FileName, fni->FileNameLength / 2));
+
+					if (!exists(Path)) {
+						CloseHandle(Handle);
+						Handle = INVALID_HANDLE_VALUE;
+					}
+
+				} else {
+					if (!DeviceIoControl(Handle, FSCTL_REQUEST_OPLOCK,
+						&inOplock, sizeof(inOplock),
+						&outOplock, sizeof(outOplock),
+						&dwBytes, nullptr)) {
+						break;
+					}
+					CloseHandle(Handle);
+					Handle = INVALID_HANDLE_VALUE;
+				}
 			}
+		});
+	}
+
+	path_update_monitor(path_update_monitor&&) = delete;
+	path_update_monitor(const path_update_monitor&) = delete;
+	path_update_monitor& operator=(path_update_monitor&&) = delete;
+	path_update_monitor& operator=(const path_update_monitor&) = delete;
+
+	~path_update_monitor() {
+		Stopping = true;
+		if (Handle != INVALID_HANDLE_VALUE)
+			CancelIoEx(Handle, nullptr);
+		if (Watcher.joinable())
+			Watcher.join();
+		if (Handle != INVALID_HANDLE_VALUE)
+			CloseHandle(Handle);
+	}
+};
+
+void continuous_update_mod_dirs(HANDLE hReady) {
+	constexpr auto ApplyDelay = std::chrono::milliseconds(200);
+
+	const auto configPath = std::filesystem::path([] {
+		std::wstring configPathString(PATHCCH_MAX_CCH, L'\0');
+		configPathString.resize(GetEnvironmentVariableW(L"XIVRES_REDIRECT_CONFIG_PATH", &configPathString[0], PATHCCH_MAX_CCH));
+		if (configPathString.empty())
+			configPathString = get_game_dir() / "xivres.redirect.config.json";
+		return configPathString;
+	}());
+
+	bool changed = false;
+	auto nextUpdateAt = std::chrono::steady_clock::now();
+	std::mutex mtxChange;
+	std::condition_variable cv;
+
+	const auto notifyChanged = [&]() {
+		std::unique_lock lock(mtxChange);
+		nextUpdateAt = std::chrono::steady_clock::now() + ApplyDelay;
+		changed = true;
+		cv.notify_one();
+	};
+
+	path_update_monitor monConfig(false, configPath);
+	const auto monConfigOnDtor = monConfig.OnChange([&](const std::filesystem::path&) { notifyChanged(); });
+
+	std::map<std::string, path_update_monitor> monTtmps;
+	std::map<std::string, xivres::util::on_dtor> monTtmpsOnDtor;
+
+	std::map<std::string, path_update_monitor> monRawFiles;
+	std::map<std::string, xivres::util::on_dtor> monRawFilesOnDtor;
+
+	std::mutex mtxReplacementStreamsEdit;
+	std::unique_lock lock(mtxChange);
+	for (auto first = true;; first = false, changed = false) {
+		while (!first) {
+			if (changed) {
+				if (cv.wait_until(lock, nextUpdateAt) == std::cv_status::timeout)
+					break;
+			} else
+				cv.wait(lock);
 		}
-
-		if (applyChangesAt > GetTickCount64())
-			continue;
-
-		applyChangesAt = (std::numeric_limits<uint64_t>::max)();
-
-		const auto lock = std::lock_guard(s_modAccessMtx);
-		s_availableReplacementStreams.clear();
-		// if (s_emptyScd) s_availableReplacementStreams.emplace(s_emptyScd->path_spec(), s_emptyScd);
 
 		try {
 			nlohmann::json json;
@@ -1373,22 +1453,87 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 			OutputDebugStringW(std::format(LR"(Error processing additional root rules file: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
 		}
 
-		try {
-			update_raw_dirs(rawDir);
-		} catch (const std::exception& e) {
-			OutputDebugStringW(std::format(LR"(Error processing raw directory: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+		for (auto it = monTtmps.begin(); it != monTtmps.end();) {
+			if (std::ranges::find(s_config.TtmpRoots, it->first) == s_config.TtmpRoots.end()) {
+				monTtmpsOnDtor.erase(it->first);
+				it = monTtmps.erase(it);
+			} else
+				++it;
 		}
 
+		for (auto it = monRawFiles.begin(); it != monRawFiles.end();) {
+			if (std::ranges::find(s_config.RawFileRoots, it->first) == s_config.RawFileRoots.end()) {
+				monRawFilesOnDtor.erase(it->first);
+				it = monRawFiles.erase(it);
+			} else
+				++it;
+		}
+
+		for (const auto& pathStr : s_config.TtmpRoots) {
+			std::filesystem::path path(pathStr);
+			if (path.is_relative())
+				path = configPath.parent_path() / path;
+
+			if (monTtmps.contains(pathStr))
+				continue;
+
+			monTtmpsOnDtor.try_emplace(pathStr, monTtmps.try_emplace(pathStr, true, path).first->second.OnChange([&](const std::filesystem::path& path) {
+				const auto filename = xivres::util::unicode::convert<std::string>(path.wstring(), &xivres::util::unicode::lower);
+				if (filename == "ttmpd.mpd" || filename == "ttmpl.mpl" || filename == "choices.json" || filename == "disable")
+					notifyChanged();
+			}));
+		}
+
+		for (const auto& pathStr : s_config.RawFileRoots) {
+			std::filesystem::path path(pathStr);
+			if (path.is_relative())
+				path = configPath.parent_path() / path;
+
+			if (monRawFiles.contains(pathStr))
+				continue;
+
+			monRawFilesOnDtor.try_emplace(pathStr, monRawFiles.try_emplace(pathStr, true, path).first->second.OnChange([&](const std::filesystem::path& path) {
+				notifyChanged();
+			}));
+		}
+
+		const auto tickCountBegin = GetTickCount64();
+		std::unique_lock modLock(s_modAccessMtx);
+		s_availableReplacementStreams.clear();
+
 		try {
-			update_ttmp_files(ttmpDir);
+			xivres::util::thread_pool::task_waiter waiter;
+			for (const auto& mon : monRawFiles | std::views::values) {
+				waiter.submit([&](auto&) {
+					try {
+						update_raw_dirs(mon.Path, mtxReplacementStreamsEdit);
+					} catch (const std::exception& e) {
+						OutputDebugStringW(std::format(LR"(Error processing raw directory: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+					}
+				});
+			}
+
+			waiter.submit([&](auto&) {
+				std::vector<std::filesystem::path> ttmpDirs;
+				ttmpDirs.reserve(monTtmps.size());
+				for (const auto& mon : monTtmps | std::views::values)
+					ttmpDirs.emplace_back(mon.Path);
+				update_ttmp_files(ttmpDirs, mtxReplacementStreamsEdit);
+			});
+
+			waiter.wait_all();
 		} catch (const std::exception& e) {
-			OutputDebugStringW(std::format(LR"(Error processing ttmp directory: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
+			OutputDebugStringW(std::format(LR"(Error processing mods: {})" "\n", xivres::util::unicode::convert<std::wstring>(e.what())).c_str());
 		}
 
 		if (hReady) {
 			SetEvent(hReady);
 			hReady = nullptr;
 		}
+
+		modLock.unlock();
+		const auto tickCountEnd = GetTickCount64();
+		OutputDebugStringW(std::format(LR"(Reload took {}ms.)" "\n", tickCountEnd - tickCountBegin).c_str());
 	}
 }
 
@@ -1419,33 +1564,33 @@ void preload_stuff() {
 }
 
 void do_stuff() {
-	MH_CreateHook(find_existing_resource_handle_finder(), &DETOUR_find_existing_resource_handle, (void**)&s_find_existing_resource_handle_original);
+	MH_CreateHook(find_existing_resource_handle_finder(), &DETOUR_find_existing_resource_handle, reinterpret_cast<void**>(&s_find_existing_resource_handle_original));
 	for (const auto p : find_rsv_indirection_resolvers())
-		MH_CreateHook(p, &DETOUR_resolve_string_indirection, (void**)&s_resolve_string_indirection_original);
+		MH_CreateHook(p, &DETOUR_resolve_string_indirection, reinterpret_cast<void**>(&s_resolve_string_indirection_original));
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CreateFileW", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
-		*reinterpret_cast<void**>(pfn) = &DETOUR_CreateFileW;
+		*static_cast<void**>(pfn) = &DETOUR_CreateFileW;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "SetFilePointerEx", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
-		*reinterpret_cast<void**>(pfn) = &DETOUR_SetFilePointerEx;
+		*static_cast<void**>(pfn) = &DETOUR_SetFilePointerEx;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "ReadFile", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
-		*reinterpret_cast<void**>(pfn) = &DETOUR_ReadFile;
+		*static_cast<void**>(pfn) = &DETOUR_ReadFile;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CloseHandle", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
-		*reinterpret_cast<void**>(pfn) = &DETOUR_CloseHandle;
+		*static_cast<void**>(pfn) = &DETOUR_CloseHandle;
 	}
 
 	MH_EnableHook(MH_ALL_HOOKS);
 
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hReadyEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr), &CloseHandle);
-	std::thread([&hReadyEvent]() {continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
+	std::thread([&hReadyEvent] { continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
 	WaitForSingleObject(hReadyEvent.get(), INFINITE);
 }

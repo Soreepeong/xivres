@@ -335,11 +335,11 @@ std::string test_voiceman(const xivres::installation& installation, const xivres
 	if (pathSpec.category_id() != 0x03)
 		return {};
 
-	const auto scdName = pathSpec.path().substr(pathSpec.path().rfind('/') + 1);
+	const auto scdName = pathSpec.text().substr(pathSpec.text().rfind('/') + 1);
 	if (!scdName.starts_with("vo_"))
 		return {};
 
-	auto parentDirName = pathSpec.path().substr(pathSpec.path().rfind('/', pathSpec.path().size() - scdName.size() - 2) + 1);
+	auto parentDirName = pathSpec.text().substr(pathSpec.text().rfind('/', pathSpec.text().size() - scdName.size() - 2) + 1);
 	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
 
 	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
@@ -395,7 +395,7 @@ std::string test_voiceman(const xivres::installation& installation, const xivres
 			if (characterName != "TATARU" && characterName != "HYTHLODAEUS" && characterName != "FEOUL")
 				return {};
 
-			return pathSpec.path().substr(0, pathSpec.path().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_')) + "_en.scd";
+			return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_')) + "_en.scd";
 		}
 	}
 	

@@ -184,6 +184,16 @@ namespace xivres {
 		xivstring& operator=(const xivstring&);
 		~xivstring() = default;
 
+		template<typename T>
+		static bool is_valid(T ptr) {
+			try {
+				void(xivstring(ptr).parsed());
+				return true;
+			} catch (...) {
+				return false;
+			}
+		}
+
 		bool operator==(const xivstring& r) const { return escaped() == r.escaped(); }
 		bool operator!=(const xivstring& r) const { return escaped() != r.escaped(); }
 		bool operator<(const xivstring& r) const { return escaped() < r.escaped(); }

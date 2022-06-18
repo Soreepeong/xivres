@@ -24,7 +24,7 @@ namespace xivres::util::unicode {
 	size_t decode(EncodingTag<wchar_t>, char32_t& out, const wchar_t* in, size_t nRemainingBytes, bool strict);
 
 	template<typename T>
-	inline size_t decode(char32_t& out, const T* in, size_t nRemainingBytes, bool strict = false) {
+	size_t decode(char32_t& out, const T* in, size_t nRemainingBytes, bool strict = false) {
 		return decode(EncodingTag<T>(), out, in, nRemainingBytes, strict);
 	}
 
@@ -41,10 +41,10 @@ namespace xivres::util::unicode {
 
 	template<class TTo>
 	TTo& convert_from_codepoint(TTo& out, char32_t c, bool strict = false) {
-		const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, c, strict);
+		const auto encLen = encode<typename TTo::value_type>(nullptr, c, strict);
 		const auto baseIndex = out.size();
 		out.resize(baseIndex + encLen);
-		unicode::encode(&out[baseIndex], c, strict);
+		encode(&out[baseIndex], c, strict);
 		return out;
 	}
 
@@ -72,16 +72,44 @@ namespace xivres::util::unicode {
 	char32_t lower(char32_t in);
 	char32_t upper(char32_t in);
 
+	template<typename TElem>
+	int strcmp(const TElem* l, const TElem* r, char32_t(*pfnCharMap)(char32_t) = nullptr, size_t lmaxlen = (std::numeric_limits<size_t>::max)(), size_t rmaxlen = (std::numeric_limits<size_t>::max)()) {
+		size_t li = 0, ri = 0;
+
+		while (li < lmaxlen && ri < rmaxlen) {
+			if (!l[li] && !r[li])
+				return 0;
+
+			char32_t lc, rc;
+			li += decode(lc, &l[li], lmaxlen - li);
+			ri += decode(rc, &r[ri], rmaxlen - ri);
+			if (pfnCharMap) {
+				lc = pfnCharMap(lc);
+				rc = pfnCharMap(rc);
+			}
+			if (lc > rc)
+				return 1;
+			if (lc < rc)
+				return -1;
+		}
+
+		if (li > ri)
+			return 1;
+		if (li < ri)
+			return -1;
+		return 0;
+	}
+
 	template<class TTo, class TFromElem, class TFromTraits = std::char_traits<TFromElem>>
 	TTo& convert(TTo& out, const std::basic_string_view<TFromElem, TFromTraits>& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
 		out.reserve(out.size() + in.size() * 4 / sizeof(in[0]) / sizeof(out[0]));
 
 		char32_t c{};
-		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && ((decLen = unicode::decode(c, &in[decIdx], in.size() - decIdx, strict))); decIdx += decLen) {
+		for (size_t decLen = 0, decIdx = 0; decIdx < in.size() && ((decLen = decode(c, &in[decIdx], in.size() - decIdx, strict))); decIdx += decLen) {
 			const auto encIdx = out.size();
-			const auto encLen = unicode::encode<typename TTo::value_type>(nullptr, pfnCharMap ? pfnCharMap(c) : c, strict);
+			const auto encLen = encode<typename TTo::value_type>(nullptr, pfnCharMap ? pfnCharMap(c) : c, strict);
 			out.resize(encIdx + encLen);
-			unicode::encode(&out[encIdx], c, strict);
+			encode(&out[encIdx], c, strict);
 		}
 
 		return out;

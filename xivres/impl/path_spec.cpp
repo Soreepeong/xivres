@@ -1,9 +1,5 @@
 #include "../include/xivres/path_spec.h"
 
-#include "../include/xivres/util.unicode.h"
-
-xivres::path_spec::path_spec(const std::wstring& fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) {}
-
 std::string xivres::path_spec::required_prefix(uint32_t categoryId, uint32_t expacId, uint32_t partId) {
 	switch (categoryId){
 		case 0x00: return "common/";
@@ -25,7 +21,7 @@ std::string xivres::path_spec::required_prefix(uint32_t categoryId, uint32_t exp
 	}
 }
 
-xivres::path_spec::path_spec(std::string fullPath): path_spec() {
+xivres::path_spec::path_spec(std::string fullPath) {
 	std::vector<std::span<char>> parts;
 	size_t previousOffset = 0, offset;
 	while ((offset = fullPath.find_first_of("/\\", previousOffset)) != std::string::npos) {

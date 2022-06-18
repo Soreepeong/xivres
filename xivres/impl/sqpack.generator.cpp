@@ -164,6 +164,7 @@ xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(cons
 	add_result result;
 	for (const auto& entryInfo : reader.Entries) {
 		try {
+			const volatile auto& x = entryInfo;
 			add(result, reader.packed_at(entryInfo), overwriteExisting);
 		} catch (const std::exception& e) {
 			result.Error.emplace_back(entryInfo.PathSpec, e.what());
@@ -488,7 +489,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entry->Provider->path_spec().path();
+				const auto& path = entry->Provider->path_spec().text();
 				strncpy_s(conflictEntries1.back().FullPath, path.c_str(), path.size());
 			}
 		}
@@ -515,7 +516,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entry->Provider->path_spec().path();
+				const auto& path = entry->Provider->path_spec().text();
 				strncpy_s(conflictEntries2.back().FullPath, path.c_str(), path.size());
 			}
 		}
@@ -681,7 +682,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entryPathSpecs[entry].path();
+				const auto& path = entryPathSpecs[entry].text();
 				strncpy_s(conflictEntries1.back().FullPath, path.c_str(), path.size());
 			}
 		}
@@ -708,7 +709,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.Locator = entry->Locator,
 					.ConflictIndex = i++,
 				});
-				const auto& path = entryPathSpecs[entry].path();
+				const auto& path = entryPathSpecs[entry].text();
 				strncpy_s(conflictEntries2.back().FullPath, path.c_str(), path.size());
 			}
 		}

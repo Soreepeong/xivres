@@ -219,7 +219,7 @@ xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::
 const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::find_data_locator_from_index1(const path_spec& pathSpec) const {
 	const auto locator = Index1.find_data_locator(pathSpec.path_hash(), pathSpec.name_hash());
 	if (locator && locator->IsSynonym)
-		return Index1.find_data_locator(pathSpec.path().c_str());
+		return Index1.find_data_locator(pathSpec.text().c_str());
 	return locator;
 }
 
@@ -232,7 +232,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::find_data_locator_from_index2(const path_spec& pathSpec) const {
 	const auto locator = Index2.find_data_locator(pathSpec.full_path_hash());
 	if (locator && locator->IsSynonym)
-		return Index2.find_data_locator(pathSpec.path().c_str());
+		return Index2.find_data_locator(pathSpec.text().c_str());
 	return locator;
 }
 

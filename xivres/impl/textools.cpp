@@ -466,10 +466,10 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 
 	try {
 		auto& mods_json = m_ttmpl->SimpleModsList.emplace_back();
-		mods_json.Name = stream.path_spec().path();
+		mods_json.Name = stream.path_spec().text();
 		mods_json.Category = "Raw File Imports";
 		mods_json.DatFile = "000000";
-		mods_json.FullPath = util::unicode::convert<std::string>(stream.path_spec().path(), &util::unicode::lower);
+		mods_json.FullPath = util::unicode::convert<std::string>(stream.path_spec().text(), &util::unicode::lower);
 		mods_json.ModOffset = m_packed->Size;
 		mods_json.ModSize = stream.size();
 		mods_json.IsDefault = true;
