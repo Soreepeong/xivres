@@ -5,6 +5,7 @@
   "dependencies": [
     "freetype",
     "libvorbis",
+    "nlohmann-json",
     "zlib"
   ]
 }
