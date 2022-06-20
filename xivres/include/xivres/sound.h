@@ -84,6 +84,10 @@ namespace xivres::sound {
 		char Name[4]{};
 		LE<uint32_t> ChunkSize;
 		aux_chunk_data Data;
+
+		[[nodiscard]] std::span<const uint8_t> data_span() const {
+			return util::span_cast<const uint8_t>(ChunkSize, &Data);
+		}
 	};
 
 	struct sound_entry_ogg_header {
@@ -227,6 +231,8 @@ namespace xivres::sound {
 			void export_to(std::vector<uint8_t>& res) const;
 
 			void set_mark_chunks(uint32_t loopStartSampleBlockIndex, uint32_t loopEndSampleBlockIndex, std::span<const uint32_t> chunks);
+
+			static sound_item make_from_reader_sound_item(const reader::sound_item& item); 
 
 			static sound_item make_from_wave(const linear_reader<uint8_t>& reader);
 

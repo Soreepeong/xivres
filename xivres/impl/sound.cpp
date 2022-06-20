@@ -170,10 +170,14 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 	if (entryIndex >= m_soundEntryOffsets.size())
 		throw std::out_of_range("entry index >= sound entry count");
 
-	sound_item res{
-		.Buffer = read_entry(m_soundEntryOffsets, m_endOfSoundEntries, static_cast<uint32_t>(entryIndex)),
-		.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]),
-	};
+	sound_item res{};
+	res.Buffer = read_entry(m_soundEntryOffsets, m_endOfSoundEntries, static_cast<uint32_t>(entryIndex));
+	res.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]);
+	
+	if (const auto minSize = sizeof *res.Header + res.Header->StreamOffset + res.Header->StreamSize; res.Buffer.size() < minSize) {
+		res.Buffer.resize(minSize);	
+		res.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]);
+	}
 	auto pos = sizeof *res.Header;
 	for (size_t i = 0; i < res.Header->AuxChunkCount; ++i) {
 		res.AuxChunks.emplace_back(reinterpret_cast<sound_entry_aux_chunk*>(&res.Buffer[pos]));
@@ -217,6 +221,18 @@ void xivres::sound::writer::sound_item::set_mark_chunks(uint32_t loopStartSample
 	markHeader.Count = static_cast<uint32_t>(marks.size());
 	if (!marks.empty())
 		memcpy(&buf[12], &marks[0], marks.size_bytes());
+}
+
+xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_reader_sound_item(const reader::sound_item& item) {
+	sound_item result{};
+	result.Header = *item.Header;
+	for (const auto& aux : item.AuxChunks) {
+		const auto dataSpan = aux->data_span();
+		result.AuxChunks.emplace(aux->Name, std::vector(dataSpan.begin(), dataSpan.end()));
+	}
+	result.Data.insert(result.Data.begin(), item.Data.begin(), item.Data.end());
+	result.ExtraData.insert(result.ExtraData.begin(), item.ExtraData.begin(), item.ExtraData.end());
+	return result;
 }
 
 size_t xivres::sound::writer::sound_item::calculate_entry_size() const {
@@ -331,6 +347,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 					break;
 				case wave_format_tag::Adpcm:
 					res.Header.Format = sound_entry_format::WaveFormatAdpcm;
+					res.Header.StreamOffset = static_cast<uint32_t>(wfbuf.size());
 					res.ExtraData = std::move(wfbuf);
 					break;
 				default:
