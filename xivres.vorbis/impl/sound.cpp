@@ -14,7 +14,10 @@ static constexpr auto FragmentedBufferSize = 256 * 1024;
 
 // https://github.com/xiph/vorbis/blob/master/examples/decoder_example.c
 xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item::get_ogg_decoded() const {
-	const auto oggf = get_ogg_file();
+	return decode_ogg(get_ogg_file());
+}
+
+xivres::sound::reader::sound_item::audio_info xivres::sound::reader::sound_item::decode_ogg(const std::vector<uint8_t>& oggf) {
 	audio_info result{};
 	size_t totalDecodedSize = 0;
 
@@ -240,10 +243,12 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 
 	for (size_t currentBlockIndex = 0; ;) {
 		size_t currentBlockCount = ReadBufferSize / channels;
-		if (currentBlockIndex < loopStartBlockIndex && loopStartBlockIndex <= currentBlockIndex + currentBlockCount)
-			currentBlockCount = loopStartBlockIndex - currentBlockIndex;
-		else if (currentBlockIndex + currentBlockCount >= loopEndBlockIndex)
-			currentBlockCount = loopEndBlockIndex - currentBlockIndex;
+		if (loopStartBlockIndex || loopEndBlockIndex) {
+			if (currentBlockIndex < loopStartBlockIndex && loopStartBlockIndex <= currentBlockIndex + currentBlockCount)
+				currentBlockCount = loopStartBlockIndex - currentBlockIndex;
+			else if (currentBlockIndex + currentBlockCount >= loopEndBlockIndex)
+				currentBlockCount = loopEndBlockIndex - currentBlockIndex;
+		}
 
 		std::span<uint8_t> data = floatSamplesReader(sizeof(float) * channels * currentBlockCount, false);
 		std::span<float> dataf;
@@ -312,7 +317,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			}
 		}
 
-		if (currentBlockIndex == loopStartBlockIndex) {
+		if ((loopStartBlockIndex || loopEndBlockIndex) && currentBlockIndex == loopStartBlockIndex) {
 			while (!ogg_page_eos(&og)) {
 				if (const auto res = ogg_stream_flush_fill(&os, &og, 0);
 					res < 0)
@@ -405,7 +410,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 		std::span(oggDataSeekTable)
 	);
 
-	if ((loopStartBlockIndex && loopEndBlockIndex) || !markIndices.empty())
+	if (!markIndices.empty())
 		soundEntry.set_mark_chunks(static_cast<uint32_t>(loopStartBlockIndex), static_cast<uint32_t>(loopEndBlockIndex), markIndices);
 	return soundEntry;
 }

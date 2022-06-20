@@ -188,6 +188,8 @@ namespace xivres::sound {
 			};
 
 			[[nodiscard]] audio_info get_ogg_decoded() const;
+			
+			[[nodiscard]] static audio_info decode_ogg(const std::vector<uint8_t>& oggf);
 		};
 
 		[[nodiscard]] std::vector<std::vector<uint8_t>> read_table_1() const { return read_table(m_offsetsTable1, m_endOfTable1); }
@@ -285,7 +287,7 @@ namespace xivres::sound {
 			m_soundEntries[index] = std::move(entry);
 		}
 
-		[[nodiscard]] std::vector<uint8_t> Export() const;
+		[[nodiscard]] std::vector<uint8_t> export_to_bytes() const;
 	};
 }
 

@@ -311,9 +311,9 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 		};
 		const auto sectionHdr = *reinterpret_cast<const CodeAndLen*>(reader(sizeof CodeAndLen, true).data());
 		pos += sizeof sectionHdr;
+		const auto sectionData = reader(sectionHdr.Len, true);
 		if (sectionHdr.Code == 0x61746164U) {
 			// "data"
-			auto r = reader(sectionHdr.Len, true);
 
 			auto res = sound_item{
 				.Header = {
@@ -322,7 +322,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 					.SamplingRate = wfex.nSamplesPerSec,
 					.Unknown_0x02E = 0,
 				},
-				.Data = {r.begin(), r.end()},
+				.Data = {sectionData.begin(), sectionData.end()},
 			};
 
 			switch (wfex.wFormatTag) {
@@ -352,7 +352,7 @@ xivres::sound::wave_format_ex& xivres::sound::writer::sound_item::as_wave_format
 	return *reinterpret_cast<wave_format_ex*>(&ExtraData[0]);
 }
 
-std::vector<uint8_t> xivres::sound::writer::Export() const {
+std::vector<uint8_t> xivres::sound::writer::export_to_bytes() const {
 	if (m_table1.size() != m_table4.size())
 		throw std::invalid_argument("table1.size != table4.size");
 

@@ -55,13 +55,11 @@ namespace xivres {
 
 		void preload_all_sqpacks() const;
 
-#ifdef _WIN32
 		static std::filesystem::path find_installation_global();
 		
 		static std::filesystem::path find_installation_china();
 		
 		static std::filesystem::path find_installation_korea();
-#endif
 	};
 }
 

@@ -150,4 +150,11 @@ std::filesystem::path xivres::installation::find_installation_korea() {
 	
 	return {};
 }
+
+#else
+
+std::filesystem::path xivres::installation::find_installation_global() { return {}; }
+std::filesystem::path xivres::installation::find_installation_china() { return {}; }
+std::filesystem::path xivres::installation::find_installation_korea() { return {}; }
+
 #endif
