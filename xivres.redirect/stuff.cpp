@@ -250,44 +250,6 @@ const char* DETOUR_resolve_string_indirection(const char* p);
 decltype(DETOUR_find_existing_resource_handle)* s_find_existing_resource_handle_original;
 decltype(DETOUR_resolve_string_indirection)* s_resolve_string_indirection_original;
 
-union sqpack_id_t {
-	uint32_t FullId;
-
-	struct {
-		uint32_t CategoryId : 16;
-		uint32_t PartId : 8;
-		uint32_t ExpacId : 8;
-	};
-
-	sqpack_id_t() : FullId(0xFFFFFFFF) {}
-	sqpack_id_t(uint32_t fullId) : FullId(fullId) {}
-
-	sqpack_id_t(uint32_t categoryId, uint32_t expacId, uint32_t partId) : CategoryId(categoryId)
-		, PartId(partId)
-		, ExpacId(expacId) {
-	}
-
-	static sqpack_id_t from_filename_int(uint32_t n) {
-		return { n >> 16, (n >> 8) & 0xFF, n & 0xFF };
-	}
-
-	[[nodiscard]] std::string exname() const {
-		return static_cast<uint32_t>(ExpacId) == 0 ? "ffxiv" : std::format("ex{}", ExpacId);
-	}
-
-	[[nodiscard]] uint32_t packid() const {
-		return (static_cast<uint32_t>(CategoryId) << 16) | (static_cast<uint32_t>(ExpacId) << 8) | static_cast<uint32_t>(PartId);
-	}
-
-	[[nodiscard]] std::string name() const {
-		return std::format("{:06x}", packid());
-	}
-
-	friend auto operator<=>(const sqpack_id_t& l, const sqpack_id_t& r) {
-		return l.FullId <=> r.FullId;
-	}
-};
-
 struct xivres_redirect_config_t {
 	class additional_game_root_t {
 		mutable std::unique_ptr<xivres::installation> m_pInstallation;
@@ -495,10 +457,10 @@ struct xivres_redirect_config_t {
 
 static std::shared_mutex s_handleMtx;
 static std::shared_mutex s_modAccessMtx;
-static std::map<sqpack_id_t, std::map<uint64_t, std::deque<std::shared_ptr<xivres::hotswap_packed_stream>>>> s_allocations;
+static std::map<xivres::sqpack_spec, std::map<uint64_t, std::deque<std::shared_ptr<xivres::hotswap_packed_stream>>>> s_allocations;
 static std::map<xivres::path_spec, std::shared_ptr<xivres::packed_stream>> s_availableReplacementStreams;
 static std::map<HANDLE, xivres::stream*> s_sqpackStreams;
-static std::map<HANDLE, uint64_t> s_virtualFilePointers;
+static std::map<HANDLE, int64_t> s_virtualFilePointers;
 static std::deque<std::string> s_fabricatedNameStorage;
 static xivres_redirect_config_t s_config;
 
@@ -527,9 +489,9 @@ static const xivres::excel::exl::reader& get_exl() {
 	return s_reader;
 }
 
-[[nodiscard]] const xivres::sqpack::generator::sqpack_views* get_sqpack_view(sqpack_id_t sqpkId) {
-	static std::map<sqpack_id_t, std::unique_ptr<xivres::sqpack::generator::sqpack_views>> s_sqpackViews;
-	static std::map<sqpack_id_t, std::mutex> s_viewMtx;
+[[nodiscard]] const xivres::sqpack::generator::sqpack_views* get_sqpack_view(xivres::sqpack_spec sqpkId) {
+	static std::map<xivres::sqpack_spec, std::unique_ptr<xivres::sqpack::generator::sqpack_views>> s_sqpackViews;
+	static std::map<xivres::sqpack_spec, std::mutex> s_viewMtx;
 	static bool s_sqpackViewsReady = false;
 
 	if (!s_sqpackViewsReady) {
@@ -537,7 +499,7 @@ static const xivres::excel::exl::reader& get_exl() {
 		const auto lock = std::lock_guard(s_sqpackMtx);
 		if (!s_sqpackViewsReady) {
 			for (const auto& id : get_installation().get_sqpack_ids()) {
-				const auto sqpkId = sqpack_id_t::from_filename_int(id);
+				const auto sqpkId = xivres::sqpack_spec::from_filename_int(id);
 				s_sqpackViews.emplace(sqpkId, nullptr);
 				static_cast<void>(s_viewMtx[sqpkId]);
 			}
@@ -561,7 +523,7 @@ static const xivres::excel::exl::reader& get_exl() {
 	xivres::sqpack::generator gen(sqpkId.exname(), sqpkId.name());
 	gen.add_sqpack(reader, true, true);
 
-	if (sqpkId.CategoryId == 7) {
+	if (sqpkId.category_id() == 7) {
 		xivres::sound::reader scd(reader.at("sound/system/Sample_System.scd"));
 		xivres::sound::writer blank;
 		blank.set_table_1(scd.read_table_1());
@@ -571,7 +533,7 @@ static const xivres::excel::exl::reader& get_exl() {
 		for (size_t i = 0; i < 256; ++i)
 			blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty(std::chrono::milliseconds(100)));
 
-		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.Export())));
+		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.export_to_bytes())));
 	}
 
 	size_t counter = 0;
@@ -579,7 +541,7 @@ static const xivres::excel::exl::reader& get_exl() {
 		auto& allocations = s_allocations[sqpkId][space];
 
 		std::shared_ptr<xivres::hotswap_packed_stream> stream;
-		const auto requiredPrefix = xivres::path_spec::required_prefix(sqpkId.packid());
+		const auto requiredPrefix = sqpkId.required_prefix();
 		for (size_t i = 0; i < count; i++, counter++) {
 			xivres::path_spec spec(std::format("{}x/{:x}.xrr", requiredPrefix, counter));
 			if (!stream)
@@ -597,17 +559,15 @@ static const xivres::excel::exl::reader& get_exl() {
 	return ptr.get();
 }
 
-std::string force_voiceman_language_for_character(const xivres::path_spec& pathSpec) {
+xivres::path_spec force_voiceman_language_for_character(const xivres::path_spec& pathSpec) {
 	if (pathSpec.category_id() != 0x03)
 		return {};
 
-	const auto scdName = pathSpec.text().substr(pathSpec.text().rfind('/') + 1);
+	const auto scdName = pathSpec.parts().back();
 	if (!scdName.starts_with("vo_"))
 		return {};
 
-	auto parentDirName = pathSpec.text().substr(pathSpec.text().rfind('/', pathSpec.text().size() - scdName.size() - 2) + 1);
-	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
-
+	const auto parentDirName = pathSpec.parts()[pathSpec.parts().size() - 2];
 	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
 		return {};
 
@@ -658,12 +618,15 @@ std::string force_voiceman_language_for_character(const xivres::path_spec& pathS
 					"[LogDialogueCharacterNames] name={} path={}\n", characterName, pathSpec.text()
 				)).c_str());
 
+			std::string_view newLanguage;
 			if (auto it = s_config.ForcedCharacterLanguages.find(characterName); it != s_config.ForcedCharacterLanguages.end())
-				return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+				newLanguage = it->second;
 			else if (it = s_config.ForcedCharacterLanguages.find(""); it != s_config.ForcedCharacterLanguages.end())
-				return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_') + 1) + it->second + ".scd";
+				newLanguage = it->second;
 			else
 				return {};
+
+			return pathSpec.parent_path() / std::format("{}{}.scd", scdName.substr(0, scdName.rfind('_') + 1), newLanguage);
 		}
 	}
 
@@ -686,7 +649,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 		nSegmentLength = pLoadDetails->SegmentLength;
 	}
 
-	sqpack_id_t sqpkId(categoryId);
+	auto sqpkId = xivres::sqpack_spec::from_category_int(categoryId);
 	xivres::path_spec pathSpec(pszPath);
 	std::shared_lock lock(s_modAccessMtx);
 
@@ -706,49 +669,57 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 		if (!pViews)
 			throw std::runtime_error(std::format("SqPack {} not found", sqpkId.name()));
 
-		std::string transformed = pszPath;
-		for (const auto& rule : s_config.PathReplacements) {
-			auto n = regex_replace(transformed, rule.regex(), rule.To);
-			if (n != transformed) {
-				transformed = std::move(n);
-				if (rule.Stop)
-					break;
-			}
-		}
-
-		if (resourceType == 'scd') {
-			if (auto t = force_voiceman_language_for_character(pathSpec); !t.empty())
-				transformed = std::move(t);
-		}
-
-		if (transformed != pszPath) {
-			xivres::path_spec transformedPathSpec(transformed);
-			auto exists = false;
-			if (!exists) exists = s_availableReplacementStreams.contains(transformedPathSpec);
-			if (!exists) exists = !!pViews->find_entry(transformedPathSpec);
-			for (const auto& additionalInstallation : s_config.AdditionalRoots) {
-				if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
+		{
+			xivres::path_spec transformedPathSpec;
+			{
+				std::string transformed = pszPath;
+				for (const auto& rule : s_config.PathReplacements) {
+					auto n = regex_replace(transformed, rule.regex(), rule.To);
+					if (n != transformed) {
+						transformed = std::move(n);
+						if (rule.Stop)
+							break;
+					}
+				}
+				transformedPathSpec = pathSpec;
 			}
 
-			if (exists) {
-				if (nSegmentLength) {
-					const auto tstr = std::format("{}.{:x}.{:x}", transformed, nSegmentOffset, nSegmentLength);
-					resourceHash = crc32_z(0, reinterpret_cast<const Bytef*>(tstr.c_str()), tstr.size());
-				} else {
-					resourceHash = crc32_z(0, reinterpret_cast<const Bytef*>(transformed.c_str()), transformed.size());
+			if (resourceType == 'scd') {
+				if (auto t = force_voiceman_language_for_character(transformedPathSpec); !t.empty())
+					transformedPathSpec = std::move(t);
+			}
+
+			if (transformedPathSpec != pathSpec) {
+				auto exists = false;
+				if (!exists) exists = s_availableReplacementStreams.contains(transformedPathSpec);
+				if (!exists) exists = !!pViews->find_entry(transformedPathSpec);
+				for (const auto& additionalInstallation : s_config.AdditionalRoots) {
+					if (!exists) exists = additionalInstallation.get_installation().get_sqpack(sqpkId.packid()).find_entry_index(transformedPathSpec) != (std::numeric_limits<size_t>::max)();
 				}
 
-				pathSpec = std::move(transformedPathSpec);
-				s_fabricatedNameStorage.emplace_back(transformed.c_str());
-				while (s_fabricatedNameStorage.size() > 1024)
-					s_fabricatedNameStorage.pop_front();
+				if (exists) {
+					if (nSegmentLength) {
+						const auto tstr = std::format(".{:x}.{:x}", nSegmentOffset, nSegmentLength);
+						resourceHash = ~crc32_combine(
+							~transformedPathSpec.full_path_hash(),
+							crc32_z(0, reinterpret_cast<const Bytef*>(tstr.c_str()), tstr.size()),
+							static_cast<long>(tstr.size()));
+					} else {
+						resourceHash = transformedPathSpec.full_path_hash();
+					}
 
-				if (s_config.LogReplacedPaths)
-					OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
-						"[LogReplacedPaths] {} => {}\n", pszPath, transformed
-					)).c_str());
+					pathSpec = std::move(transformedPathSpec);
+					s_fabricatedNameStorage.emplace_back(pathSpec.text());
+					while (s_fabricatedNameStorage.size() > 1024)
+						s_fabricatedNameStorage.pop_front();
 
-				pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
+					if (s_config.LogReplacedPaths)
+						OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format(
+							"[LogReplacedPaths] {} => {}\n", pszPath, pathSpec.text()
+						)).c_str());
+
+					pszPath = const_cast<char*>(s_fabricatedNameStorage.back().c_str());
+				}
 			}
 		}
 
@@ -867,7 +838,7 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 	const auto categoryId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(0, 2).c_str(), nullptr, 16));
 	const auto expacId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(2, 2).c_str(), nullptr, 16));
 	const auto partId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(4, 2).c_str(), nullptr, 16));
-	const auto sqpkId = sqpack_id_t(categoryId, expacId, partId);
+	const auto sqpkId = xivres::sqpack_spec(categoryId, expacId, partId);
 
 	const auto pViews = get_sqpack_view(sqpkId);
 	if (!pViews)
@@ -1558,7 +1529,7 @@ void preload_stuff() {
 	});
 	for (const auto id : packIds) {
 		xivres::util::thread_pool::pool::instance().submit<void>([id](auto&) {
-			static_cast<void>(get_sqpack_view(sqpack_id_t::from_filename_int(id)));
+			static_cast<void>(get_sqpack_view(xivres::sqpack_spec::from_filename_int(id)));
 		});
 	}
 }

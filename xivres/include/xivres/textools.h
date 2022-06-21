@@ -26,8 +26,8 @@ namespace xivres::textools {
 		std::string Name;
 		std::string Category;
 		std::string FullPath;
-		uint64_t ModOffset{};
-		uint64_t ModSize{};
+		int64_t ModOffset{};
+		int64_t ModSize{};
 		std::string DatFile;
 		bool IsDefault{};
 		std::optional<mod_pack> ModPack;

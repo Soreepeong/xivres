@@ -1,11 +1,58 @@
 #include "../include/xivres/path_spec.h"
 
-std::string xivres::path_spec::required_prefix(uint32_t categoryId, uint32_t expacId, uint32_t partId) {
-	switch (categoryId){
+xivres::sqpack_spec::sqpack_spec(std::string_view part1, std::string_view part2, std::string_view part3) {
+	ExpacId = PartId = 0;
+
+	if (part1 == "common") {
+		CategoryId = 0x00;
+
+	} else if (part1 == "bgcommon") {
+		CategoryId = 0x01;
+
+	} else if (part1 == "bg") {
+		CategoryId = 0x02;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
+		PartId = ExpacId > 0U ? static_cast<uint8_t>(std::strtol(&part3[0], nullptr, 10)) : 0;
+
+	} else if (part1 == "cut") {
+		CategoryId = 0x03;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
+
+	} else if (part1 == "chara") {
+		CategoryId = 0x04;
+
+	} else if (part1 == "shader") {
+		CategoryId = 0x05;
+
+	} else if (part1 == "ui") {
+		CategoryId = 0x06;
+
+	} else if (part1 == "sound") {
+		CategoryId = 0x07;
+
+	} else if (part1 == "vfx") {
+		CategoryId = 0x08;
+
+	} else if (part1 == "exd") {
+		CategoryId = 0x0a;
+
+	} else if (part1 == "game_script") {
+		CategoryId = 0x0b;
+
+	} else if (part1 == "music") {
+		CategoryId = 0x0c;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
+
+	} else
+		CategoryId = 0x00;
+}
+
+std::string xivres::sqpack_spec::required_prefix() const {
+	switch (static_cast<uint32_t>(CategoryId)) {
 		case 0x00: return "common/";
 		case 0x01: return "bgcommon/";
-		case 0x02: return expacId > 0 ? std::format("bg/ex{}/{:02x}_", expacId, partId) : "bg/ffxiv/";
-		case 0x03: return expacId > 0 ? std::format("cut/ex{}/", expacId) : "cut/ffxiv/";
+		case 0x02: return ExpacId > 0U ? std::format("bg/ex{}/{:02x}_", ExpacId, PartId) : "bg/ffxiv/";
+		case 0x03: return ExpacId > 0U ? std::format("cut/ex{}/", ExpacId) : "cut/ffxiv/";
 		case 0x04: return "chara/";
 		case 0x05: return "shader/";
 		case 0x06: return "ui/";
@@ -17,114 +64,171 @@ std::string xivres::path_spec::required_prefix(uint32_t categoryId, uint32_t exp
 		case 0x0c: return "music/";
 		case 0x12: return "sqpack_test/";
 		case 0x13: return "debug/";
-		default: return "invalid/";
+		default: return {};
 	}
 }
 
-xivres::path_spec::path_spec(std::string fullPath) {
-	std::vector<std::span<char>> parts;
-	size_t previousOffset = 0, offset;
-	while ((offset = fullPath.find_first_of("/\\", previousOffset)) != std::string::npos) {
-		auto part = std::span(fullPath).subspan(previousOffset, offset - previousOffset);
-		previousOffset = offset + 1;
+xivres::path_spec::path_spec(std::string fullPath)
+	: m_text(std::move(fullPath)) {
 
-		if (part.empty() || (part.size() == 1 && part[0] == '.'))
-			void();
-		else if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
-			if (!parts.empty())
-				parts.pop_back();
-		} else {
-			parts.push_back(part);
-		}
+	for (auto& c : m_text) {
+		if (c == '\\')
+			c = '/';
 	}
 
-	if (auto part = std::span(fullPath).subspan(previousOffset); part.empty() || (part.size() == 1 && part[0] == '.'))
-		void();
-	else if (part.size() == 2 && part[0] == '.' && part[1] == '.') {
-		if (!parts.empty())
-			parts.pop_back();
+	{
+		size_t previousOffset = 0;
+		for (size_t offset; (offset = m_text.find('/', previousOffset)) != std::string::npos; previousOffset = offset + 1) {
+			m_parts.emplace_back(std::string_view(m_text).substr(previousOffset, offset - previousOffset));
+			if (!m_parts.empty() && m_parts.back().empty())
+				m_parts.pop_back();
+		}
+		m_parts.emplace_back(std::string_view(m_text).substr(previousOffset));
+		if (!m_parts.empty() && m_parts.back().empty())
+			m_parts.pop_back();
+	}
+
+	recalculate_hash_values(true);
+}
+
+xivres::path_spec& xivres::path_spec::operator/=(const path_spec& r) {
+	if (r.empty())
+		return *this;
+
+	const auto previousPointer = &m_text[0];
+	size_t previousOffset = m_text.size() + 1;
+	m_text.reserve(m_text.size() + 1 + r.m_text.size());
+	m_text.push_back('/');
+	m_text.insert(m_text.end(), r.m_text.begin(), r.m_text.end());
+	const auto recheckSqPack = m_parts.size() < 3;
+	{
+		m_parts.reserve(m_parts.size() + r.parts().size());
+		for (auto& p : m_parts)
+			p = {p.data() - previousPointer + &m_text[0], p.size()};
+		for (size_t offset; (offset = m_text.find('/', previousOffset)) != std::string::npos; previousOffset = offset + 1)
+			m_parts.emplace_back(std::string_view(m_text).substr(previousOffset, offset - previousOffset));
+		m_parts.emplace_back(std::string_view(m_text).substr(previousOffset));
+	}
+
+	if (recheckSqPack)
+		m_sqpack = {m_parts[0], m_parts.size() > 1 ? m_parts[1] : std::string_view(), m_parts.size() > 2 ? m_parts[2] : std::string_view()};
+
+	if (r.path_hash() == EmptyHashValue) {
+		m_pathHash = full_path_hash();
+		m_nameHash = r.name_hash();
+		m_fullPathHash = ~crc32_combine(
+			crc32_combine(~full_path_hash(), ~SlashHashValue, 1),
+			~r.name_hash(),
+			static_cast<long>(r.text().size()));
+
 	} else {
-		parts.push_back(part);
+		m_pathHash = ~crc32_combine(
+			crc32_combine(~full_path_hash(), ~SlashHashValue, 1),
+			~r.path_hash(),
+			static_cast<long>(&r.parts().back().front() - &r.parts().front().front() - 1));
+		m_nameHash = r.name_hash();
+		m_fullPathHash = ~crc32_combine(
+			crc32_combine(~path_hash(), ~SlashHashValue, 1),
+			~name_hash(),
+			static_cast<long>(parts().back().size()));
 	}
 
-	if (parts.empty())
-		return;
+	return *this;
+}
 
-	m_empty = false;
-	m_text.reserve(std::accumulate(parts.begin(), parts.end(), SIZE_MAX, [](size_t curr, const std::string_view& view) { return curr + view.size() + 1; }));
+xivres::path_spec& xivres::path_spec::operator+=(const path_spec& r) {
+	if (r.empty())
+		return *this;
 
-	m_pathHash = m_nameHash = 0;
-	for (size_t i = 0; i < parts.size(); i++) {
-		if (i > 0) {
-			m_text += "/";
-			if (i == 1)
-				m_pathHash = m_nameHash;
-			else
-				m_pathHash = crc32_combine(crc32_combine(m_pathHash, ~SlashHashValue, 1), m_nameHash, static_cast<long>(parts[i - 1].size()));
-		}
-		m_text += parts[i];
-		for (auto& p : parts[i]) {
-			if ('A' <= p && p <= 'Z')
-				p += 'a' - 'A';
-		}
-		m_nameHash = crc32_z(0, reinterpret_cast<const uint8_t*>(parts[i].data()), parts[i].size());
+	const auto previousPointer = &m_text[0];
+	size_t previousOffset = &m_parts.back().front() - &m_text[0];
+	m_text.reserve(m_text.size() + r.m_text.size());
+	m_text.insert(m_text.end(), r.m_text.begin(), r.m_text.end());
+	const auto recheckSqPack = m_parts.size() < 3;
+	{
+		m_parts.reserve(m_parts.size() + r.parts().size());
+		for (auto& p : m_parts)
+			p = {p.data() - previousPointer + &m_text[0], p.size()};
+		for (size_t offset; (offset = m_text.find('/', previousOffset)) != std::string::npos; previousOffset = offset + 1)
+			m_parts.emplace_back(std::string_view(m_text).substr(previousOffset, offset - previousOffset));
+		m_parts.emplace_back(std::string_view(m_text).substr(previousOffset));
 	}
 
-	m_fullPathHash = crc32_combine(crc32_combine(m_pathHash, ~SlashHashValue, 1), m_nameHash, parts.empty() ? 0 : static_cast<long>(parts.back().size()));
+	recalculate_hash_values(recheckSqPack);
 
-	m_fullPathHash = ~m_fullPathHash;
-	m_pathHash = ~m_pathHash;
-	m_nameHash = ~m_nameHash;
+	return *this;
+}
 
-	if (!parts.empty()) {
-		std::vector<std::string_view> views;
-		views.reserve(parts.size());
-		for (const auto& part : parts)
-			views.emplace_back(part);
+xivres::path_spec& xivres::path_spec::replace_stem(const std::string& newStem) {
+	if (m_parts.empty())
+		void();
+	else if (m_parts.size() == 1) {
+		m_text.clear();
+		m_parts.clear();
+		clear();
+	} else {
+		m_text.resize(m_text.size() - m_parts.back().size() - 1);
+		m_parts.pop_back();
+		m_fullPathHash = m_pathHash;
 
-		m_expacId = m_partId = 0;
+		std::string s;
+		s.reserve(m_parts.back().data() - m_parts.front().data() - 1);
+		util::unicode::convert(s, std::string_view(m_parts.front().data(), m_parts.back().data() - m_parts.front().data() - 1), &util::unicode::lower);
+		m_pathHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 
-		if (views[0] == "common") {
-			m_categoryId = 0x00;
+		s.clear();
+		s.reserve(m_parts.back().size());
+		util::unicode::convert(s, std::string_view(m_parts.back().data(), m_parts.back().size()), &util::unicode::lower);
+		m_nameHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 
-		} else if (views[0] == "bgcommon") {
-			m_categoryId = 0x01;
+		if (newStem.empty() && m_parts.size() < 3)
+			m_sqpack = {m_parts[0], m_parts.size() > 1 ? m_parts[1] : std::string_view(), m_parts.size() > 2 ? m_parts[2] : std::string_view()};
+	}
 
-		} else if (views[0] == "bg") {
-			m_categoryId = 0x02;
-			m_expacId = views.size() >= 2 && views[1].starts_with("ex") ? static_cast<uint8_t>(std::strtol(&views[1][2], nullptr, 10)) : 0;
-			m_partId = views.size() >= 3 && m_expacId > 0 ? static_cast<uint8_t>(std::strtol(&views[2][0], nullptr, 10)) : 0;
+	*this /= newStem;
+	return *this;
+}
 
-		} else if (views[0] == "cut") {
-			m_categoryId = 0x03;
-			m_expacId = views.size() >= 2 && views[1].starts_with("ex") ? static_cast<uint8_t>(std::strtol(&views[1][2], nullptr, 10)) : 0;
+xivres::path_spec xivres::path_spec::filename() const {
+	path_spec res;
+	if (!parts().empty()) {
+		res.m_text = parts().back();
+		res.m_nameHash = res.m_fullPathHash = m_nameHash;
+		res.m_parts = {std::string_view(res.m_text)};
+		res.m_sqpack = {res.m_parts.front()};
+	}
+	return res;
+}
 
-		} else if (views[0] == "chara") {
-			m_categoryId = 0x04;
+void xivres::path_spec::recalculate_hash_values(bool checkSqPack) {
+	if (m_parts.empty()) {
+		clear();
 
-		} else if (views[0] == "shader") {
-			m_categoryId = 0x05;
+	} else if (m_parts.size() == 1) {
+		m_empty = false;
+		
+		std::string s;
+		s.reserve(m_parts.front().size());
+		util::unicode::convert(s, m_parts.front(), &util::unicode::lower);
+		m_fullPathHash = m_nameHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+		if (checkSqPack)
+			m_sqpack = {m_parts[0], std::string_view(), std::string_view()};
 
-		} else if (views[0] == "ui") {
-			m_categoryId = 0x06;
+	} else {
+		m_empty = false;
+		
+		std::string s;
+		s.reserve(m_parts.back().data() - m_parts.front().data() - 1);
+		util::unicode::convert(s, std::string_view(m_parts.front().data(), m_parts.back().data() - m_parts.front().data() - 1), &util::unicode::lower);
+		m_pathHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 
-		} else if (views[0] == "sound") {
-			m_categoryId = 0x07;
-
-		} else if (views[0] == "vfx") {
-			m_categoryId = 0x08;
-
-		} else if (views[0] == "exd") {
-			m_categoryId = 0x0a;
-
-		} else if (views[0] == "game_script") {
-			m_categoryId = 0x0b;
-
-		} else if (views[0] == "music") {
-			m_categoryId = 0x0c;
-			m_expacId = views.size() >= 2 && views[1].starts_with("ex") ? static_cast<uint8_t>(std::strtol(&views[1][2], nullptr, 10)) : 0;
-
-		} else
-			m_categoryId = 0x00;
+		s.clear();
+		s.reserve(m_parts.back().size());
+		util::unicode::convert(s, std::string_view(m_parts.back().data(), m_parts.back().size()), &util::unicode::lower);
+		m_nameHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+		
+		m_fullPathHash = ~crc32_combine(crc32_combine(~m_pathHash, ~SlashHashValue, 1), ~m_nameHash, static_cast<long>(m_parts.back().size()));
+		if (checkSqPack)
+			m_sqpack = {m_parts[0], m_parts[1], m_parts.size() > 2 ? m_parts[2] : std::string_view()};
 	}
 }

@@ -10,6 +10,61 @@
 #include "util.unicode.h"
 
 namespace xivres {
+	union sqpack_spec {
+		uint32_t FullId;
+
+		struct {
+			uint32_t CategoryId : 16;
+			uint32_t PartId : 8;
+			uint32_t ExpacId : 8;
+		};
+
+		sqpack_spec() : FullId(0xFFFFFFFF) {}
+
+		sqpack_spec(uint32_t categoryId, uint32_t expacId, uint32_t partId)
+			: CategoryId(categoryId)
+			, PartId(partId)
+			, ExpacId(expacId) { }
+
+		sqpack_spec(std::string_view part1, std::string_view part2 = {}, std::string_view part3 = {});
+
+		static sqpack_spec from_category_int(uint32_t n) {
+			sqpack_spec spec;
+			spec.FullId = n;
+			return spec;
+		}
+		
+		static sqpack_spec from_filename_int(uint32_t n) {
+			return {n >> 16, (n >> 8) & 0xFF, n & 0xFF};
+		}
+		
+		[[nodiscard]] uint8_t category_id() const { return static_cast<uint8_t>(CategoryId); }
+		[[nodiscard]] uint8_t part_id() const { return static_cast<uint8_t>(PartId); }
+		[[nodiscard]] uint8_t expac_id() const { return static_cast<uint8_t>(ExpacId); }
+
+		[[nodiscard]] std::string exname() const {
+			return static_cast<uint32_t>(ExpacId) == 0 ? "ffxiv" : std::format("ex{}", ExpacId);
+		}
+
+		[[nodiscard]] uint32_t packid() const {
+			return (static_cast<uint32_t>(CategoryId) << 16) | (static_cast<uint32_t>(ExpacId) << 8) | static_cast<uint32_t>(PartId);
+		}
+
+		[[nodiscard]] std::string name() const {
+			return std::format("{:06x}", packid());
+		}
+
+		[[nodiscard]] std::string required_prefix() const;
+
+		bool operator==(const sqpack_spec& r) const {
+			return FullId == r.FullId;
+		}
+
+		friend auto operator<=>(const sqpack_spec& l, const sqpack_spec& r) {
+			return l.FullId <=> r.FullId;
+		}
+	};
+
 	struct path_spec {
 		static constexpr uint32_t EmptyHashValue = 0xFFFFFFFFU;
 		static constexpr uint8_t EmptyId = 0xFF;
@@ -17,55 +72,97 @@ namespace xivres {
 
 	private:
 		bool m_empty = true;
-		uint8_t m_categoryId = EmptyId;
-		uint8_t m_expacId = EmptyId;
-		uint8_t m_partId = EmptyId;
+		sqpack_spec m_sqpack;
 		uint32_t m_pathHash = EmptyHashValue;
 		uint32_t m_nameHash = EmptyHashValue;
 		uint32_t m_fullPathHash = EmptyHashValue;
 		std::string m_text;
+		std::vector<std::string_view> m_parts;
 
 	public:
 		path_spec() noexcept = default;
-		path_spec& operator=(const path_spec& r) = default;
-		path_spec(const path_spec& r) = default;
 		~path_spec() = default;
 
+		path_spec(const path_spec& r)
+			: m_empty(r.m_empty)
+			, m_sqpack(r.m_sqpack)
+			, m_pathHash(r.m_pathHash)
+			, m_nameHash(r.m_nameHash)
+			, m_fullPathHash(r.m_fullPathHash)
+			, m_text(r.m_text) {
+			m_parts.reserve(r.m_parts.size());
+			for (const auto& part : r.m_parts)
+				m_parts.emplace_back(&m_text[&part[0] - &r.m_text[0]], part.size());
+		}
 		path_spec(path_spec&& r) noexcept { swap(*this, r); }
-		path_spec& operator=(path_spec&& r) noexcept { swap(*this, r); return *this; }
+
+		path_spec& operator=(path_spec&& r) noexcept {
+			swap(*this, r);
+			return *this;
+		}
 		
-		path_spec(uint32_t pathHash, uint32_t nameHash, uint32_t fullPathHash, uint8_t categoryId, uint8_t expacId, uint8_t partId)
+		path_spec& operator=(const path_spec& r) {
+			path_spec newSpec(r);
+			swap(*this, newSpec);
+			return *this;
+		}
+
+		path_spec(uint32_t pathHash, uint32_t nameHash, uint32_t fullPathHash, sqpack_spec sqpackSpec)
 			: m_empty(false)
-			, m_categoryId(categoryId)
-			, m_expacId(expacId)
-			, m_partId(partId)
+			, m_sqpack(sqpackSpec)
 			, m_pathHash(pathHash)
 			, m_nameHash(nameHash)
-			, m_fullPathHash(fullPathHash) {}
+			, m_fullPathHash(fullPathHash) { }
+
+		path_spec(uint32_t pathHash, uint32_t nameHash, uint32_t fullPathHash, uint8_t categoryId, uint8_t expacId, uint8_t partId)
+			: path_spec(pathHash, nameHash, fullPathHash, sqpack_spec(categoryId, expacId, partId)) { }
 
 		template<typename TElem>
-		path_spec(const TElem* fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) {}
+		path_spec(const TElem* fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) { }
 
 		template<typename TElem, typename TTrait = std::char_traits<TElem>>
-		path_spec(std::basic_string_view<TElem, TTrait> fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) {}
+		path_spec(std::basic_string_view<TElem, TTrait> fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) { }
 
 		template<typename TElem, typename TTrait = std::char_traits<TElem>, typename TAlloc = std::allocator<TElem>>
-		path_spec(const std::basic_string<TElem, TTrait, TAlloc>& fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) {}
+		path_spec(const std::basic_string<TElem, TTrait, TAlloc>& fullPath) : path_spec(util::unicode::convert<std::string>(fullPath)) { }
 
 		path_spec(std::string fullPath);
 
-		path_spec(const std::filesystem::path& path) : path_spec(path.u8string()) {}
+		path_spec(const std::filesystem::path& path) : path_spec(path.u8string()) { }
 
 		friend void swap(path_spec& l, path_spec& r) noexcept {
 			std::swap(l.m_empty, r.m_empty);
-			std::swap(l.m_categoryId, r.m_categoryId);
-			std::swap(l.m_expacId, r.m_expacId);
-			std::swap(l.m_partId, r.m_partId);
+			std::swap(l.m_sqpack, r.m_sqpack);
 			std::swap(l.m_pathHash, r.m_pathHash);
 			std::swap(l.m_nameHash, r.m_nameHash);
 			std::swap(l.m_fullPathHash, r.m_fullPathHash);
+
+			const auto rts = &l.m_text[0];
+			const auto lts = &r.m_text[0];
 			std::swap(l.m_text, r.m_text);
+			std::swap(l.m_parts, r.m_parts);
+			for (auto& part : l.m_parts)
+				part = {&l.m_text[&part[0] - lts], part.size()};
+			for (auto& part : r.m_parts)
+				part = {&r.m_text[&part[0] - rts], part.size()};
 		}
+
+		path_spec& operator/=(const path_spec& r);
+		path_spec& operator+=(const path_spec& r);
+		path_spec& replace_stem(const std::string& newStem = {});
+
+		friend path_spec operator/(path_spec l, const path_spec& r) {
+			l /= r;
+			return l;
+		}
+
+		friend path_spec operator+(path_spec l, const path_spec& r) {
+			l += r;
+			return l;
+		}
+
+		[[nodiscard]] path_spec with_stem(const std::string& newStem = {}) const { return path_spec(*this).replace_stem(newStem); }
+		[[nodiscard]] path_spec parent_path() const { return with_stem(); }
 
 		void clear() noexcept {
 			path_spec empty;
@@ -77,28 +174,29 @@ namespace xivres {
 		operator bool() const { return m_empty; }
 		[[nodiscard]] bool empty() const { return m_empty; }
 
-		[[nodiscard]] uint8_t category_id() const { return m_categoryId; }
-		[[nodiscard]] uint8_t expac_id() const { return m_expacId; }
-		[[nodiscard]] uint8_t part_id() const { return m_partId; }
+		[[nodiscard]] std::vector<std::string_view> parts() const { return m_parts; }
+		[[nodiscard]] path_spec filename() const;
+
+		[[nodiscard]] uint8_t category_id() const { return m_sqpack.category_id(); }
+		[[nodiscard]] uint8_t expac_id() const { return m_sqpack.ExpacId; }
+		[[nodiscard]] uint8_t part_id() const { return m_sqpack.PartId; }
 		[[nodiscard]] uint32_t path_hash() const { return m_pathHash; }
 		[[nodiscard]] uint32_t name_hash() const { return m_nameHash; }
 		[[nodiscard]] uint32_t full_path_hash() const { return m_fullPathHash; }
 
 		[[nodiscard]] bool has_original() const { return !m_text.empty(); }
 		[[nodiscard]] const std::string& text() const { return m_text; }
-		[[nodiscard]] path_spec textless() const { return !has_original() ? *this : path_spec(m_pathHash, m_nameHash, m_fullPathHash, m_categoryId, m_expacId, m_partId); }
+		[[nodiscard]] path_spec textless() const { return !has_original() ? *this : path_spec(m_pathHash, m_nameHash, m_fullPathHash, m_sqpack); }
 
-		[[nodiscard]] uint32_t packid() const { return (m_categoryId << 16) | (m_expacId << 8) | m_partId; }
-		[[nodiscard]] std::string packname() const { return std::format("{:0>6x}", packid()); }
-		[[nodiscard]] std::string exname() const { return m_expacId == 0 ? "ffxiv" : std::format("ex{}", m_expacId); }
+		[[nodiscard]] uint32_t packid() const { return m_sqpack.packid(); }
+		[[nodiscard]] std::string packname() const { return m_sqpack.name(); }
+		[[nodiscard]] std::string exname() const { return m_sqpack.exname(); }
 
 		bool operator==(const path_spec& r) const {
 			if (m_empty && r.m_empty)
 				return true;
 
-			return m_categoryId == r.m_categoryId
-				&& m_expacId == r.m_expacId
-				&& m_partId == r.m_partId
+			return m_sqpack == r.m_sqpack
 				&& m_fullPathHash == r.m_fullPathHash
 				&& m_nameHash == r.m_nameHash
 				&& m_pathHash == r.m_pathHash
@@ -109,6 +207,10 @@ namespace xivres {
 			return !this->operator==(r);
 		}
 
+	private:
+		void recalculate_hash_values(bool checkSqPack);
+
+	public:
 		struct AllHashComparator {
 			static int compare(const path_spec& l, const path_spec& r) {
 				if (l.m_empty && r.m_empty)
@@ -263,12 +365,6 @@ namespace xivres {
 				return util::unicode::strcmp(lt, r.FullPath, &util::unicode::lower, sizeof r.FullPath);
 			}
 		};
-
-		static std::string required_prefix(uint32_t categoryId, uint32_t expacId, uint32_t partId);
-
-		static std::string required_prefix(uint32_t packId) {
-			return required_prefix(packId >> 16, (packId >> 8) & 0xFF, packId & 0xFF);
-		}
 	};
 }
 
@@ -278,10 +374,10 @@ struct std::formatter<xivres::path_spec, char> : std::formatter<std::basic_strin
 	auto format(const xivres::path_spec& t, FormatContext& fc) {
 		if (t.has_original()) {
 			return std::formatter<std::basic_string<char>, char>::format(std::format(
-				"{}({:08x}/{:08x}, {:08x})", t.text(), t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
+																			"{}({:08x}/{:08x}, {:08x})", t.text(), t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
 		} else {
 			return std::formatter<std::basic_string<char>, char>::format(std::format(
-				R"(???({:08x}/{:08x}, {:08x}))", t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
+																			R"(???({:08x}/{:08x}, {:08x}))", t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
 		}
 	}
 };

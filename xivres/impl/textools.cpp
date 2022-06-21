@@ -66,8 +66,8 @@ void xivres::textools::from_json(const nlohmann::json& j, mods_json& p) {
 	p.Name = JsonValueOrDefault(j, "Name", ""s, ""s);
 	p.Category = JsonValueOrDefault(j, "Category", ""s, ""s);
 	p.FullPath = JsonValueOrDefault(j, "FullPath", ""s, ""s);
-	p.ModOffset = JsonValueOrDefault(j, "ModOffset", 0ULL, 0ULL);
-	p.ModSize = JsonValueOrDefault(j, "ModSize", 0ULL, 0ULL);
+	p.ModOffset = JsonValueOrDefault(j, "ModOffset", 0LL, 0LL);
+	p.ModSize = JsonValueOrDefault(j, "ModSize", 0LL, 0LL);
 	p.DatFile = JsonValueOrDefault(j, "DatFile", ""s, ""s);
 	p.IsDefault = JsonValueOrDefault(j, "IsDefault", false, false);
 	if (const auto it = j.find("ModPackEntry"); it != j.end() && !it->is_null())

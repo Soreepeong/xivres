@@ -42,7 +42,7 @@ static std::string test_pack_unpack_file(std::shared_ptr<xivres::packed_stream> 
 
 		pcszLastStep = "Decode Passthrough-packed";
 		decoded = std::make_shared<unpacked_stream>(std::make_shared<stream_as_packed_stream>(pathSpec, packed));
-		
+
 		const auto decodedPassthrough = decoded->read_vector<uint8_t>();
 		if (decodedOriginal.empty() && decodedPassthrough.empty())
 			void();
@@ -86,9 +86,12 @@ static void test_pack_unpack(const xivres::installation& gameReader, bool decode
 							switch (res.Type = packed->get_packed_type()) {
 								case xivres::packed::type::none: break;
 								case xivres::packed::type::placeholder: break;
-								case xivres::packed::type::standard: res.Result = test_pack_unpack_file<xivres::standard_passthrough_packer, xivres::standard_compressing_packer>(std::move(packed), pathSpec); break;
-								case xivres::packed::type::model: res.Result = test_pack_unpack_file<xivres::model_passthrough_packer, xivres::model_compressing_packer>(std::move(packed), pathSpec); break;
-								case xivres::packed::type::texture: res.Result = test_pack_unpack_file<xivres::texture_passthrough_packer, xivres::texture_compressing_packer>(std::move(packed), pathSpec); break;
+								case xivres::packed::type::standard: res.Result = test_pack_unpack_file<xivres::standard_passthrough_packer, xivres::standard_compressing_packer>(std::move(packed), pathSpec);
+									break;
+								case xivres::packed::type::model: res.Result = test_pack_unpack_file<xivres::model_passthrough_packer, xivres::model_compressing_packer>(std::move(packed), pathSpec);
+									break;
+								case xivres::packed::type::texture: res.Result = test_pack_unpack_file<xivres::texture_passthrough_packer, xivres::texture_compressing_packer>(std::move(packed), pathSpec);
+									break;
 								default: break;
 							}
 						}
@@ -148,7 +151,7 @@ static std::shared_ptr<xivres::stream> make_ogg_crispy(std::shared_ptr<xivres::s
 	newscd.set_table_5(scd.read_table_5());
 	newscd.set_sound_item(0, newentry);
 
-	return std::make_shared<xivres::memory_stream>(newscd.Export());
+	return std::make_shared<xivres::memory_stream>(newscd.export_to_bytes());
 }
 
 static void test_sqpack_generator(const xivres::installation& gameReader) {
@@ -331,44 +334,34 @@ void test_range_read(const xivres::installation& gameReader) {
 	waiter.wait_all();
 }
 
-std::string test_voiceman(const xivres::installation& installation, const xivres::path_spec& pathSpec) {
+xivres::path_spec test_voiceman(const xivres::installation& installation, const xivres::path_spec& pathSpec) {
 	if (pathSpec.category_id() != 0x03)
 		return {};
 
-	const auto scdName = pathSpec.text().substr(pathSpec.text().rfind('/') + 1);
+	const auto scdName = pathSpec.parts().back();
+	const auto scdNameLower = xivres::util::unicode::convert<std::string>(scdName, &xivres::util::unicode::lower);
 	if (!scdName.starts_with("vo_"))
 		return {};
 
-	auto parentDirName = pathSpec.text().substr(pathSpec.text().rfind('/', pathSpec.text().size() - scdName.size() - 2) + 1);
-	parentDirName = parentDirName.substr(0, parentDirName.find('/'));
-
-	if (!std::string_view(scdName).substr(3).starts_with(parentDirName) || scdName.at(3 + parentDirName.size()) != '_')
+	const auto parentDirNameLower = xivres::util::unicode::convert<std::string>(pathSpec.parts()[pathSpec.parts().size() - 2], &xivres::util::unicode::lower);
+	if (!std::string_view(scdNameLower).substr(3).starts_with(parentDirNameLower) || scdName.at(3 + parentDirNameLower.size()) != '_')
 		return {};
 
 	// vo_<dirname>_<key>_<gender>_<language>.scd
 	std::string sheetKeyPrefix;
 	std::string excelName;
 
-	if (parentDirName.starts_with("VOICEMAN_")) {
-		sheetKeyPrefix = std::format("TEXT_{}_{}_", parentDirName, scdName.substr(18, 6));
+	if (parentDirNameLower.starts_with("voiceman_")) {
+		sheetKeyPrefix = std::format("TEXT_{}_{}_", xivres::util::unicode::convert<std::string>(parentDirNameLower, &xivres::util::unicode::upper), scdName.substr(18, 6));
 		excelName = std::format("cut_scene/{}/voiceman_{}", scdName.substr(12, 3), scdName.substr(12, 5));
-		
+
 	} else {
-		auto parentDirNameLower = parentDirName;
-		for (auto& c : parentDirNameLower)
-			if (c < 128)
-				c = std::tolower(c);
-		
 		const auto exl = xivres::excel::exl::reader(installation);
 		for (const auto& name : exl.name_to_id_map() | std::views::keys) {
 			if (!name.starts_with("quest/"))
 				continue;
 
-			auto nameLower = name;
-			for (auto& c : nameLower)
-				if (c < 128)
-					c = std::tolower(c);
-
+			const auto nameLower = xivres::util::unicode::convert<std::string>(name, &xivres::util::unicode::lower);
 			if (!nameLower.contains(parentDirNameLower))
 				continue;
 
@@ -380,59 +373,57 @@ std::string test_voiceman(const xivres::installation& installation, const xivres
 			return {};
 	}
 
-	for (auto& c : sheetKeyPrefix)
-		c = std::toupper(c);
-	
+	sheetKeyPrefix = xivres::util::unicode::convert<std::string>(sheetKeyPrefix, &xivres::util::unicode::upper);
+
 	const auto dialogueSheet = installation.get_excel(excelName);
-	
-	for (auto i = 0; i < dialogueSheet.get_exh_reader().get_pages().size(); i++) {
+
+	for (size_t i = 0; i < dialogueSheet.get_exh_reader().get_pages().size(); i++) {
 		for (const auto& row : dialogueSheet.get_exd_reader(i)) {
 			const auto& key = row[0][0].String.escaped();
 			if (!key.starts_with(sheetKeyPrefix))
 				continue;
 
-			const auto characterName = key.substr(sheetKeyPrefix.size());
-			if (characterName != "TATARU" && characterName != "HYTHLODAEUS" && characterName != "FEOUL")
-				return {};
-
-			return pathSpec.text().substr(0, pathSpec.text().rfind('/') + 1) + scdName.substr(0, scdName.rfind('_')) + "_en.scd";
+			const auto characterName = xivres::util::unicode::convert<std::string>(key.substr(sheetKeyPrefix.size()), &xivres::util::unicode::lower);
+			return pathSpec.parent_path() / std::format("{}{}.scd", scdName.substr(0, scdName.rfind('_') + 1), "de");
 		}
 	}
-	
+
 	return {};
 }
 
 int main() {
 	const auto tend = GetTickCount64();
-	try {
-		SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
-		system("chcp 65001 > NUL");
+	SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
+	system("chcp 65001 > NUL");
 
-		xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 
-		std::cout << test_voiceman(gameReader, "cut/ffxiv/sound/MANFST/MANFST005/vo_MANFST005_200260_m_en.scd") << std::endl;
-		std::cout << test_voiceman(gameReader, "cut/ffxiv/sound/MANSEA/MANSEA005/vo_MANSEA005_000010_m_ja.scd") << std::endl;
-		std::cout << test_voiceman(gameReader, "cut/ex3/sound/voicem/voiceman_05000/vo_voiceman_05000_000010_m_ja.scd") << std::endl;
+	xivres::path_spec test;
+	test = "common";
+	test /= "font";
+	test /= "font1.tex";
+	test = test.parent_path();
+	test = test / "font2.tex";
+	std::cout << gameReader.get_file(test)->size() << std::endl;
+	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANFST/MANFST005/vo_MANFST005_200260_m_en.scd"))->size() << std::endl;
+	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANSEA/MANSEA005/vo_MANSEA005_000010_m_ja.scd"))->size() << std::endl;
+	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ex3/sound/voicem/voiceman_05000/vo_voiceman_05000_000010_m_ja.scd"))->size() << std::endl;
 
-		// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
+	// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
-		// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
-		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
-		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo400.tex")));
-		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo500.tex")));
-		// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
-		// preview(xivres::texture::stream(gameReader.get_file("common/font/font1.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo400.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo500.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo600.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("common/font/font1.tex")));
 
-		// test_range_read(gameReader);
-		// test_pack_unpack(gameReader, true);
-		// test_sqpack_generator(gameReader);
-		// test_ogg_decode_encode(gameReader);
-		// test_excel(gameReader);
+	// test_range_read(gameReader);
+	// test_pack_unpack(gameReader, true);
+	// test_sqpack_generator(gameReader);
+	// test_ogg_decode_encode(gameReader);
+	// test_excel(gameReader);
 
-		std::cout << "Success: took " << (GetTickCount64() - tend) << "ms" << std::endl;
-	} catch (const std::exception& e) {
-		std::cout << e.what() << std::endl;
-		throw;
-	}
+	std::cout << "Success: took " << (GetTickCount64() - tend) << "ms" << std::endl;
 	return 0;
 }
