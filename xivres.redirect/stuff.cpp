@@ -681,7 +681,7 @@ void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint3
 							break;
 					}
 				}
-				transformedPathSpec = pathSpec;
+				transformedPathSpec = transformed;
 			}
 
 			if (resourceType == 'scd') {

@@ -1,5 +1,6 @@
 {
 	"logReplacedPaths": false,
+	"logDialogueCharacterNames": true,
 	"logPathFilters": [
 		{
 			"pattern": ".*",
@@ -47,22 +48,28 @@
 			]
 		}
 	],
+	"ttmpRoots": [
+		"ttmp"
+	],
+	"rawFileRoots": [
+		"sqraw"
+	],
 	"pathReplacements": [
 		{
 			"from": "^sound/voice/(vo_battle|vo_cm|vo_emote)/.*$",
 			"to": "sound/empty256.scd"
 		},
 		{
-			"from": "^((?:cut|sound/voice/vo_line)/.*?[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"from": "^((?:sound/voice/vo_line)/.*?[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
 			"to": "$1ko"
 		},
 		{
-			"from": "^(sound/.*)",
-			"to": "$1"
-		},
-		{
-			"from": "^((?!cut|sound/voice/vo_line).*[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
+			"from": "^((?!sound/|cut/).*[_/.])(?:ja|en|fr|de|chs|ko)(?=[_/.])",
 			"to": "$1ko"
 		}
-	]
+	],
+	"forcedCharacterLanguages": {
+		"tataru": "en",
+		"": "ko"
+	}
 }
