@@ -1,4 +1,8 @@
 {
+	"ttmpChoicesFiles": [
+		"choices.alt.json",
+		"choices.json"
+	],
 	"logReplacedPaths": false,
 	"logDialogueCharacterNames": true,
 	"logPathFilters": [
