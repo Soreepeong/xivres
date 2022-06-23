@@ -94,7 +94,7 @@ bool xivres::fontgen::empty_fixed_size_font::draw(char32_t codepoint, uint8_t* p
 	return false;
 }
 
-bool xivres::fontgen::empty_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+bool xivres::fontgen::empty_fixed_size_font::draw(char32_t codepoint, util::b8g8r8a8* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const {
 	return false;
 }
 

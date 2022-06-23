@@ -31,40 +31,104 @@ namespace xivres::texture {
 		TextureNoSwizzle = 0x80000000,
 	};
 
-	inline attribute operator| (attribute l, attribute r) {
+	inline attribute operator|(attribute l, attribute r) {
 		return static_cast<attribute>(static_cast<uint32_t>(l) | static_cast<uint32_t>(r));
 	}
 
-	inline attribute operator& (attribute l, attribute r) {
+	inline attribute operator&(attribute l, attribute r) {
 		return static_cast<attribute>(static_cast<uint32_t>(l) & static_cast<uint32_t>(r));
 	}
 
 	inline bool operator!(attribute lss) {
 		return static_cast<uint32_t>(lss) == 0;
 	}
-	
-	enum class format : uint32_t {
-		Unknown = 0,
-		L8 = 4400,
-		A8 = 4401,
-		A4R4G4B4 = 5184,
-		A1R5G5B5 = 5185,
-		A8R8G8B8 = 5200,
-		X8R8G8B8 = 5201,
-		R32F = 8528,
-		G16R16F = 8784,
-		G32R32F = 8800,
-		A16B16G16R16F = 9312,
-		A32B32G32R32F = 9328,
-		DXT1 = 13344,
-		DXT3 = 13360,
-		DXT5 = 13361,
-		D16 = 16704,
+
+	union format_type {
+		enum class types : uint32_t {
+			Integer = 1,
+			Float = 2,
+			Dxt = 3,
+			Bc123 = 3,
+			DepthStencil = 4,
+			Special = 5,
+			Bc57 = 6,
+		};
+		
+		uint32_t Value;
+
+		struct {
+			uint32_t Enum : 4;
+			uint32_t Bpp : 4;
+			uint32_t Component : 4;
+			types Type : 4;
+		};
+
+		constexpr format_type(): Value(0) {}
+		constexpr format_type(format_type&&) noexcept = default;
+		constexpr format_type(const format_type&) noexcept = default;
+		constexpr format_type& operator=(format_type&&) noexcept = default;
+		constexpr format_type& operator=(const format_type&) noexcept = default;
+		constexpr format_type(uint32_t v): Value(v) {}
+		constexpr ~format_type() = default;
+
+		constexpr operator uint32_t() const {
+			return Value;
+		}
+
+		constexpr format_type& operator=(uint32_t v) {
+			Value = v;
+			return *this;
+		}
+
+		std::strong_ordering operator<=>(const format_type& r) const {
+			return Value <=> r.Value;
+		}
 	};
+
+	namespace formats {
+		static constexpr format_type Unknown = 0;
+
+		// Integer types
+		static constexpr format_type L8 = 0x1130;
+		static constexpr format_type A8 = 0x1131;
+		static constexpr format_type B4G4R4A4 = 0x1440;
+		static constexpr format_type B5G5R5A1 = 0x1441;
+		static constexpr format_type B8G8R8A8 = 0x1450;
+		static constexpr format_type B8G8R8X8 = 0x1451;
+
+		// Floating point types
+		static constexpr format_type R32F = 0x2150;
+		static constexpr format_type R16G16F = 0x2250;
+		static constexpr format_type R32G32F = 0x2260;
+		static constexpr format_type R16G16B16A16F = 0x2460;
+		static constexpr format_type R32G32B32A32F = 0x2470;
+
+		// Block compression types (DX9 names)
+		static constexpr format_type DXT1 = 0x3420;
+		static constexpr format_type DXT3 = 0x3430;
+		static constexpr format_type DXT5 = 0x3431;
+		static constexpr format_type ATI2 = 0x6230;
+
+		// Block compression types (DX11 names)
+		static constexpr format_type BC1 = 0x3420;
+		static constexpr format_type BC2 = 0x3430;
+		static constexpr format_type BC3 = 0x3431;
+		static constexpr format_type BC5 = 0x6230;
+		static constexpr format_type BC7 = 0x6432;
+
+		// Depth stencil types
+		static constexpr format_type D16 = 0x4140;
+		static constexpr format_type D24S8 = 0x4250;
+
+		// Special types
+		static constexpr format_type Null = 0x5100;
+		static constexpr format_type Shadow16 = 0x5140;
+		static constexpr format_type Shadow24 = 0x5150;
+	}
 
 	struct header {
 		LE<attribute> Attribute;
-		LE<format> Type;
+		LE<format_type> Type;
 		LE<uint16_t> Width;
 		LE<uint16_t> Height;
 		LE<uint16_t> Depth;
@@ -80,7 +144,7 @@ namespace xivres::texture {
 		}
 	};
 
-	[[nodiscard]] size_t calc_raw_data_length(format type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);
+	[[nodiscard]] size_t calc_raw_data_length(format_type type, size_t width, size_t height, size_t depth, size_t mipmapIndex = 0);
 
 	[[nodiscard]] size_t calc_raw_data_length(const header& header, size_t mipmapIndex = 0);
 }

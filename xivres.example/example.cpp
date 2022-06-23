@@ -398,20 +398,34 @@ int main() {
 
 	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 
-	xivres::path_spec test;
-	test = "common";
-	test /= "font";
-	test /= "font1.tex";
-	test = test.parent_path();
-	test = test / "font2.tex";
-	std::cout << gameReader.get_file(test)->size() << std::endl;
-	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANFST/MANFST005/vo_MANFST005_200260_m_en.scd"))->size() << std::endl;
-	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANSEA/MANSEA005/vo_MANSEA005_000010_m_ja.scd"))->size() << std::endl;
-	std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ex3/sound/voicem/voiceman_05000/vo_voiceman_05000_000010_m_ja.scd"))->size() << std::endl;
+	// xivres::sound::reader seui(gameReader.get_file("sound/system/SE_UI.scd"));
+	// auto tbl1 = seui.read_table_1();
+	// auto tbl2 = seui.read_table_2();
+	// auto tbl4 = seui.read_table_4();
+	// auto tbl5 = seui.read_table_5();
+	// for (size_t i = 0; i < seui.sound_item_count(); i++) {
+	// 	auto si = seui.read_sound_item(i);
+	// 	if (*si.Header->Format == xivres::sound::sound_entry_format::Empty)
+	// 		continue;
+	// 	
+	// 	__debugbreak();
+	// 	__debugbreak();
+	// }
+	//
+	// xivres::path_spec test;
+	// test = "common";
+	// test /= "font";
+	// test /= "font1.tex";
+	// test = test.parent_path();
+	// test = test / "font2.tex";
+	// std::cout << gameReader.get_file(test)->size() << std::endl;
+	// std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANFST/MANFST005/vo_MANFST005_200260_m_en.scd"))->size() << std::endl;
+	// std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ffxiv/sound/MANSEA/MANSEA005/vo_MANSEA005_000010_m_ja.scd"))->size() << std::endl;
+	// std::cout << gameReader.get_file(test_voiceman(gameReader, "cut/ex3/sound/voicem/voiceman_05000/vo_voiceman_05000_000010_m_ja.scd"))->size() << std::endl;
 
 	// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
-	// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
+	preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo400.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo500.tex")));

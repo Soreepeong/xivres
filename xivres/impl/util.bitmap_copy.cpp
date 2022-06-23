@@ -7,7 +7,7 @@ std::vector<uint8_t> xivres::util::bitmap_copy::create_gamma_table(float gamma) 
 	return res;
 }
 
-void xivres::util::bitmap_copy::to_rgba8888::draw_line_to_rgb_opaque(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
+void xivres::util::bitmap_copy::to_b8g8r8a8::draw_line_to_rgb_opaque(b8g8r8a8* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
 	while (nPixelCount--) {
 		const auto opacityScaled = m_gammaTable[*pSource];
 		pTarget->R = (m_colorBackground.R * (255 - opacityScaled) + m_colorForeground.R * opacityScaled) / 255;
@@ -19,28 +19,28 @@ void xivres::util::bitmap_copy::to_rgba8888::draw_line_to_rgb_opaque(RGBA8888* p
 	}
 }
 
-void xivres::util::bitmap_copy::to_rgba8888::draw_line_to_rgb(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
+void xivres::util::bitmap_copy::to_b8g8r8a8::draw_line_to_rgb(b8g8r8a8* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
 	while (nPixelCount--) {
 		const auto opacityScaled = m_gammaTable[*pSource];
-		const auto blendedBgColor = RGBA8888{
+		const auto blendedBgColor = b8g8r8a8{
 			(m_colorBackground.R * m_colorBackground.A + pTarget->R * (255 - m_colorBackground.A)) / 255,
 			(m_colorBackground.G * m_colorBackground.A + pTarget->G * (255 - m_colorBackground.A)) / 255,
 			(m_colorBackground.B * m_colorBackground.A + pTarget->B * (255 - m_colorBackground.A)) / 255,
 			255 - ((255 - m_colorBackground.A) * (255 - pTarget->A)) / 255,
 		};
-		const auto blendedFgColor = RGBA8888{
+		const auto blendedFgColor = b8g8r8a8{
 			(m_colorForeground.R * m_colorForeground.A + pTarget->R * (255 - m_colorForeground.A)) / 255,
 			(m_colorForeground.G * m_colorForeground.A + pTarget->G * (255 - m_colorForeground.A)) / 255,
 			(m_colorForeground.B * m_colorForeground.A + pTarget->B * (255 - m_colorForeground.A)) / 255,
 			255 - ((255 - m_colorForeground.A) * (255 - pTarget->A)) / 255,
 		};
-		const auto currentColor = RGBA8888{
+		const auto currentColor = b8g8r8a8{
 			(blendedBgColor.R * (255 - opacityScaled) + blendedFgColor.R * opacityScaled) / 255,
 			(blendedBgColor.G * (255 - opacityScaled) + blendedFgColor.G * opacityScaled) / 255,
 			(blendedBgColor.B * (255 - opacityScaled) + blendedFgColor.B * opacityScaled) / 255,
 			(blendedBgColor.A * (255 - opacityScaled) + blendedFgColor.A * opacityScaled) / 255,
 		};
-		const auto blendedDestColor = RGBA8888{
+		const auto blendedDestColor = b8g8r8a8{
 			(pTarget->R * pTarget->A + currentColor.R * (255 - pTarget->A)) / 255,
 			(pTarget->G * pTarget->A + currentColor.G * (255 - pTarget->A)) / 255,
 			(pTarget->B * pTarget->A + currentColor.B * (255 - pTarget->A)) / 255,
@@ -55,7 +55,7 @@ void xivres::util::bitmap_copy::to_rgba8888::draw_line_to_rgb(RGBA8888* pTarget,
 	}
 }
 
-void xivres::util::bitmap_copy::to_rgba8888::copy(int srcX1, int srcY1, int srcX2, int srcY2, int targetX1, int targetY1) {
+void xivres::util::bitmap_copy::to_b8g8r8a8::copy(int srcX1, int srcY1, int srcX2, int srcY2, int targetX1, int targetY1) {
 	auto destPtrBegin = &m_pTarget[(m_nTargetVerticalDirection == bitmap_vertical_direction::TopRowFirst ? targetY1 : m_nTargetHeight - targetY1 - 1) * m_nTargetWidth + targetX1];
 	const auto destPtrDelta = m_nTargetWidth * static_cast<int>(m_nTargetVerticalDirection);
 
@@ -98,22 +98,22 @@ void xivres::util::bitmap_copy::to_rgba8888::copy(int srcX1, int srcY1, int srcX
 	}
 }
 
-xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::back_color(RGBA8888 color) {
+xivres::util::bitmap_copy::to_b8g8r8a8& xivres::util::bitmap_copy::to_b8g8r8a8::back_color(b8g8r8a8 color) {
 	m_colorBackground = color;
 	return *this;
 }
 
-xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::fore_color(RGBA8888 color) {
+xivres::util::bitmap_copy::to_b8g8r8a8& xivres::util::bitmap_copy::to_b8g8r8a8::fore_color(b8g8r8a8 color) {
 	m_colorForeground = color;
 	return *this;
 }
 
-xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::gamma_table(std::span<const uint8_t> gammaTable) {
+xivres::util::bitmap_copy::to_b8g8r8a8& xivres::util::bitmap_copy::to_b8g8r8a8::gamma_table(std::span<const uint8_t> gammaTable) {
 	m_gammaTable = gammaTable;
 	return *this;
 }
 
-xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::to(RGBA8888* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection) {
+xivres::util::bitmap_copy::to_b8g8r8a8& xivres::util::bitmap_copy::to_b8g8r8a8::to(b8g8r8a8* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection) {
 	m_pTarget = pBuf;
 	m_nTargetWidth = width;
 	m_nTargetHeight = height;
@@ -121,7 +121,7 @@ xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::
 	return *this;
 }
 
-xivres::util::bitmap_copy::to_rgba8888& xivres::util::bitmap_copy::to_rgba8888::from(const void* pBuf, size_t width, size_t height, size_t stride, bitmap_vertical_direction verticalDirection) {
+xivres::util::bitmap_copy::to_b8g8r8a8& xivres::util::bitmap_copy::to_b8g8r8a8::from(const void* pBuf, size_t width, size_t height, size_t stride, bitmap_vertical_direction verticalDirection) {
 	m_pSource = static_cast<const uint8_t*>(pBuf);
 	m_nSourceWidth = width;
 	m_nSourceHeight = height;

@@ -43,7 +43,7 @@ bool xivres::fontgen::fontdata_fixed_size_font::draw(char32_t codepoint, uint8_t
 	return true;
 }
 
-bool xivres::fontgen::fontdata_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+bool xivres::fontgen::fontdata_fixed_size_font::draw(char32_t codepoint, util::b8g8r8a8* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const {
 	const auto pEntry = m_info->Font->get_glyph(codepoint);
 	if (!pEntry)
 		return false;
@@ -53,7 +53,7 @@ bool xivres::fontgen::fontdata_fixed_size_font::draw(char32_t codepoint, util::R
 	const auto& mipmapStream = *m_info->Mipmaps.at(pEntry->texture_file_index());
 	const auto planeIndex = fontdata::glyph_entry::ChannelMap[pEntry->texture_plane_index()];
 	src.adjust_to_intersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
-	util::bitmap_copy::to_rgba8888()
+	util::bitmap_copy::to_b8g8r8a8()
 		.from(&mipmapStream.as_span<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
 		.to(pBuf, destWidth, destHeight, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)
@@ -110,7 +110,7 @@ std::string xivres::fontgen::fontdata_fixed_size_font::family_name() const {
 
 xivres::fontgen::fontdata_fixed_size_font::fontdata_fixed_size_font(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<texture::memory_mipmap_stream>> mipmapStreams, std::string familyName, std::string subfamilyName) {
 	for (const auto& mipmapStream : mipmapStreams) {
-		if (mipmapStream->Type != texture::format::A8R8G8B8)
+		if (mipmapStream->Type != texture::formats::B8G8R8A8)
 			throw std::invalid_argument("All mipmap streams must be in A8R8G8B8 format.");
 	}
 

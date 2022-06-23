@@ -110,7 +110,7 @@ bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, uint8_t
 	return true;
 }
 
-bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, util::b8g8r8a8* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const {
 	const auto glyphIndex = m_face.get_char_index(codepoint);
 	if (!glyphIndex)
 		return false;
@@ -127,7 +127,7 @@ bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, util::R
 	freetype_bitmap_wrapper bitmapWrapper(m_face.library());
 	bitmapWrapper.convert_from(bitmapGlyph->bitmap, 1);
 
-	util::bitmap_copy::to_rgba8888()
+	util::bitmap_copy::to_b8g8r8a8()
 		.from(bitmapWrapper->buffer, bitmapWrapper->pitch, bitmapWrapper->rows, 1, util::bitmap_vertical_direction::TopRowFirst)
 		.to(pBuf, destWidth, destHeight, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)

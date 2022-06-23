@@ -15,7 +15,7 @@ namespace xivres::texture {
 	public:
 		stream(const std::shared_ptr<xivres::stream>& strm);
 
-		stream(format type, size_t width, size_t height, size_t depth = 1, size_t mipmapCount = 1, size_t repeatCount = 1);
+		stream(format_type type, size_t width, size_t height, size_t depth = 1, size_t mipmapCount = 1, size_t repeatCount = 1);
 
 		void set_mipmap(size_t mipmapIndex, size_t repeatIndex, std::shared_ptr<mipmap_stream> mipmap);
 
@@ -25,7 +25,7 @@ namespace xivres::texture {
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 
-		[[nodiscard]] format type() const {
+		[[nodiscard]] format_type type() const {
 			return m_header.Type;
 		}
 

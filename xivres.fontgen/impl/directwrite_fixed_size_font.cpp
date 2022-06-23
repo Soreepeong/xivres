@@ -366,7 +366,7 @@ xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed
 
 xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed_size_font::operator=(directwrite_fixed_size_font&&) noexcept = default;
 
-bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util::RGBA8888* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const {
+bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util::b8g8r8a8* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	glyph_metrics gm;
 	if (!try_get_glyph_metrics(codepoint, gm, analysis))
@@ -383,7 +383,7 @@ bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util
 	m_drawBuffer.resize(gm.area());
 	success_or_throw(analysis->CreateAlphaTexture(DWRITE_TEXTURE_ALIASED_1x1, gm.as_const_rect_pointer(), &m_drawBuffer[0], static_cast<uint32_t>(m_drawBuffer.size())));
 
-	util::bitmap_copy::to_rgba8888()
+	util::bitmap_copy::to_b8g8r8a8()
 		.from(&m_drawBuffer[0], gm.width(), gm.height(), 1, util::bitmap_vertical_direction::TopRowFirst)
 		.to(pBuf, destWidth, destHeight, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)

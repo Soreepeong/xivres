@@ -59,11 +59,11 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 				transparent = buf;
 				const auto w = static_cast<size_t>(strm->Width);
 				const auto h = static_cast<size_t>(strm->Height);
-				const auto view = std::span(reinterpret_cast<util::RGBA8888*>(&transparent[0]), w * h);
+				const auto view = std::span(reinterpret_cast<util::b8g8r8a8*>(&transparent[0]), w * h);
 				for (size_t i = 0; i < h; ++i) {
 					for (size_t j = 0; j < w; ++j) {
 						auto& v = view[i * w + j];
-						auto bg = (i / 8 + j / 8) % 2 ? util::RGBA8888(255, 255, 255, 255) : util::RGBA8888(150, 150, 150, 255);
+						auto bg = (i / 8 + j / 8) % 2 ? util::b8g8r8a8(255, 255, 255, 255) : util::b8g8r8a8(150, 150, 150, 255);
 						v.R = (v.R * v.A + bg.R * (255U - v.A)) / 255U;
 						v.G = (v.G * v.A + bg.G * (255U - v.A)) / 255U;
 						v.B = (v.B * v.A + bg.B * (255U - v.A)) / 255U;
@@ -98,25 +98,25 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 			switch (showmode) {
 				case 0:
 				case 1:
-					reinterpret_cast<util::RGBA8888*>(&bitfields[0])->SetFrom(255, 0, 0, 0);
-					reinterpret_cast<util::RGBA8888*>(&bitfields[1])->SetFrom(0, 255, 0, 0);
-					reinterpret_cast<util::RGBA8888*>(&bitfields[2])->SetFrom(0, 0, 255, 0);
+					reinterpret_cast<util::b8g8r8a8*>(&bitfields[0])->set_components(255, 0, 0, 0);
+					reinterpret_cast<util::b8g8r8a8*>(&bitfields[1])->set_components(0, 255, 0, 0);
+					reinterpret_cast<util::b8g8r8a8*>(&bitfields[2])->set_components(0, 0, 255, 0);
 					break;
 				case 2:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<util::RGBA8888*>(&bitfield)->SetFrom(255, 0, 0, 0);
+						reinterpret_cast<util::b8g8r8a8*>(&bitfield)->set_components(255, 0, 0, 0);
 					break;
 				case 3:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<util::RGBA8888*>(&bitfield)->SetFrom(0, 255, 0, 0);
+						reinterpret_cast<util::b8g8r8a8*>(&bitfield)->set_components(0, 255, 0, 0);
 					break;
 				case 4:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<util::RGBA8888*>(&bitfield)->SetFrom(0, 0, 255, 0);
+						reinterpret_cast<util::b8g8r8a8*>(&bitfield)->set_components(0, 0, 255, 0);
 					break;
 				case 5:
 					for (auto& bitfield : bitfields)
-						reinterpret_cast<util::RGBA8888*>(&bitfield)->SetFrom(0, 0, 0, 255);
+						reinterpret_cast<util::b8g8r8a8*>(&bitfield)->set_components(0, 0, 0, 255);
 					break;
 			}
 			StretchDIBits(hdc, renderOffset.x, renderOffset.y, dw, dh, 0, 0, strm->Width, strm->Height, showmode == 0 ? &transparent[0] : &buf[0], &bmi, DIB_RGB_COLORS, SRCCOPY);

@@ -17,9 +17,9 @@ namespace xivres::fontgen {
 		glyph_metrics Occupied;
 		std::vector<character_info> Characters;
 
-		void draw_to(texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::RGBA8888 fgColor, util::RGBA8888 bgColor) const;
+		void draw_to(texture::memory_mipmap_stream& mipmapStream, const fixed_size_font& fontFace, int x, int y, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const;
 
-		[[nodiscard]] std::shared_ptr<texture::memory_mipmap_stream> create_mipmap(const fixed_size_font& fontFace, util::RGBA8888 fgColor, util::RGBA8888 bgColor, int pad = 0) const;
+		[[nodiscard]] std::shared_ptr<texture::memory_mipmap_stream> create_mipmap(const fixed_size_font& fontFace, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor, int pad = 0) const;
 	};
 
 	struct text_measurer {

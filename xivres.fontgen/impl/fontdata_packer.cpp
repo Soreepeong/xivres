@@ -237,7 +237,7 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::
 	const auto channelIndex = fontdata::glyph_entry::ChannelMap[planeIndex % 4];
 
 	while (m_targetMipmapStreams.size() <= mipmapIndex)
-		m_targetMipmapStreams.emplace_back(std::make_shared<texture::memory_mipmap_stream>(m_nSideLength, m_nSideLength, 1, texture::format::A8R8G8B8));
+		m_targetMipmapStreams.emplace_back(std::make_shared<texture::memory_mipmap_stream>(m_nSideLength, m_nSideLength, 1, texture::formats::B8G8R8A8));
 	const auto& pStream = m_targetMipmapStreams[mipmapIndex];
 	const auto pCurrentTargetBuffer = &pStream->as_span<uint8_t>()[channelIndex];
 

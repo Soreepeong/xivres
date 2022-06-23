@@ -17,7 +17,7 @@ xivres::texture::stream::stream(const std::shared_ptr<xivres::stream>& strm)
 	}
 }
 
-xivres::texture::stream::stream(format type, size_t width, size_t height, size_t depth, size_t mipmapCount, size_t repeatCount)
+xivres::texture::stream::stream(format_type type, size_t width, size_t height, size_t depth, size_t mipmapCount, size_t repeatCount)
 	: m_header({
 		.Attribute = attribute::TextureType2D,
 		.Type = type,
@@ -43,7 +43,7 @@ void xivres::texture::stream::set_mipmap(size_t mipmapIndex, size_t repeatIndex,
 		throw std::invalid_argument("invalid mipmap height");
 	if (mipmap->Depth != l)
 		throw std::invalid_argument("invalid mipmap depths");
-	if (mipmap->Type != m_header.Type)
+	if (mipmap->Type != *m_header.Type)
 		throw std::invalid_argument("invalid mipmap type");
 	if (mipmap->size() != calc_raw_data_length(mipmap->Type, w, h, l))
 		throw std::invalid_argument("invalid mipmap size");

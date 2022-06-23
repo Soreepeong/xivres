@@ -12,10 +12,10 @@ namespace xivres::texture {
 		const uint16_t Width;
 		const uint16_t Height;
 		const uint16_t Depth;
-		const format Type;
+		const format_type Type;
 		const std::streamsize SupposedMipmapLength;
 
-		mipmap_stream(size_t width, size_t height, size_t depths, format type);
+		mipmap_stream(size_t width, size_t height, size_t depths, format_type type);
 
 		[[nodiscard]] std::streamsize size() const override;
 
@@ -28,7 +28,7 @@ namespace xivres::texture {
 	public:
 		wrapped_mipmap_stream(header header, size_t mipmapIndex, std::shared_ptr<const stream> underlying);
 
-		wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::shared_ptr<const stream> underlying);
+		wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format_type type, std::shared_ptr<const stream> underlying);
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 	};
@@ -37,9 +37,9 @@ namespace xivres::texture {
 		std::vector<uint8_t> m_data;
 
 	public:
-		memory_mipmap_stream(size_t width, size_t height, size_t depths, format type);
+		memory_mipmap_stream(size_t width, size_t height, size_t depths, format_type type);
 
-		memory_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::vector<uint8_t> data);
+		memory_mipmap_stream(size_t width, size_t height, size_t depths, format_type type, std::vector<uint8_t> data);
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 

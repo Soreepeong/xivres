@@ -2,41 +2,43 @@
 
 #include <stdexcept>
 
-size_t xivres::texture::calc_raw_data_length(format type, size_t width, size_t height, size_t depth, size_t mipmapIndex /*= 0*/) {
+size_t xivres::texture::calc_raw_data_length(format_type type, size_t width, size_t height, size_t depth, size_t mipmapIndex /*= 0*/) {
 	width = (std::max<size_t>)(1, width >> mipmapIndex);
 	height = (std::max<size_t>)(1, height >> mipmapIndex);
 	depth = (std::max<size_t>)(1, depth >> mipmapIndex);
 	switch (type) {
-		case format::L8:
-		case format::A8:
+		case formats::L8:
+		case formats::A8:
 			return width * height * depth;
 
-		case format::A4R4G4B4:
-		case format::A1R5G5B5:
+		case formats::B4G4R4A4:
+		case formats::B5G5R5A1:
 			return width * height * depth * 2;
 
-		case format::A8R8G8B8:
-		case format::X8R8G8B8:
-		case format::R32F:
-		case format::G16R16F:
+		case formats::B8G8R8A8:
+		case formats::B8G8R8X8:
+		case formats::R32F:
+		case formats::R16G16F:
 			return width * height * depth * 4;
 
-		case format::A16B16G16R16F:
-		case format::G32R32F:
+		case formats::R16G16B16A16F:
+		case formats::R32G32F:
 			return width * height * depth * 8;
 
-		case format::A32B32G32R32F:
+		case formats::R32G32B32A32F:
 			return width * height * depth * 16;
 
-		case format::DXT1:
+		case formats::BC1:
 			return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 8;
 
-		case format::DXT3:
-		case format::DXT5:
+		case formats::BC2:
+		case formats::BC3:
+		case formats::BC5:
+		case formats::BC7:
 			return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 16;
 
-		case format::D16:
-		case format::Unknown:
+		case formats::D16:
+		case formats::Unknown:
 		default:
 			throw std::invalid_argument("Unsupported type");
 	}

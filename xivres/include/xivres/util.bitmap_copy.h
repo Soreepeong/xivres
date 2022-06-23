@@ -17,11 +17,11 @@ namespace xivres::util {
 	namespace bitmap_copy {
 		std::vector<uint8_t> create_gamma_table(float gamma);
 
-		class to_rgba8888 {
+		class to_b8g8r8a8 {
 			std::span<const uint8_t> m_gammaTable;
 
-			RGBA8888 m_colorForeground = RGBA8888(0, 0, 0, 255);
-			RGBA8888 m_colorBackground = RGBA8888(0, 0, 0, 0);
+			b8g8r8a8 m_colorForeground = b8g8r8a8(0, 0, 0, 255);
+			b8g8r8a8 m_colorBackground = b8g8r8a8(0, 0, 0, 0);
 
 			const uint8_t* m_pSource = nullptr;
 			size_t m_nSourceWidth = 0;
@@ -29,37 +29,37 @@ namespace xivres::util {
 			size_t m_nSourceStride = 0;
 			bitmap_vertical_direction m_nSourceVerticalDirection = bitmap_vertical_direction::Undefined;
 
-			RGBA8888* m_pTarget = nullptr;
+			b8g8r8a8* m_pTarget = nullptr;
 			size_t m_nTargetWidth = 0;
 			size_t m_nTargetHeight = 0;
 			bitmap_vertical_direction m_nTargetVerticalDirection = bitmap_vertical_direction::Undefined;
 
 		public:
-			to_rgba8888& from(const void* pBuf, size_t width, size_t height, size_t stride, bitmap_vertical_direction verticalDirection);
+			to_b8g8r8a8& from(const void* pBuf, size_t width, size_t height, size_t stride, bitmap_vertical_direction verticalDirection);
 
-			to_rgba8888& to(RGBA8888* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection);
+			to_b8g8r8a8& to(b8g8r8a8* pBuf, size_t width, size_t height, bitmap_vertical_direction verticalDirection);
 
-			to_rgba8888& gamma_table(std::span<const uint8_t> gammaTable);
+			to_b8g8r8a8& gamma_table(std::span<const uint8_t> gammaTable);
 
-			to_rgba8888& fore_color(RGBA8888 color);
+			to_b8g8r8a8& fore_color(b8g8r8a8 color);
 
-			to_rgba8888& back_color(RGBA8888 color);
+			to_b8g8r8a8& back_color(b8g8r8a8 color);
 
 			void copy(int srcX1, int srcY1, int srcX2, int srcY2, int targetX1, int targetY1);
 
 		private:
-			void draw_line_to_rgb(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
+			void draw_line_to_rgb(b8g8r8a8* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
 
-			void draw_line_to_rgb_opaque(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
+			void draw_line_to_rgb_opaque(b8g8r8a8* pTarget, const uint8_t* pSource, size_t nPixelCount) const;
 
 			template<bool ColorIsForeground>
-			void draw_line_to_rgb_binary_opacity(RGBA8888* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
+			void draw_line_to_rgb_binary_opacity(b8g8r8a8* pTarget, const uint8_t* pSource, size_t nPixelCount) const {
 				const auto color = ColorIsForeground ? m_colorForeground : m_colorBackground;
 				while (nPixelCount--) {
 					const auto opacityScaled = m_gammaTable[*pSource];
 					const auto opacity = 255 * (ColorIsForeground ? opacityScaled : 255 - opacityScaled) / 255;
 					if (opacity) {
-						const auto blendedDestColor = RGBA8888{
+						const auto blendedDestColor = b8g8r8a8{
 							(pTarget->R * pTarget->A + color.R * (255 - pTarget->A)) / 255,
 							(pTarget->G * pTarget->A + color.G * (255 - pTarget->A)) / 255,
 							(pTarget->B * pTarget->A + color.B * (255 - pTarget->A)) / 255,

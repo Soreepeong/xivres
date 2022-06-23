@@ -2,7 +2,7 @@
 #include "../include/xivres/texture.stream.h"
 #include "../include/xivres/util.dxt.h"
 
-xivres::texture::mipmap_stream::mipmap_stream(size_t width, size_t height, size_t depths, format type)
+xivres::texture::mipmap_stream::mipmap_stream(size_t width, size_t height, size_t depths, format_type type)
 	: Width(static_cast<uint16_t>(width))
 	, Height(static_cast<uint16_t>(height))
 	, Depth(static_cast<uint16_t>(depths))
@@ -30,7 +30,7 @@ xivres::texture::wrapped_mipmap_stream::wrapped_mipmap_stream(header header, siz
 		header.Type)
 	, m_underlying(std::move(underlying)) {}
 
-xivres::texture::wrapped_mipmap_stream::wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::shared_ptr<const stream> underlying)
+xivres::texture::wrapped_mipmap_stream::wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format_type type, std::shared_ptr<const stream> underlying)
 	: mipmap_stream(width, height, depths, type)
 	, m_underlying(std::move(underlying)) {}
 
@@ -43,13 +43,13 @@ std::streamsize xivres::texture::wrapped_mipmap_stream::read(std::streamoff offs
 	return length;
 }
 
-xivres::texture::memory_mipmap_stream::memory_mipmap_stream(size_t width, size_t height, size_t depths, format type)
+xivres::texture::memory_mipmap_stream::memory_mipmap_stream(size_t width, size_t height, size_t depths, format_type type)
 	: mipmap_stream(width, height, depths, type)
 	, m_data(SupposedMipmapLength) {
 
 }
 
-xivres::texture::memory_mipmap_stream::memory_mipmap_stream(size_t width, size_t height, size_t depths, format type, std::vector<uint8_t> data)
+xivres::texture::memory_mipmap_stream::memory_mipmap_stream(size_t width, size_t height, size_t depths, format_type type, std::vector<uint8_t> data)
 	: mipmap_stream(width, height, depths, type)
 	, m_data(std::move(data)) {
 	m_data.resize(SupposedMipmapLength);
@@ -62,15 +62,15 @@ std::streamsize xivres::texture::memory_mipmap_stream::read(std::streamoff offse
 }
 
 std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_mipmap_stream::as_argb8888(const mipmap_stream& strm) {
-	const auto pixelCount = calc_raw_data_length(format::L8, strm.Width, strm.Height, strm.Depth);
+	const auto pixelCount = calc_raw_data_length(formats::L8, strm.Width, strm.Height, strm.Depth);
 	const auto cbSource = (std::min)(static_cast<size_t>(strm.size()), calc_raw_data_length(strm.Type, strm.Width, strm.Height, strm.Depth));
 
-	std::vector<uint8_t> result(pixelCount * sizeof util::RGBA8888);
-	const auto rgba8888view = util::span_cast<LE<util::RGBA8888>>(result);
+	std::vector<uint8_t> result(pixelCount * sizeof util::b8g8r8a8);
+	const auto b8g8r8a8view = util::span_cast<util::b8g8r8a8>(result);
 	uint32_t pos = 0, read = 0;
 	uint8_t buf8[8192];
 	switch (strm.Type) {
-		case format::L8:
+		case formats::L8:
 		{
 			if (cbSource < pixelCount)
 				throw std::runtime_error("Truncated data detected");
@@ -78,12 +78,12 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 				strm.read_fully(read, buf8, len);
 				read += len;
 				for (size_t i = 0; i < len; ++pos, ++i)
-					rgba8888view[pos] = util::RGBA8888(buf8[i], buf8[i], buf8[i], 255);
+					b8g8r8a8view[pos] = util::b8g8r8a8(buf8[i], buf8[i], buf8[i], 255);
 			}
 			break;
 		}
 
-		case format::A8:
+		case formats::A8:
 		{
 			if (cbSource < pixelCount)
 				throw std::runtime_error("Truncated data detected");
@@ -91,97 +91,85 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 				strm.read_fully(read, buf8, len);
 				read += len;
 				for (size_t i = 0; i < len; ++pos, ++i)
-					rgba8888view[pos] = util::RGBA8888(255, 255, 255, buf8[i]);
+					b8g8r8a8view[pos] = util::b8g8r8a8(255, 255, 255, buf8[i]);
 			}
 			break;
 		}
 
-		case format::A4R4G4B4:
+		case formats::B4G4R4A4:
 		{
-			if (cbSource < pixelCount * sizeof util::RGBA4444)
+			if (cbSource < pixelCount * sizeof util::b4g4r4a4)
 				throw std::runtime_error("Truncated data detected");
-			const auto view = util::span_cast<LE<util::RGBA4444>>(buf8);
+			const auto view = util::span_cast<util::b4g4r4a4>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
 				read += len;
-				for (size_t i = 0, count = len / sizeof util::RGBA4444; i < count; ++pos, ++i)
-					rgba8888view[pos] = util::RGBA8888((*view[i]).R * 17, (*view[i]).G * 17, (*view[i]).B * 17, (*view[i]).A * 17);
+				for (size_t i = 0, count = len / sizeof util::b4g4r4a4; i < count; ++pos, ++i)
+					b8g8r8a8view[pos].set_components_from(view[i]);
 			}
 			break;
 		}
 
-		case format::A1R5G5B5:
+		case formats::B5G5R5A1:
 		{
-			if (cbSource < pixelCount * sizeof util::RGBA5551)
+			if (cbSource < pixelCount * sizeof util::b5g5r5a1)
 				throw std::runtime_error("Truncated data detected");
-			const auto view = util::span_cast<LE<util::RGBA5551>>(buf8);
+			const auto view = util::span_cast<util::b5g5r5a1>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
 				read += len;
-				for (size_t i = 0, count = len / sizeof util::RGBA5551; i < count; ++pos, ++i)
-					rgba8888view[pos] = util::RGBA8888((*view[i]).R * 255 / 31, (*view[i]).G * 255 / 31, (*view[i]).B * 255 / 31, (*view[i]).A * 255);
+				for (size_t i = 0, count = len / sizeof util::b5g5r5a1; i < count; ++pos, ++i)
+					b8g8r8a8view[pos].set_components_from(view[i]);
 			}
 			break;
 		}
 
-		case format::A8R8G8B8:
-			if (cbSource < pixelCount * sizeof util::RGBA8888)
+		case formats::B8G8R8A8:
+			if (cbSource < pixelCount * sizeof util::b8g8r8a8)
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(rgba8888view));
+			strm.read_fully(0, std::span(b8g8r8a8view));
 			break;
 
-		case format::X8R8G8B8:
-			if (cbSource < pixelCount * sizeof util::RGBA8888)
+		case formats::B8G8R8X8:
+			if (cbSource < pixelCount * sizeof util::b8g8r8a8)
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(rgba8888view));
-			for (auto& item : rgba8888view) {
-				const auto native = *item;
-				item = util::RGBA8888(native.R, native.G, native.B, 0xFF);
+			strm.read_fully(0, std::span(b8g8r8a8view));
+			for (auto& item : b8g8r8a8view) {
+				item = util::b8g8r8a8(item.R, item.G, item.B, 0xFF);
 			}
 			break;
 
-		case format::A16B16G16R16F:
+		case formats::R16G16B16A16F:
 		{
-			if (cbSource < pixelCount * sizeof util::RGBAF16)
+			if (cbSource < pixelCount * sizeof util::r16g16b16a16f)
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(rgba8888view));
-			const auto view = util::span_cast<util::RGBAF16>(buf8);
+			strm.read_fully(0, std::span(b8g8r8a8view));
+			const auto view = util::span_cast<util::r16g16b16a16f>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
 				read += len;
-				for (size_t i = 0, count = len / sizeof util::RGBAF16; i < count; ++pos, ++i) {
-					rgba8888view[pos] = util::RGBA8888(
-						static_cast<uint32_t>(std::round(255 * view[i].R)),
-						static_cast<uint32_t>(std::round(255 * view[i].G)),
-						static_cast<uint32_t>(std::round(255 * view[i].B)),
-						static_cast<uint32_t>(std::round(255 * view[i].A))
-					);
-				}
+				for (size_t i = 0, count = len / sizeof util::r16g16b16a16f; i < count; ++pos, ++i)
+					b8g8r8a8view[pos].set_components_from(view[i]);
 			}
 			break;
 		}
 
-		case format::A32B32G32R32F:
+		case formats::R32G32B32A32F:
 		{
-			if (cbSource < pixelCount * sizeof util::RGBAF32)
+			if (cbSource < pixelCount * sizeof util::r32g32b32a32f)
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(rgba8888view));
-			const auto view = util::span_cast<util::RGBAF32>(buf8);
+			strm.read_fully(0, std::span(b8g8r8a8view));
+			const auto view = util::span_cast<util::r32g32b32a32f>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
 				read += len;
-				for (size_t i = 0, count = len / sizeof util::RGBAF32; i < count; ++pos, ++i)
-					rgba8888view[pos] = util::RGBA8888(
-						static_cast<uint32_t>(std::round(255 * view[i].R)),
-						static_cast<uint32_t>(std::round(255 * view[i].G)),
-						static_cast<uint32_t>(std::round(255 * view[i].B)),
-						static_cast<uint32_t>(std::round(255 * view[i].A))
-					);
+				for (size_t i = 0, count = len / sizeof util::r32g32b32a32f; i < count; ++pos, ++i)
+					b8g8r8a8view[pos].set_components_from(view[i]);
 			}
 			break;
 		}
 
-		case format::DXT1:
+		case formats::DXT1:
 		{
 			if (cbSource * 2 < pixelCount)
 				throw std::runtime_error("Truncated data detected");
@@ -192,13 +180,13 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 					DecompressBlockDXT1(
 						pos / 2 % strm.Width,
 						pos / 2 / strm.Width * 4,
-						strm.Width, &buf8[i], &rgba8888view[0]);
+						strm.Width, &buf8[i], &b8g8r8a8view[0]);
 				}
 			}
 			break;
 		}
 
-		case format::DXT3:
+		case formats::DXT3:
 		{
 			if (cbSource * 4 < pixelCount)
 				throw std::runtime_error("Truncated data detected");
@@ -209,14 +197,14 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 					DecompressBlockDXT1(
 						pos / 4 % strm.Width,
 						pos / 4 / strm.Width * 4,
-						strm.Width, &buf8[i], &rgba8888view[0]);
+						strm.Width, &buf8[i], &b8g8r8a8view[0]);
 					for (size_t dy = 0; dy < 4; dy += 1) {
 						for (size_t dx = 0; dx < 4; dx += 2) {
-							const auto native1 = *rgba8888view[dy * strm.Width + dx];
-							rgba8888view[dy * strm.Width + dx] = util::RGBA8888(native1.R, native1.G, native1.B, 17 * (buf8[i + dy * 2 + dx / 2] & 0xF));
+							auto& native1 = b8g8r8a8view[dy * strm.Width + dx];
+							native1 = util::b8g8r8a8(native1.R, native1.G, native1.B, 17 * (buf8[i + dy * 2 + dx / 2] & 0xF));
 
-							const auto native2 = *rgba8888view[dy * strm.Width + dx + 1];
-							rgba8888view[dy * strm.Width + dx + 1] = util::RGBA8888(native2.R, native2.G, native2.B, 17 * (buf8[i + dy * 2 + dx / 2] >> 4));
+							auto& native2 = b8g8r8a8view[dy * strm.Width + dx + 1];
+							native2 = util::b8g8r8a8(native2.R, native2.G, native2.B, 17 * (buf8[i + dy * 2 + dx / 2] >> 4));
 						}
 					}
 				}
@@ -224,7 +212,7 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 			break;
 		}
 
-		case format::DXT5:
+		case formats::DXT5:
 		{
 			if (cbSource * 4 < pixelCount)
 				throw std::runtime_error("Truncated data detected");
@@ -235,22 +223,22 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 					DecompressBlockDXT5(
 						pos / 4 % strm.Width,
 						pos / 4 / strm.Width * 4,
-						strm.Width, &buf8[i], &rgba8888view[0]);
+						strm.Width, &buf8[i], &b8g8r8a8view[0]);
 				}
 			}
 			break;
 		}
 
-		case format::Unknown:
+		case formats::Unknown:
 		default:
 			throw std::runtime_error("Unsupported type");
 	}
 
-	return std::make_shared<memory_mipmap_stream>(strm.Width, strm.Height, strm.Depth, format::A8R8G8B8, std::move(result));
+	return std::make_shared<memory_mipmap_stream>(strm.Width, strm.Height, strm.Depth, formats::B8G8R8A8, std::move(result));
 }
 
 std::shared_ptr<const xivres::texture::mipmap_stream> xivres::texture::memory_mipmap_stream::as_argb8888_view(std::shared_ptr<const mipmap_stream> strm) {
-	if (strm->Type == format::A8R8G8B8)
+	if (strm->Type == formats::B8G8R8A8)
 		return std::make_shared<wrapped_mipmap_stream>(strm->Width, strm->Height, strm->Depth, strm->Type, std::move(strm));
 
 	return as_argb8888(*strm);
