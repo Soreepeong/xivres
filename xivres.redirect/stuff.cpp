@@ -247,8 +247,12 @@ private:
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash);
 const char* DETOUR_resolve_string_indirection(const char* p);
 
-decltype(DETOUR_find_existing_resource_handle)* s_find_existing_resource_handle_original;
-decltype(DETOUR_resolve_string_indirection)* s_resolve_string_indirection_original;
+decltype(&DETOUR_find_existing_resource_handle) s_find_existing_resource_handle_original;
+decltype(&DETOUR_resolve_string_indirection) s_resolve_string_indirection_original;
+decltype(&CreateFileW) s_CreateFileW_original;
+decltype(&SetFilePointerEx) s_SetFilePointerEx_original;
+decltype(&ReadFile) s_ReadFile_original;
+decltype(&CloseHandle) s_CloseHandle_original;
 
 struct xivres_redirect_config_t {
 	class additional_game_root_t {
@@ -818,14 +822,14 @@ const char* DETOUR_resolve_string_indirection(const char* p) {
 
 HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
 	if (dwDesiredAccess != GENERIC_READ || dwCreationDisposition != OPEN_EXISTING)
-		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto path = std::filesystem::path(lpFileName);
 	if (!exists(path.parent_path().parent_path().parent_path() / "ffxiv_dx11.exe"))
-		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	if (path.parent_path().parent_path().filename() != L"sqpack")
-		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	int sqpkType;
 	if (path.extension() == L".index")
@@ -835,7 +839,7 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 	else if (path.extension().wstring().starts_with(L".dat"))
 		sqpkType = wcstol(path.extension().wstring().substr(4).c_str(), nullptr, 10);
 	else
-		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto categoryId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(0, 2).c_str(), nullptr, 16));
 	const auto expacId = static_cast<uint32_t>(std::wcstoul(path.filename().wstring().substr(2, 2).c_str(), nullptr, 16));
@@ -844,10 +848,10 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 
 	const auto pViews = get_sqpack_view(sqpkId);
 	if (!pViews)
-		return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
 	const auto indexPath = std::filesystem::path(path).replace_extension(".index");
-	const auto hFile = CreateFileW(indexPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+	const auto hFile = s_CreateFileW_original(indexPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hFile == INVALID_HANDLE_VALUE)
 		return hFile;
 
@@ -905,7 +909,7 @@ BOOL WINAPI DETOUR_SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove
 		}
 	}
 
-	return SetFilePointerEx(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod);
+	return s_SetFilePointerEx_original(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod);
 }
 
 BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
@@ -923,7 +927,7 @@ BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesT
 			return TRUE;
 		}
 	}
-	return ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
+	return s_ReadFile_original(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 }
 
 BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
@@ -933,7 +937,7 @@ BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
 		s_virtualFilePointers.erase(hObject);
 	}
 
-	return CloseHandle(hObject);
+	return s_CloseHandle_original(hObject);
 }
 
 static std::span<char> get_clean_exe_span() {
@@ -1527,21 +1531,25 @@ void do_stuff() {
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CreateFileW", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		s_CreateFileW_original = *static_cast<decltype(&CreateFileW)*>(pfn); 
 		*static_cast<void**>(pfn) = &DETOUR_CreateFileW;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "SetFilePointerEx", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		s_SetFilePointerEx_original = *static_cast<decltype(&SetFilePointerEx)*>(pfn); 
 		*static_cast<void**>(pfn) = &DETOUR_SetFilePointerEx;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "ReadFile", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		s_ReadFile_original = *static_cast<decltype(&ReadFile)*>(pfn); 
 		*static_cast<void**>(pfn) = &DETOUR_ReadFile;
 	}
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CloseHandle", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);
+		s_CloseHandle_original = *static_cast<decltype(&CloseHandle)*>(pfn); 
 		*static_cast<void**>(pfn) = &DETOUR_CloseHandle;
 	}
 
