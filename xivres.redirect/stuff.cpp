@@ -245,9 +245,11 @@ private:
 };
 
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash);
+int DETOUR_get_cutscene_language(void* p1);
 const char* DETOUR_resolve_string_indirection(const char* p);
 
 decltype(&DETOUR_find_existing_resource_handle) s_find_existing_resource_handle_original;
+decltype(&DETOUR_get_cutscene_language) s_get_cutscene_language_original;
 decltype(&DETOUR_resolve_string_indirection) s_resolve_string_indirection_original;
 decltype(&CreateFileW) s_CreateFileW_original;
 decltype(&SetFilePointerEx) s_SetFilePointerEx_original;
@@ -372,6 +374,7 @@ struct xivres_redirect_config_t {
 	std::vector<additional_game_root_t> AdditionalRoots;
 	std::vector<replacement_rule_t> PathReplacements;
 	std::map<std::string, std::string> ForcedCharacterLanguages;
+	int ForcedCharacterLanguageLipSync = -1;
 
 	friend void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
 		obj.ttmpChoicesFiles = j.value("ttmpChoicesFiles", std::vector<std::string>{"choices.json"});
@@ -445,9 +448,10 @@ struct xivres_redirect_config_t {
 				obj.PathReplacements.emplace_back(item.get<replacement_rule_t>());
 		}
 
-		if (const auto it = j.find("forcedCharacterLanguages"); it == j.end())
+		if (const auto it = j.find("forcedCharacterLanguages"); it == j.end()) {
 			obj.ForcedCharacterLanguages.clear();
-		else {
+			obj.ForcedCharacterLanguageLipSync = -1;
+		} else {
 			if (!it->is_object())
 				throw std::runtime_error("forcedCharacterLanguages must be an object mapping string(character name) to string(language code)");
 
@@ -456,6 +460,21 @@ struct xivres_redirect_config_t {
 				obj.ForcedCharacterLanguages.emplace(
 					xivres::util::unicode::convert<std::string>(k, &xivres::util::unicode::lower),
 					v.get<std::string>());
+			}
+
+			if (const auto it = obj.ForcedCharacterLanguages.find(""); it != obj.ForcedCharacterLanguages.end()) {
+				if (it->second == "ja")
+					obj.ForcedCharacterLanguageLipSync = 0;
+				else if (it->second == "en")
+					obj.ForcedCharacterLanguageLipSync = 1;
+				else if (it->second == "de")
+					obj.ForcedCharacterLanguageLipSync = 2;
+				else if (it->second == "fr")
+					obj.ForcedCharacterLanguageLipSync = 3;
+				else if (it->second == "chs")
+					obj.ForcedCharacterLanguageLipSync = 4;
+				else if (it->second == "ko")
+					obj.ForcedCharacterLanguageLipSync = 6;
 			}
 		}
 	}
@@ -637,6 +656,12 @@ xivres::path_spec force_voiceman_language_for_character(const xivres::path_spec&
 	}
 
 	return {};
+}
+
+int DETOUR_get_cutscene_language(void* p1) {
+	if (s_config.ForcedCharacterLanguageLipSync != -1)
+		return s_config.ForcedCharacterLanguageLipSync;
+	return s_get_cutscene_language_original(p1);
 }
 
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
@@ -976,6 +1001,18 @@ static void* find_existing_resource_handle_finder() {
 	const auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
 		(res.data() + res.size() - get_clean_exe_span().data());
 	return p + *reinterpret_cast<int*>(p) + 4;
+}
+
+static void* find_cutscene_language_getter() {
+	// https://github.com/lmcintyre/PrefPro/blob/804a63c75321890b39f216dd2c9d245e1ff21f69/PrefPro/PrefPro.cs#L94
+	const auto [section, delta] = get_clean_text_section();
+	const auto res = utils::signature_finder()
+		.look_in(section)
+		.look_for_hex("E8 ?? ?? ?? ?? 48 63 56 1C")
+		.find_one();
+	const auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
+		(res.data() - get_clean_exe_span().data());
+	return p + 5 + *reinterpret_cast<const int*>(&p[1]);
 }
 
 static std::vector<void*> find_rsv_indirection_resolvers() {
@@ -1526,6 +1563,9 @@ void preload_stuff() {
 
 void do_stuff() {
 	MH_CreateHook(find_existing_resource_handle_finder(), &DETOUR_find_existing_resource_handle, reinterpret_cast<void**>(&s_find_existing_resource_handle_original));
+
+	MH_CreateHook(find_cutscene_language_getter(), &DETOUR_get_cutscene_language, reinterpret_cast<void**>(&s_get_cutscene_language_original));
+
 	for (const auto p : find_rsv_indirection_resolvers())
 		MH_CreateHook(p, &DETOUR_resolve_string_indirection, reinterpret_cast<void**>(&s_resolve_string_indirection_original));
 
