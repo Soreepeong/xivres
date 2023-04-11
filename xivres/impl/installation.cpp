@@ -69,7 +69,7 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) 
 void xivres::installation::preload_all_sqpacks() const {
 	util::thread_pool::task_waiter waiter;
 	for (const auto& key : m_readers | std::views::keys)
-		waiter.submit([this, key](auto&) { void(get_sqpack(key)); });
+		waiter.submit([this, key](auto&) { (void)get_sqpack(key); });
 	waiter.wait_all();
 }
 

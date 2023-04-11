@@ -391,12 +391,58 @@ xivres::path_spec test_voiceman(const xivres::installation& installation, const 
 	return {};
 }
 
+static void test_search(const xivres::installation& gameReader, std::string_view sequence) {
+	xivres::util::thread_pool::task_waiter<> waiter;
+	uint64_t nextPrintTickCount = 0;
+
+	for (const auto packId : gameReader.get_sqpack_ids()) {
+		const auto& packfile = gameReader.get_sqpack(packId);
+
+		for (size_t i = 0;;) {
+			for (; i < packfile.Entries.size() && waiter.pending() < waiter.pool().concurrency(); i++) {
+				const auto& entry = packfile.Entries[i];
+
+				waiter.submit([packId, &packfile, &sequence, pathSpec = entry.PathSpec](auto&) {
+					try {
+						const auto file = packfile.at(pathSpec);
+						if (file->size() == 0)
+							return;
+						auto buf = xivres::util::thread_pool::pooled_byte_buffer();
+						if (!buf)
+							buf.emplace();
+						if (buf->size() < file->size())
+							buf->resize(file->size());
+						const auto rsize = file->read(0, &(*buf)[0], buf->capacity());
+						const auto it = std::search(&(*buf)[0], &(*buf)[rsize], sequence.begin(), sequence.end());
+						if (it == &(*buf)[rsize])
+							return;
+						std::cout << std::format("\r{:06X} {} \n", packId, pathSpec);
+					} catch (const std::out_of_range&) {
+					}
+				});
+			}
+
+			if (!waiter.get())
+				break;
+			if (GetTickCount64() > nextPrintTickCount) {
+				nextPrintTickCount = GetTickCount64() + 200;
+				std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6}]", packId, i, packfile.Entries.size());
+				std::cout.flush();
+			}
+		}
+	}
+
+	std::cout << std::endl;
+}
+
 int main() {
 	const auto tend = GetTickCount64();
 	SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
 	system("chcp 65001 > NUL");
 
 	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
+
+	test_search(gameReader, "swd_hitbarr_t0p");
 
 	// xivres::sound::reader seui(gameReader.get_file("sound/system/SE_UI.scd"));
 	// auto tbl1 = seui.read_table_1();
@@ -425,7 +471,7 @@ int main() {
 
 	// xivres::installation gameReader(R"(Z:\XIV\JP\game)");
 
-	preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
+	// preview(xivres::texture::stream(gameReader.get_file("common/graphics/texture/-omni_shadow_index_table.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo300.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo400.tex")));
 	// preview(xivres::texture::stream(gameReader.get_file("ui/uld/Title_Logo500.tex")));

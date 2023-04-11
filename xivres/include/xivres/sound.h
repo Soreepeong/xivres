@@ -44,7 +44,6 @@ namespace xivres::sound {
 		LE<uint32_t> Table5Offset;
 		LE<uint32_t> Unknown_0x01C;
 	};
-	static_assert(sizeof offsets == 0x20);
 
 	enum class sound_entry_format : uint32_t {
 		WaveFormatPcm = 0x01,

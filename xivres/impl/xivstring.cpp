@@ -1,5 +1,7 @@
 #include "../include/xivres/xivstring.h"
 
+#include <algorithm>
+
 #include "../include/xivres/util.span_cast.h"
 
 std::unique_ptr<xivres::xivstring::xivexpr> xivres::xivstring::xivexpr::parse(std::string_view s) {

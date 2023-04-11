@@ -8,7 +8,7 @@
 	"logPathFilters": [
 		{
 			"pattern": ".*",
-			"include": false
+			"include": true
 		},
 		{
 			"pattern": "^(music|exd|bg|bgcommon)/.*",
