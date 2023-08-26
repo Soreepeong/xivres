@@ -157,7 +157,11 @@ void xivres::fontgen::fontdata_packer::layout_glyphs() {
 		pendingRectangles.clear();
 		plansInProgress.clear();
 		for (const auto pInfo : plansToTryAgain) {
-			pendingRectangles.emplace_back(0, 0, pInfo->BaseEntry.BoundingWidth + 1, pInfo->BaseEntry.BoundingHeight + 1);
+			pendingRectangles.emplace_back(
+				0,
+				0,
+				pInfo->BaseEntry.BoundingWidth + 1,
+				pInfo->BaseEntry.BoundingHeight + 1 + pInfo->PadUp + pInfo->PadDown);
 			plansInProgress.emplace_back(pInfo);
 		}
 		plansToTryAgain.clear();
@@ -176,7 +180,7 @@ void xivres::fontgen::fontdata_packer::layout_glyphs() {
 
 			for (auto& target : info.Targets) {
 				target.Entry.TextureOffsetX = util::range_check_cast<uint16_t>(r.x + 1 + info.BaseEntry.BoundingWidth - *target.Entry.BoundingWidth);
-				target.Entry.TextureOffsetY = static_cast<uint16_t>(r.y + 1);
+				target.Entry.TextureOffsetY = static_cast<uint16_t>(r.y + 1 + info.PadUp - target.Entry.TextureOffsetY);
 				target.Entry.TextureIndex = static_cast<uint16_t>(planeIndex);
 				target.Font.add_glyph(target.Entry);
 			}
@@ -262,7 +266,7 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::
 					pCurrentTargetBuffer,
 					4,
 					info.BaseEntry.TextureOffsetX - info.CurrentOffsetX,
-					info.BaseEntry.TextureOffsetY - info.BaseEntry.CurrentOffsetY,
+					info.BaseEntry.TextureOffsetY - info.BaseEntry.CurrentOffsetY + info.PadUp,
 					m_nSideLength,
 					m_nSideLength,
 					255, 0, 255, 255
@@ -293,11 +297,13 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 				if (!baseFont.try_get_glyph_metrics(info.Codepoint, gm))
 					throw std::runtime_error("Base font reported to have a codepoint but it's failing to report glyph metrics");
 
-				info.CurrentOffsetX = (std::min)(0, gm.X1);
-				info.BaseEntry.CurrentOffsetY = gm.Y1;
-				info.BaseEntry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());
+				info.CurrentOffsetX = util::range_check_cast<int16_t>((std::min<int>)(0, gm.X1));
 				info.BaseEntry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - info.CurrentOffsetX);
-				info.BaseEntry.NextOffsetX = gm.AdvanceX - gm.X2;
+				info.BaseEntry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - gm.X2);
+
+				info.PadUp = info.PadDown = 0;
+				info.BaseEntry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
+				info.BaseEntry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());
 
 				for (auto& target : info.Targets) {
 					auto pooledSourceFont = **m_threadSafeSourceFonts[target.SourceFontIndex];
@@ -313,15 +319,23 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 					if (gm.height() != *info.BaseEntry.BoundingHeight)
 						throw std::runtime_error("Target font has a glyph with different bounding height from the source");
 
-					target.Entry.CurrentOffsetY = gm.Y1;
-					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());
+					if (gm.Y1 > 0)
+						target.Entry.TextureOffsetY = util::range_check_cast<uint16_t>(gm.Y1);
+					else
+						target.Entry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
+					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<uint32_t>)(gm.Y2, target.Font.line_height()) - (std::min)(0, gm.Y1));
 					target.Entry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - (std::min)(0, gm.X1));
-					target.Entry.NextOffsetX = gm.AdvanceX - gm.X2;
+					target.Entry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - gm.X2);
 
 					if (*info.BaseEntry.BoundingWidth < *target.Entry.BoundingWidth) {
-						info.CurrentOffsetX -= *target.Entry.BoundingWidth - *info.BaseEntry.BoundingWidth;
+						info.CurrentOffsetX = util::range_check_cast<int16_t>(info.CurrentOffsetX - *target.Entry.BoundingWidth + *info.BaseEntry.BoundingWidth);
 						info.BaseEntry.BoundingWidth = *target.Entry.BoundingWidth;
 					}
+
+					if (gm.Y1 > info.PadUp)
+						info.PadUp = util::range_check_cast<int8_t>(gm.Y1);
+					if (info.PadDown + info.PadUp + *info.BaseEntry.BoundingHeight < target.Entry.BoundingHeight)
+						info.PadDown = util::range_check_cast<int8_t>(target.Entry.BoundingHeight - info.PadUp - *info.BaseEntry.BoundingHeight);
 				}
 			}
 		});

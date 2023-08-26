@@ -442,6 +442,8 @@ int main() {
 
 	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 
+	gameReader.get_file("chara/monster/m0361/obj/body/b0001/model/m0361b0001.mdl")->read_vector<char>();
+
 	test_search(gameReader, "swd_hitbarr_t0p");
 
 	// xivres::sound::reader seui(gameReader.get_file("sound/system/SE_UI.scd"));

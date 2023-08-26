@@ -16,7 +16,9 @@ namespace xivres::fontgen {
 			const fixed_size_font* BaseFont{};
 			fontdata::glyph_entry BaseEntry{};
 			const util::unicode::blocks::block_definition* UnicodeBlock{};
-			int CurrentOffsetX{};
+			int16_t CurrentOffsetX{};
+			int8_t PadUp;
+			int8_t PadDown;
 
 			struct target_glyph {
 				fontdata::stream& Font;
