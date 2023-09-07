@@ -177,7 +177,7 @@ public:
 		, m_path(std::move(path)) {
 
 		const auto ext = xivres::util::unicode::convert<std::string>(m_path.extension().wstring(), xivres::util::unicode::lower);
-		if (ext == ".tex" || ext == ".atex")
+		if (ext == ".tex")
 			m_packedType = xivres::packed::type::texture;
 		else if (ext == ".mdl")
 			m_packedType = xivres::packed::type::model;
@@ -366,6 +366,7 @@ struct xivres_redirect_config_t {
 	};
 
 	std::vector<std::string> ttmpChoicesFiles;
+	bool LogAllPaths = false;
 	bool LogReplacedPaths = false;
 	bool LogDialogueCharacterNames = false;
 	std::vector<std::string> TtmpRoots;
@@ -378,6 +379,7 @@ struct xivres_redirect_config_t {
 
 	friend void from_json(const nlohmann::json& j, xivres_redirect_config_t& obj) {
 		obj.ttmpChoicesFiles = j.value("ttmpChoicesFiles", std::vector<std::string>{"choices.json"});
+		obj.LogAllPaths = j.value("logAllPaths", false);
 		obj.LogReplacedPaths = j.value("logReplacedPaths", false);
 		obj.LogDialogueCharacterNames = j.value("logDialogueCharacterNames", false);
 		obj.TtmpRoots = j.value("ttmpRoots", std::vector<std::string>());
@@ -667,6 +669,9 @@ int DETOUR_get_cutscene_language(void* p1) {
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
 	const auto retAddr = static_cast<char**>(_AddressOfReturnAddress());
 	auto& pszPath = retAddr[0x11];
+
+	if (s_config.LogAllPaths)
+		OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format("[LogAllPaths] {}\n", pszPath)).c_str());
 
 	struct resource_load_details_t {
 		void* Unknown_0x00;
@@ -1036,8 +1041,11 @@ void update_raw_dirs(const std::filesystem::path& rawDir) {
 		if (!innerRoot.is_directory())
 			continue;
 
-		if (exists(std::filesystem::path(innerRoot).parent_path() / "disable"))
+		if (exists(std::filesystem::path(innerRoot) / "disable")) {
+			OutputDebugStringW(std::format(LR"(Disabled Raw Directory: {})" "\n", innerRoot.path().wstring()).c_str());
 			continue;
+		} else
+			OutputDebugStringW(std::format(LR"(Added Raw Directory: {})" "\n", innerRoot.path().wstring()).c_str());
 
 		const auto innerRootPathLength = innerRoot.path().wstring().size();
 		directoriesToCheckForMapping.clear();
@@ -1482,7 +1490,7 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 				continue;
 
 			monTtmpsOnDtor.try_emplace(pathStr, monTtmps.try_emplace(pathStr, true, path).first->second.OnChange([&](const std::filesystem::path& path) {
-				const auto filename = xivres::util::unicode::convert<std::string>(path.wstring(), &xivres::util::unicode::lower);
+				const auto filename = xivres::util::unicode::convert<std::string>(path.filename().wstring(), &xivres::util::unicode::lower);
 				if (filename == "ttmpd.mpd" || filename == "ttmpl.mpl" || filename == "choices.json" || filename == "disable")
 					notifyChanged();
 			}));
