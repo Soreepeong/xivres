@@ -138,6 +138,18 @@ namespace xivres::util::TrueType {
 		};
 	};
 
+	enum class LookupType : uint16_t {
+		SingleAdjustment = 1,
+		PairAdjustment = 2,
+		CursiveAttachment = 3,
+		MarkToBaseAttachment = 4,
+		MarkToLigatureAttachment = 5,
+		MarkToMarkAttachment = 6,
+		ContextPositioning = 7,
+		ChainedContextPositioning = 8,
+		ExtensionPositioning = 9,
+	};
+
 	struct LookupTable {
 		struct LookupFlags {
 			uint8_t RightToLeft : 1;
@@ -150,7 +162,7 @@ namespace xivres::util::TrueType {
 		static_assert(sizeof LookupFlags == 1);
 
 		struct LookupTableHeader {
-			BE<uint16_t> LookupType;
+			BE<LookupType> LookupType;
 			uint8_t MarkAttachmentType;
 			LookupFlags LookupFlag;
 			BE<uint16_t> SubtableCount;
@@ -2331,6 +2343,14 @@ namespace xivres::util::TrueType {
 			};
 		};
 
+		union ExtensionPositioningSubtable {
+			struct Format1 {
+				BE<uint16_t> PosFormat;
+				BE<LookupType> ExtensionLookupType;
+				BE<uint32_t> ExtensionOffset;
+			};
+		};
+
 		union {
 			Fixed Version;
 			GposHeaderV1_0 HeaderV1_1;
@@ -2401,14 +2421,34 @@ namespace xivres::util::TrueType {
 
 				for (const auto& lookupTableOffset : lookupList.Offsets()) {
 					const auto offset = lookupListOffset + *lookupTableOffset;
+					
 					LookupTable::View lookupTable(m_bytes + offset, m_length - offset);
 					if (!lookupTable)
 						continue;
-					if (*lookupTable->Header.LookupType != 2)
-						continue;  // Not Pair Adjustment Positioning Subtable
 
 					for (size_t subtableIndex = 0, i_ = *lookupTable->Header.SubtableCount; subtableIndex < i_; subtableIndex++) {
-						const auto subtableSpan = lookupTable.SubtableSpan(subtableIndex);
+						auto subtableSpan = lookupTable.SubtableSpan(subtableIndex);
+
+						switch (*lookupTable->Header.LookupType) {
+						case LookupType::PairAdjustment:
+							break;
+
+						case LookupType::ExtensionPositioning: {
+							if (subtableSpan.size() < sizeof(ExtensionPositioningSubtable::Format1))
+								continue;
+							const auto& table = *reinterpret_cast<const ExtensionPositioningSubtable::Format1*>(subtableSpan.data());
+							if (*table.PosFormat != 1)
+								continue;
+							if (*table.ExtensionLookupType != LookupType::PairAdjustment)
+								continue;
+							subtableSpan = subtableSpan.subspan(table.ExtensionOffset);
+							break;
+						}
+
+						default:
+							continue;
+						}
+
 						if (PairAdjustmentPositioningSubtable::Format1::View v(subtableSpan); v) {
 							if (!(*v->Header.ValueFormat1).AdvanceX && !(*v->Header.ValueFormat2).PlacementX)
 								continue;
@@ -2436,7 +2476,7 @@ namespace xivres::util::TrueType {
 									const auto startGlyphId = static_cast<size_t>(*rangeRecord.StartGlyphId);
 									const auto endGlyphId = static_cast<size_t>(*rangeRecord.EndGlyphId);
 									const auto startCoverageIndex = static_cast<size_t>(*rangeRecord.StartCoverageIndex);
-									for (size_t glyphIndex = 0, i_ = endGlyphId - startGlyphId; glyphIndex < i_; glyphIndex++) {
+									for (size_t glyphIndex = 0, i_ = endGlyphId - startGlyphId + 1; glyphIndex < i_; glyphIndex++) {
 										const auto glyph1Id = startGlyphId + glyphIndex;
 										for (const auto c1 : glyphToCharMap[glyph1Id]) {
 											const auto pairSetView = v.PairSetView(startCoverageIndex + glyphIndex);
