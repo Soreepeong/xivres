@@ -435,6 +435,80 @@ static void test_search(const xivres::installation& gameReader, std::string_view
 	std::cout << std::endl;
 }
 
+static void test_size_reduction(const xivres::installation& gameReader) {
+	struct task_t {
+		const xivres::sqpack::reader::entry_info& EntryInfo;
+		xivres::packed::type Type;
+		std::string Result;
+	};
+
+	xivres::util::thread_pool::task_waiter<task_t> waiter;
+	uint64_t nextPrintTickCount = 0;
+
+	uint64_t oldSize = 0;
+	uint64_t newSize = 0;
+	uint64_t didFiles = 0;
+
+	for (const auto packId : gameReader.get_sqpack_ids()) {
+		const auto& packfile = gameReader.get_sqpack(packId);
+
+		for (size_t i = 0;;) {
+			for (; waiter.pending() < std::max<size_t>(8, waiter.pool().concurrency()) && i < packfile.Entries.size(); i++) {
+				const auto& entry = packfile.Entries[i];
+
+				waiter.submit([i, &entry, &packfile, &oldSize, &newSize, &didFiles](auto&) {
+					task_t res{ .EntryInfo = entry };
+					try {
+						auto packed = packfile.packed_at(entry.PathSpec);
+						auto packedSize = packed->size();
+						auto unpacked = packed->get_unpacked();
+						auto unpackedSize = unpacked.size();
+						oldSize += packedSize;
+						newSize += packedSize;
+
+						auto buffer = xivres::util::thread_pool::pooled_byte_buffer();
+						buffer.emplace(unpackedSize);
+						unpackedSize = packed->read(0, buffer->data(), unpackedSize);
+
+						auto deflater = xivres::util::zlib_deflater::pooled();
+						deflater.emplace(Z_BEST_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+						auto res = (*deflater)(std::span<uint8_t>(buffer->data(), unpackedSize));
+						newSize += res.size() - packedSize;
+					} catch (const std::exception& e) {
+						res.Result = e.what();
+					}
+						didFiles++;
+					return res;
+					});
+			}
+
+			const auto r = waiter.get();
+			if (!r)
+				break;
+
+			const auto& entry = r->EntryInfo;
+
+			if (!r->Result.empty() || GetTickCount64() > nextPrintTickCount) {
+				nextPrintTickCount = GetTickCount64() + 200;
+				std::cout << std::format("\r[{:0>6X}:{:0>6}/{:0>6} {:08x}/{:08x}={:08x}]", packId, i, packfile.Entries.size(), entry.PathSpec.path_hash(), entry.PathSpec.name_hash(), entry.PathSpec.full_path_hash());
+				switch (r->Type) {
+				case xivres::packed::type::model: std::cout << " Model   ";
+					break;
+				case xivres::packed::type::standard: std::cout << " Standard";
+					break;
+				case xivres::packed::type::texture: std::cout << " Texture ";
+					break;
+				}
+				std::cout << std::format(" {} -> {}", oldSize, newSize);
+				if (!r->Result.empty())
+					std::cout << std::format("\n\t=>{}", r->Result) << std::endl;
+			}
+		}
+	}
+
+	std::cout << std::endl;
+}
+
 int main() {
 	const auto tend = GetTickCount64();
 	SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
@@ -442,9 +516,10 @@ int main() {
 
 	xivres::installation gameReader(R"(C:\Program Files (x86)\SquareEnix\FINAL FANTASY XIV - A Realm Reborn\game)");
 
-	gameReader.get_file("chara/monster/m0361/obj/body/b0001/model/m0361b0001.mdl")->read_vector<char>();
+	test_size_reduction(gameReader);
+	// gameReader.get_file("chara/monster/m0361/obj/body/b0001/model/m0361b0001.mdl")->read_vector<char>();
 
-	test_search(gameReader, "swd_hitbarr_t0p");
+	// test_search(gameReader, "swd_hitbarr_t0p");
 
 	// xivres::sound::reader seui(gameReader.get_file("sound/system/SE_UI.scd"));
 	// auto tbl1 = seui.read_table_1();

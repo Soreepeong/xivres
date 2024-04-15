@@ -551,16 +551,19 @@ static const xivres::excel::exl::reader& get_exl() {
 	gen.add_sqpack(reader, true, true);
 
 	if (sqpkId.category_id() == 7) {
-		xivres::sound::reader scd(reader.at("sound/system/Sample_System.scd"));
-		xivres::sound::writer blank;
-		blank.set_table_1(scd.read_table_1());
-		blank.set_table_2(scd.read_table_2());
-		blank.set_table_4(scd.read_table_4());
-		blank.set_table_5(scd.read_table_5());
-		for (size_t i = 0; i < 256; ++i)
-			blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty(std::chrono::milliseconds(100)));
+		const auto ssei = reader.find_entry_index("sound/system/Sample_System.scd");
+		if (ssei != std::numeric_limits<size_t>::max()) {
+			xivres::sound::reader scd(reader.at(reader.Entries[ssei]));
+			xivres::sound::writer blank;
+			blank.set_table_1(scd.read_table_1());
+			blank.set_table_2(scd.read_table_2());
+			blank.set_table_4(scd.read_table_4());
+			blank.set_table_5(scd.read_table_5());
+			for (size_t i = 0; i < 256; ++i)
+				blank.set_sound_item(i, xivres::sound::writer::sound_item::make_empty(std::chrono::milliseconds(100)));
 
-		gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.export_to_bytes())));
+			gen.add(std::make_shared<xivres::passthrough_packed_stream<xivres::standard_passthrough_packer>>("sound/empty256.scd", std::make_shared<xivres::memory_stream>(blank.export_to_bytes())));
+		}
 	}
 
 	size_t counter = 0;
@@ -668,7 +671,12 @@ int DETOUR_get_cutscene_language(void* p1) {
 
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
 	const auto retAddr = static_cast<char**>(_AddressOfReturnAddress());
-	auto& pszPath = retAddr[0x11];
+	
+	auto rspsub = reinterpret_cast<uint8_t*>(*retAddr);
+	while (rspsub[-3] != 0x48 || rspsub[-2] != 0x83 || rspsub[-1] != 0xec)
+		rspsub--;
+
+	auto& pszPath = retAddr[0x0b + *rspsub / 8];
 
 	if (s_config.LogAllPaths)
 		OutputDebugStringW(xivres::util::unicode::convert<std::wstring>(std::format("[LogAllPaths] {}\n", pszPath)).c_str());
@@ -880,7 +888,7 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 	if (!pViews)
 		return s_CreateFileW_original(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 
-	const auto indexPath = std::filesystem::path(path).replace_extension(".index");
+	const auto indexPath = std::filesystem::path(path).replace_extension(".index2");
 	const auto hFile = s_CreateFileW_original(indexPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hFile == INVALID_HANDLE_VALUE)
 		return hFile;
@@ -1001,7 +1009,7 @@ static void* find_existing_resource_handle_finder() {
 	const auto [section, delta] = get_clean_text_section();
 	const auto res = utils::signature_finder()
 	                 .look_in(section)
-	                 .look_for_hex("48 8b 4f ?? 4c 8b cd 4d 8b c4 49 8b d5 e8")
+	                 .look_for_hex("48 8b ?? ?? 4c 8b cd 4d 8b ?? 49 8b ?? e8")
 	                 .find_one();
 	const auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
 		(res.data() + res.size() - get_clean_exe_span().data());
@@ -1013,7 +1021,7 @@ static void* find_cutscene_language_getter() {
 	const auto [section, delta] = get_clean_text_section();
 	const auto res = utils::signature_finder()
 		.look_in(section)
-		.look_for_hex("E8 ?? ?? ?? ?? 48 63 56 1C")
+		.look_for_hex("E8 ?? ?? ?? ?? ?? 63 56 1C")
 		.find_one();
 	const auto p = reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
 		(res.data() - get_clean_exe_span().data());

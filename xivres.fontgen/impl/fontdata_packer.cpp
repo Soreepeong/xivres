@@ -299,7 +299,6 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 
 				info.CurrentOffsetX = util::range_check_cast<int16_t>((std::min<int>)(0, gm.X1));
 				info.BaseEntry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - info.CurrentOffsetX);
-				info.BaseEntry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - gm.X2);
 
 				info.PadUp = info.PadDown = 0;
 				info.BaseEntry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
@@ -325,7 +324,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 						target.Entry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
 					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<uint32_t>)(gm.Y2, target.Font.line_height()) - (std::min)(0, gm.Y1));
 					target.Entry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - (std::min)(0, gm.X1));
-					target.Entry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - gm.X2);
+					target.Entry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - target.Entry.BoundingWidth);
 
 					if (*info.BaseEntry.BoundingWidth < *target.Entry.BoundingWidth) {
 						info.CurrentOffsetX = util::range_check_cast<int16_t>(info.CurrentOffsetX - *target.Entry.BoundingWidth + *info.BaseEntry.BoundingWidth);
