@@ -267,13 +267,13 @@ freetype_bitmap_wrapper::freetype_bitmap_wrapper(FT_Library library)
 	FT_Bitmap_Init(&m_bitmap);
 }
 
-std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::load_glyph(uint32_t glyphIndex, bool render) const {
+std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::load_glyph(uint32_t glyphIndex, bool render) const {
 	if (m_face->glyph->glyph_index != glyphIndex)
 		success_or_throw(FT_Load_Glyph(m_face, glyphIndex, m_info->Params.LoadFlags));
 
 	FT_Glyph glyph;
 	success_or_throw(FT_Get_Glyph(m_face->glyph, &glyph));
-	auto uniqueGlyphPtr = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*>(glyph, FT_Done_Glyph);
+	auto uniqueGlyphPtr = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)>(glyph, FT_Done_Glyph);
 
 	FT_Vector zeroDelta{};
 	FT_Glyph_Transform(glyph, &m_info->Matrix, &zeroDelta); // failing this is acceptable

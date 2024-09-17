@@ -24,7 +24,7 @@ static HRESULT success_or_throw(HRESULT hr, std::initializer_list<HRESULT> accep
 		0,
 		nullptr);
 	if (pszMsg) {
-		std::unique_ptr<wchar_t, decltype(LocalFree)*> pszMsgFree(pszMsg, LocalFree);
+		std::unique_ptr<wchar_t, decltype(&LocalFree)> pszMsgFree(pszMsg, LocalFree);
 
 		throw std::runtime_error(std::format(
 			"Error (HRESULT=0x{:08X}): {}",

@@ -18,7 +18,7 @@
 
 namespace xivres::fontgen {
 	class freetype_fixed_size_font : public default_abstract_fixed_size_font {
-		using library_ptr_t = std::unique_ptr<std::remove_pointer_t<FT_Library>, decltype(FT_Done_FreeType)*>;
+		using library_ptr_t = std::unique_ptr<std::remove_pointer_t<FT_Library>, decltype(&FT_Done_FreeType)>;
 
 	public:
 		struct create_struct {
@@ -64,7 +64,7 @@ namespace xivres::fontgen {
 
 			[[nodiscard]] int get_char_index(char32_t codepoint) const;
 
-			[[nodiscard]] std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(FT_Done_Glyph)*> load_glyph(uint32_t glyphIndex, bool render) const;
+			[[nodiscard]] std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> load_glyph(uint32_t glyphIndex, bool render) const;
 
 			[[nodiscard]] FT_Library library() const;
 

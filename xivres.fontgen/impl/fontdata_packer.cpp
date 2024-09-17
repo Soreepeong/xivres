@@ -388,6 +388,11 @@ void xivres::fontgen::fontdata_packer::prepare_target_font_basic_info() {
 		targetFont.line_height(sourceFont.line_height());
 		targetFont.ascent(sourceFont.ascent());
 		targetFont.reserve_glyphs(sourceFont.all_codepoints().size());
+
+		const auto& kerningPairs = sourceFont.all_kerning_pairs();
+		targetFont.reserve_kernings(kerningPairs.size());
+		for (const auto& kp : kerningPairs)
+			targetFont.add_kerning(kp.first.first, kp.first.second, kp.second);
 	}
 }
 
