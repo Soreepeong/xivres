@@ -21,11 +21,11 @@ namespace xivres::image_change_data {
 	};
 
 	struct entry {
-		uint8_t Variant;
-		uint8_t Unknown_0x001;
-		LE<uint16_t> Mask;
-		uint8_t Vfx;
-		uint8_t Animation;
+		uint8_t MaterialId;
+		uint8_t DecalId;
+		LE<uint16_t> AttributeAndSound;
+		uint8_t VfxId;
+		uint8_t MaterialAnimationId;
 	};
 
 	class file {
