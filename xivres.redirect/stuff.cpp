@@ -516,10 +516,13 @@ static const xivres::excel::exl::reader& get_exl() {
 	return s_reader;
 }
 
-[[nodiscard]] const xivres::sqpack::generator::sqpack_views* get_sqpack_view(xivres::sqpack_spec sqpkId) {
+[[nodiscard]] const xivres::sqpack::generator::sqpack_views* get_sqpack_view(xivres::sqpack_spec sqpkId, bool initializeOnFirstCall = true) {
 	static std::map<xivres::sqpack_spec, std::unique_ptr<xivres::sqpack::generator::sqpack_views>> s_sqpackViews;
 	static std::map<xivres::sqpack_spec, std::mutex> s_viewMtx;
 	static bool s_sqpackViewsReady = false;
+
+	if (!initializeOnFirstCall && !s_sqpackViewsReady)
+		return nullptr;
 
 	if (!s_sqpackViewsReady) {
 		static std::mutex s_sqpackMtx;
@@ -566,6 +569,14 @@ static const xivres::excel::exl::reader& get_exl() {
 		}
 	}
 
+	{
+		std::shared_lock modLock(s_modAccessMtx);
+		for (const auto& [k, v] : s_availableReplacementStreams) {
+			if (sqpkId.category_id() == k.category_id() && sqpkId.expac_id() == k.expac_id() && sqpkId.part_id() == k.part_id())
+				gen.reserve_space(k, static_cast<uint32_t>(v->size()));
+		}
+	}
+
 	size_t counter = 0;
 	for (const auto& [space, count] : std::initializer_list<std::pair<uint32_t, size_t>>{{16 * 1048576, 2048}, {128 * 1048576, 256}, {0x7FFFFFFF, 8}}) {
 		auto& allocations = s_allocations[sqpkId][space];
@@ -586,6 +597,16 @@ static const xivres::excel::exl::reader& get_exl() {
 	}
 
 	ptr = std::make_unique<xivres::sqpack::generator::sqpack_views>(gen.export_to_views(false));
+	{
+		std::shared_lock modLock(s_modAccessMtx);
+		for (const auto& [k, v] : s_availableReplacementStreams) {
+			const auto e = ptr->find_entry(k);
+			if (!e)
+				continue;
+
+			dynamic_cast<xivres::hotswap_packed_stream*>(e->Provider.get())->swap_stream(v);
+		}
+	}
 	return ptr.get();
 }
 
@@ -1519,6 +1540,12 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 
 		const auto tickCountBegin = GetTickCount64();
 		std::unique_lock modLock(s_modAccessMtx);
+		for (const auto& [k, v] : s_availableReplacementStreams) {
+			if (const auto sqpackView = get_sqpack_view(xivres::sqpack_spec{k.category_id(), k.expac_id(), k.part_id()}, false)) {
+				if (const auto entry = sqpackView->find_entry(k))
+					dynamic_cast<xivres::hotswap_packed_stream*>(entry->Provider.get())->swap_stream();
+			}
+		}
 		s_availableReplacementStreams.clear();
 
 		try {
@@ -1545,39 +1572,28 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 			hReady = nullptr;
 		}
 
+		for (const auto& [k, v] : s_availableReplacementStreams) {
+			if (const auto sqpackView = get_sqpack_view(xivres::sqpack_spec{k.category_id(), k.expac_id(), k.part_id()}, false)) {
+				if (const auto entry = sqpackView->find_entry(k)) {
+					const auto hps = dynamic_cast<xivres::hotswap_packed_stream*>(entry->Provider.get());
+					if (hps->size() >= v->size())
+						hps->swap_stream(v);
+				}
+			}
+		}
+
 		modLock.unlock();
 		const auto tickCountEnd = GetTickCount64();
 		OutputDebugStringW(std::format(LR"(Reload took {}ms.)" "\n", tickCountEnd - tickCountBegin).c_str());
 	}
 }
 
-void preload_stuff() {
-	auto packIds = get_installation().get_sqpack_ids();
-	std::ranges::sort(packIds, [](const auto l, const auto r) {
-		auto partIdL = l & 0xFF;
-		auto partIdR = r & 0xFF;
-		if (partIdL != partIdR)
-			return partIdL < partIdR;
-
-		auto expacIdL = (l >> 8) & 0xFF;
-		auto expacIdR = (r >> 8) & 0xFF;
-		if (expacIdL != expacIdR)
-			return expacIdL < expacIdR;
-
-		auto categoryIdL = l >> 16;
-		auto categoryIdR = r >> 16;
-		if (categoryIdL != categoryIdR)
-			return categoryIdL < categoryIdR;
-		return false;
-	});
-	for (const auto id : packIds) {
-		xivres::util::thread_pool::pool::instance().submit<void>([id](auto&) {
-			static_cast<void>(get_sqpack_view(xivres::sqpack_spec::from_filename_int(id)));
-		});
-	}
-}
-
 void do_stuff() {
+	Sleep(4000);
+
+	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hReadyEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr), &CloseHandle);
+	std::thread([&hReadyEvent] { continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
+
 	MH_CreateHook(find_existing_resource_handle_finder(), &DETOUR_find_existing_resource_handle, reinterpret_cast<void**>(&s_find_existing_resource_handle_original));
 
 	MH_CreateHook(find_cutscene_language_getter(), &DETOUR_get_cutscene_language, reinterpret_cast<void**>(&s_get_cutscene_language_original));
@@ -1609,9 +1625,30 @@ void do_stuff() {
 		*static_cast<void**>(pfn) = &DETOUR_CloseHandle;
 	}
 
+	WaitForSingleObject(hReadyEvent.get(), INFINITE);
 	MH_EnableHook(MH_ALL_HOOKS);
 
-	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hReadyEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr), &CloseHandle);
-	std::thread([&hReadyEvent] { continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
-	WaitForSingleObject(hReadyEvent.get(), INFINITE);
+	auto packIds = get_installation().get_sqpack_ids();
+	std::ranges::sort(packIds, [](const auto l, const auto r) {
+		auto partIdL = l & 0xFF;
+		auto partIdR = r & 0xFF;
+		if (partIdL != partIdR)
+			return partIdL < partIdR;
+
+		auto expacIdL = (l >> 8) & 0xFF;
+		auto expacIdR = (r >> 8) & 0xFF;
+		if (expacIdL != expacIdR)
+			return expacIdL < expacIdR;
+
+		auto categoryIdL = l >> 16;
+		auto categoryIdR = r >> 16;
+		if (categoryIdL != categoryIdR)
+			return categoryIdL < categoryIdR;
+		return false;
+	});
+	for (const auto id : packIds) {
+		xivres::util::thread_pool::pool::instance().submit<void>([id](auto&) {
+			static_cast<void>(get_sqpack_view(xivres::sqpack_spec::from_filename_int(id)));
+		});
+	}
 }

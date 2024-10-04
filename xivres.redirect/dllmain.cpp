@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "utils.h"
 
-void preload_stuff();
 void do_stuff();
 
 HMODULE g_hModule;
@@ -41,7 +40,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			DisableThreadLibraryCalls(hModule);
 			MH_Initialize();
 			antidebug();
-			preload_stuff();
 			return TRUE;
 		
 		case DLL_PROCESS_DETACH:
