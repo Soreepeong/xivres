@@ -41,7 +41,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_1_t
 xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(std::vector<uint8_t> data, bool strictVerify)
 	: sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(std::move(data), strictVerify) {
 	if (strictVerify) {
-		if (index_header().PathHashLocatorSegment.Size % sizeof sqindex::path_hash_locator)
+		if (index_header().PathHashLocatorSegment.Size % sizeof(sqindex::path_hash_locator))
 			throw bad_data_error("PathHashLocators has an invalid size alignment");
 		index_header().PathHashLocatorSegment.Sha1.verify(pair_hash_locators(), "PathHashLocatorSegment has invalid data SHA-1");
 	}
@@ -50,7 +50,7 @@ xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(std::vector<uint8_t> data
 xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool strictVerify)
 	: sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(strm, strictVerify) {
 	if (strictVerify) {
-		if (index_header().PathHashLocatorSegment.Size % sizeof sqindex::path_hash_locator)
+		if (index_header().PathHashLocatorSegment.Size % sizeof(sqindex::path_hash_locator))
 			throw bad_data_error("PathHashLocators has an invalid size alignment");
 		index_header().PathHashLocatorSegment.Sha1.verify(pair_hash_locators(), "PathHashLocatorSegment has invalid data SHA-1");
 	}

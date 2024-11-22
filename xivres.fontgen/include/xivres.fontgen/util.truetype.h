@@ -26,7 +26,7 @@ namespace xivres::util::TrueType {
 		BE<uint16_t> Major;
 		BE<uint16_t> Minor;
 	};
-	static_assert(sizeof Fixed == 0x04);
+	static_assert(sizeof(Fixed) == 0x04);
 
 	struct OffsetTableStruct {
 		Fixed SfntVersion;
@@ -35,7 +35,7 @@ namespace xivres::util::TrueType {
 		BE<uint16_t> EntrySelector;
 		BE<uint16_t> RangeShift;
 	};
-	static_assert(sizeof OffsetTableStruct == 0x0C);
+	static_assert(sizeof(OffsetTableStruct) == 0x0C);
 
 	struct DirectoryTableEntry {
 		TagStruct Tag;
@@ -43,7 +43,7 @@ namespace xivres::util::TrueType {
 		BE<uint32_t> Offset;
 		BE<uint32_t> Length;
 	};
-	static_assert(sizeof DirectoryTableEntry == 0x10);
+	static_assert(sizeof(DirectoryTableEntry) == 0x10);
 
 	enum class PlatformId : uint16_t {
 		Unicode = 0,
@@ -110,7 +110,7 @@ namespace xivres::util::TrueType {
 			View(std::span<T> data) : View() {
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
 
-				if (data.size_bytes() < sizeof uint16_t)
+				if (data.size_bytes() < sizeof(uint16_t))
 					return;
 
 				if (2 * (*obj->Count + 1) > data.size_bytes())
@@ -159,7 +159,7 @@ namespace xivres::util::TrueType {
 			uint8_t UseMarkFilteringSet : 1;
 			uint8_t Reserved : 3;
 		};
-		static_assert(sizeof LookupFlags == 1);
+		static_assert(sizeof(LookupFlags) == 1);
 
 		struct LookupTableHeader {
 			BE<LookupType> LookupType;
@@ -191,12 +191,12 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof Header)
+				if (data.size_bytes() < sizeof(Header))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
 
-				if (data.size_bytes() < sizeof Header + static_cast<size_t>(2) * (*obj->Header.SubtableCount) + (obj->Header.LookupFlag.UseMarkFilteringSet ? 2 : 0))
+				if (data.size_bytes() < sizeof(Header) + static_cast<size_t>(2) * (*obj->Header.SubtableCount) + (obj->Header.LookupFlag.UseMarkFilteringSet ? 2 : 0))
 					return;
 
 				m_obj = obj;
@@ -270,7 +270,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof FormatHeader)
+				if (data.size_bytes() < sizeof(FormatHeader))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -278,12 +278,12 @@ namespace xivres::util::TrueType {
 				const auto count = static_cast<size_t>(*obj->Header.Count);
 				switch (obj->Header.FormatId) {
 					case 1:  // NOLINT(bugprone-branch-clone)
-						if (data.size_bytes() < sizeof FormatHeader + sizeof uint16_t * count)
+						if (data.size_bytes() < sizeof(FormatHeader) + sizeof(uint16_t) * count)
 							return;
 						break;
 
 					case 2:
-						if (data.size_bytes() < sizeof FormatHeader + sizeof RangeRecord * count)
+						if (data.size_bytes() < sizeof(FormatHeader) + sizeof(RangeRecord) * count)
 							return;
 						break;
 
@@ -399,7 +399,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof FormatId)
+				if (data.size_bytes() < sizeof(FormatId))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -541,7 +541,7 @@ namespace xivres::util::TrueType {
 			uint16_t IsLastResortFont : 1;
 			uint16_t Reserved15 : 1;
 		};
-		static_assert(sizeof HeadFlags == 2);
+		static_assert(sizeof(HeadFlags) == 2);
 
 		struct MacStyleFlags {
 			uint16_t Bold : 1;
@@ -553,7 +553,7 @@ namespace xivres::util::TrueType {
 			uint16_t Extended : 1;
 			uint16_t Reserved : 9;
 		};
-		static_assert(sizeof MacStyleFlags == 2);
+		static_assert(sizeof(MacStyleFlags) == 2);
 
 		Fixed Version;
 		Fixed FontRevision;
@@ -707,7 +707,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof NameHeader)
+				if (data.size_bytes() < sizeof(NameHeader))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -927,7 +927,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -935,7 +935,7 @@ namespace xivres::util::TrueType {
 						if (*obj->Header.FormatId != FormatId_Value || data.size_bytes() < *obj->Header.Length)
 							return;
 
-						if (data.size_bytes() < sizeof Format0)
+						if (data.size_bytes() < sizeof(Format0))
 							return;
 
 						m_obj = obj;
@@ -1006,7 +1006,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1034,7 +1034,7 @@ namespace xivres::util::TrueType {
 						if (c >= 0x10000)
 							return 0;
 
-						const auto& subHeader = m_obj->SubHeaders[m_obj->Header.SubHeaderKeys[c >> 8] / sizeof SubHeader];
+						const auto& subHeader = m_obj->SubHeaders[m_obj->Header.SubHeaderKeys[c >> 8] / sizeof(SubHeader)];
 						if (reinterpret_cast<const char*>(&subHeader) + sizeof(subHeader) > m_bytes + *m_obj->Header.Length)
 							return 0; // overflow
 
@@ -1042,7 +1042,7 @@ namespace xivres::util::TrueType {
 						if (c < *subHeader.FirstCode || c >= static_cast<uint32_t>(*subHeader.FirstCode + *subHeader.EntryCount))
 							return 0;
 
-						const auto glyphArray = reinterpret_cast<const BE<uint16_t>*>(reinterpret_cast<const char*>(&subHeader.IdRangeOffset) + sizeof subHeader.IdRangeOffset + subHeader.IdRangeOffset);
+						const auto glyphArray = reinterpret_cast<const BE<uint16_t>*>(reinterpret_cast<const char*>(&subHeader.IdRangeOffset) + sizeof(subHeader).IdRangeOffset + subHeader.IdRangeOffset);
 						const auto pGlyphIndex = &glyphArray[c - subHeader.FirstCode];
 						if (reinterpret_cast<const char*>(pGlyphIndex) + sizeof(*pGlyphIndex) > m_bytes + *m_obj->Header.Length)
 							return 0; // overflow
@@ -1053,11 +1053,11 @@ namespace xivres::util::TrueType {
 
 					void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {
 						for (char32_t baseChar = 0; baseChar < 0x10000; baseChar += 0x100) {
-							const auto& subHeader = m_obj->SubHeaders[m_obj->Header.SubHeaderKeys[baseChar >> 8] / sizeof SubHeader];
+							const auto& subHeader = m_obj->SubHeaders[m_obj->Header.SubHeaderKeys[baseChar >> 8] / sizeof(SubHeader)];
 							if (reinterpret_cast<const char*>(&subHeader) + sizeof(subHeader) > m_bytes + *m_obj->Header.Length)
 								continue;  // overflow
 
-							const auto glyphArray = reinterpret_cast<const BE<uint16_t>*>(reinterpret_cast<const char*>(&subHeader.IdRangeOffset) + sizeof subHeader.IdRangeOffset + subHeader.IdRangeOffset);
+							const auto glyphArray = reinterpret_cast<const BE<uint16_t>*>(reinterpret_cast<const char*>(&subHeader.IdRangeOffset) + sizeof(subHeader).IdRangeOffset + subHeader.IdRangeOffset);
 							for (char32_t c = baseChar + subHeader.FirstCode, c2_ = c + subHeader.EntryCount; c < c2_; c++) {
 								const auto pGlyphIndex = &glyphArray[baseChar - subHeader.FirstCode];
 								if (reinterpret_cast<const char*>(pGlyphIndex) + sizeof(*pGlyphIndex) > m_bytes + *m_obj->Header.Length)
@@ -1112,7 +1112,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1120,7 +1120,7 @@ namespace xivres::util::TrueType {
 						if (*obj->Header.FormatId != FormatId_Value || data.size_bytes() < *obj->Header.Length)
 							return;
 
-						if (sizeof Header + 4 + static_cast<size_t>(*obj->Header.SegCountX2) * 3 > data.size_bytes())
+						if (sizeof(Header) + 4 + static_cast<size_t>(*obj->Header.SegCountX2) * 3 > data.size_bytes())
 							return;
 
 						if (reinterpret_cast<const char*>(&obj->Data[1 + obj->Header.SegCount() * 4]) > reinterpret_cast<const char*>(obj) + data.size_bytes())
@@ -1261,7 +1261,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1340,7 +1340,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1422,7 +1422,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1500,7 +1500,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1557,7 +1557,7 @@ namespace xivres::util::TrueType {
 			};
 
 			static std::unique_ptr<IFormatView> GetFormatView(const void* pData, size_t length) {
-				if (length < sizeof FormatId)
+				if (length < sizeof(FormatId))
 					return nullptr;
 				switch (*static_cast<const Format*>(pData)->FormatId) {
 					case 0: return TryMakeUniqueFormatView<Format::Format0::View>(pData, length);
@@ -1618,7 +1618,7 @@ namespace xivres::util::TrueType {
 
 				for (size_t i = 0, i_ = *obj->Header.SubtableCount; i < i_; ++i) {
 					const auto& encRec = obj->EncodingRecords[i];
-					if (encRec.SubtableOffset + sizeof uint16_t > data.size_bytes())
+					if (encRec.SubtableOffset + sizeof(uint16_t) > data.size_bytes())
 						return;
 
 					const auto pFormatView = Format::GetFormatView(std::span(reinterpret_cast<const char*>(obj), data.size_bytes()).subspan(*encRec.SubtableOffset));
@@ -1704,7 +1704,7 @@ namespace xivres::util::TrueType {
 				View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
-					if (sizeof Header > data.size_bytes())
+					if (sizeof(Header) > data.size_bytes())
 						return;
 
 					const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1792,7 +1792,7 @@ namespace xivres::util::TrueType {
 				View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
-					if (data.size_bytes() < sizeof KernHeader)
+					if (data.size_bytes() < sizeof(KernHeader))
 						return;
 
 					const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1820,10 +1820,10 @@ namespace xivres::util::TrueType {
 					std::map<std::pair<char32_t, char32_t>, int>& result,
 					const std::vector<std::set<char32_t>>& glyphToCharMap
 				) {
-					std::span<const char> data{ reinterpret_cast<const char*>(&m_obj->FirstSubtable), m_length - sizeof KernHeader };
+					std::span<const char> data{ reinterpret_cast<const char*>(&m_obj->FirstSubtable), m_length - sizeof(KernHeader) };
 
 					for (size_t i = 0; i < m_obj->Header.SubtableCount; ++i) {
-						if (data.size_bytes() < sizeof SubtableHeader)
+						if (data.size_bytes() < sizeof(SubtableHeader))
 							return;  // invalid kern table
 
 						const auto& kernSubtableHeader = *reinterpret_cast<const SubtableHeader*>(data.data());
@@ -1832,7 +1832,7 @@ namespace xivres::util::TrueType {
 
 						const auto coverage = *kernSubtableHeader.Coverage;
 						if (kernSubtableHeader.Version == 0 && coverage.Horizontal) {
-							const auto formatData = data.subspan(sizeof kernSubtableHeader, kernSubtableHeader.Length - sizeof kernSubtableHeader);
+							const auto formatData = data.subspan(sizeof(kernSubtableHeader), kernSubtableHeader.Length - sizeof(kernSubtableHeader));
 							switch (coverage.Format) {
 								case 0:
 									if (Format0::View view(formatData); view)
@@ -1890,7 +1890,7 @@ namespace xivres::util::TrueType {
 				View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 				template<typename T>
 				View(std::span<T> data) : View() {
-					if (data.size_bytes() < sizeof KernHeader)
+					if (data.size_bytes() < sizeof(KernHeader))
 						return;
 
 					const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -1920,10 +1920,10 @@ namespace xivres::util::TrueType {
 				) {
 					// Untested
 
-					std::span<const char> data{ reinterpret_cast<const char*>(&m_obj->FirstSubtable), m_length - sizeof KernHeader };
+					std::span<const char> data{ reinterpret_cast<const char*>(&m_obj->FirstSubtable), m_length - sizeof(KernHeader) };
 
 					for (size_t i = 0; i < m_obj->Header.SubtableCount; ++i) {
-						if (data.size_bytes() < sizeof SubtableHeader)
+						if (data.size_bytes() < sizeof(SubtableHeader))
 							return;  // invalid kern table
 
 						const auto& kernSubtableHeader = *reinterpret_cast<const SubtableHeader*>(data.data());
@@ -1932,7 +1932,7 @@ namespace xivres::util::TrueType {
 
 						const auto coverage = *kernSubtableHeader.Coverage;
 						if (!coverage.Vertical) {
-							const auto formatData = data.subspan(sizeof kernSubtableHeader, kernSubtableHeader.Length - sizeof kernSubtableHeader);
+							const auto formatData = data.subspan(sizeof(kernSubtableHeader), kernSubtableHeader.Length - sizeof(kernSubtableHeader));
 							switch (coverage.Format) {
 								case 0:
 									if (Format0::View view(formatData); view)
@@ -1975,7 +1975,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof Version0::KernHeader)
+				if (data.size_bytes() < sizeof(Version0::KernHeader))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -2046,7 +2046,7 @@ namespace xivres::util::TrueType {
 				uint16_t Reserved : 8;
 			};
 		};
-		static_assert(sizeof ValueFormatFlags == 2);
+		static_assert(sizeof(ValueFormatFlags) == 2);
 
 		union PairAdjustmentPositioningSubtable {
 			struct Format1 {
@@ -2174,7 +2174,7 @@ namespace xivres::util::TrueType {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < sizeof FormatHeader)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -2182,7 +2182,7 @@ namespace xivres::util::TrueType {
 						if (obj->Header.FormatId != 1)
 							return;
 
-						if (data.size_bytes() < sizeof FormatHeader + static_cast<size_t>(2) * (*obj->Header.PairSetCount))
+						if (data.size_bytes() < sizeof(FormatHeader) + static_cast<size_t>(2) * (*obj->Header.PairSetCount))
 							return;
 
 						if (CoverageTable::View coverageTable(reinterpret_cast<const char*>(obj) + *obj->Header.CoverageOffset, data.size_bytes() - *obj->Header.CoverageOffset); !coverageTable)
@@ -2279,7 +2279,7 @@ namespace xivres::util::TrueType {
 						const auto bit = ((*obj->Header.ValueFormat2).Value << 16) | (*obj->Header.ValueFormat1).Value;
 						const auto valueCountPerPairValueRecord = static_cast<size_t>(std::popcount<uint32_t>(bit));
 
-						if (data.size_bytes() < sizeof FormatHeader + sizeof BE<uint16_t> *valueCountPerPairValueRecord * (*obj->Header.Class1Count) * (*obj->Header.Class2Count))
+						if (data.size_bytes() < sizeof(FormatHeader) + sizeof(BE<uint16_t>) * valueCountPerPairValueRecord * (*obj->Header.Class1Count) * (*obj->Header.Class2Count))
 							return;
 
 						if (ClassDefTable::View v(reinterpret_cast<const char*>(obj) + *obj->Header.ClassDef1Offset, data.size_bytes() - *obj->Header.ClassDef1Offset); !v)
@@ -2378,7 +2378,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof GposHeaderV1_0)
+				if (data.size_bytes() < sizeof(GposHeaderV1_0))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -2387,7 +2387,7 @@ namespace xivres::util::TrueType {
 					return;
 
 				if (obj->Version.Major > 1 || (obj->Version.Major == 1 && obj->Version.Minor >= 1)) {
-					if (data.size_bytes() < sizeof GposHeaderV1_1)
+					if (data.size_bytes() < sizeof(GposHeaderV1_1))
 						return;
 				}
 
@@ -2559,12 +2559,12 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length, size_t offsetInCollection = 0) : View(std::span(static_cast<const char*>(pData), length), offsetInCollection) {}
 			template<typename T>
 			View(std::span<T> data, size_t offsetInCollection = 0) : View() {
-				if (data.size_bytes() < sizeof OffsetTable)
+				if (data.size_bytes() < sizeof(OffsetTable))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
 
-				if (data.size_bytes() < sizeof OffsetTable + sizeof DirectoryTableEntry * obj->OffsetTable.TableCount)
+				if (data.size_bytes() < sizeof(OffsetTable) + sizeof(DirectoryTableEntry) * obj->OffsetTable.TableCount)
 					return;
 
 				size_t requiredLength = sizeof(OffsetTableStruct) + sizeof(DirectoryTableEntry) * *obj->OffsetTable.TableCount;
@@ -2653,7 +2653,7 @@ namespace xivres::util::TrueType {
 			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 			template<typename T>
 			View(std::span<T> data) : View() {
-				if (data.size_bytes() < sizeof Header)
+				if (data.size_bytes() < sizeof(Header))
 					return;
 
 				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
@@ -2662,10 +2662,10 @@ namespace xivres::util::TrueType {
 					return;
 				if (obj->FileHeader.MajorVersion == 0)
 					return;
-				if (data.size_bytes() < sizeof Header + sizeof uint32_t * obj->FileHeader.FontCount)
+				if (data.size_bytes() < sizeof(Header) + sizeof(uint32_t) * obj->FileHeader.FontCount)
 					return;
 				if (obj->FileHeader.MajorVersion >= 2) {
-					if (data.size_bytes() < sizeof Header + sizeof uint32_t * obj->FileHeader.FontCount + sizeof DigitalSignatureHeader)
+					if (data.size_bytes() < sizeof(Header) + sizeof(uint32_t) * obj->FileHeader.FontCount + sizeof(DigitalSignatureHeader))
 						return;
 
 					const auto pDsig = reinterpret_cast<const DigitalSignatureHeader*>(&obj->FontOffsets[*obj->FileHeader.FontCount]);
