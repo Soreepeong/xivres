@@ -23,10 +23,15 @@ _COM_SMARTPTR_TYPEDEF(IDWriteFontFamily, __uuidof(IDWriteFontFamily));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFile, __uuidof(IDWriteFontFile));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFileLoader, __uuidof(IDWriteFontFileLoader));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFileStream, __uuidof(IDWriteFontFileStream));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextFormat, __uuidof(IDWriteTextFormat));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextLayout, __uuidof(IDWriteTextLayout));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontSetBuilder, __uuidof(IDWriteFontSetBuilder));
 _COM_SMARTPTR_TYPEDEF(IDWriteGdiInterop, __uuidof(IDWriteGdiInterop));
 _COM_SMARTPTR_TYPEDEF(IDWriteGlyphRunAnalysis, __uuidof(IDWriteGlyphRunAnalysis));
 _COM_SMARTPTR_TYPEDEF(IDWriteLocalizedStrings, __uuidof(IDWriteLocalizedStrings));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextAnalyzer, __uuidof(IDWriteTextAnalyzer));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextAnalyzer2, __uuidof(IDWriteTextAnalyzer2));
+_COM_SMARTPTR_TYPEDEF(IDWriteTypography, __uuidof(IDWriteTypography));
 
 namespace xivres::fontgen {
 	class directwrite_fixed_size_font : public default_abstract_fixed_size_font {
@@ -35,6 +40,7 @@ namespace xivres::fontgen {
 			DWRITE_RENDERING_MODE RenderMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL;
 			DWRITE_MEASURING_MODE MeasureMode = DWRITE_MEASURING_MODE_GDI_CLASSIC;
 			DWRITE_GRID_FIT_MODE GridFitMode = DWRITE_GRID_FIT_MODE_ENABLED;
+			std::vector<DWRITE_FONT_FEATURE> Features{};
 
 			[[nodiscard]] const wchar_t* get_measuring_mode_string() const;
 
@@ -71,6 +77,8 @@ namespace xivres::fontgen {
 			IDWriteFontPtr Font;
 			IDWriteFontFacePtr Face;
 			IDWriteFontFace1Ptr Face1;
+			IDWriteTextFormatPtr Format;
+			IDWriteTypographyPtr Typography;
 		};
 
 		dwrite_interfaces_t m_dwrite;

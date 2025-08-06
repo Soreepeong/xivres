@@ -31,7 +31,6 @@ static HRESULT success_or_throw(HRESULT hr, std::initializer_list<HRESULT> accep
 			static_cast<uint32_t>(hr),
 			xivres::util::unicode::convert<std::string>(std::wstring(pszMsg))
 		));
-
 	} else {
 		throw std::runtime_error(std::format(
 			"Error (HRESULT=0x{:08X})",
@@ -159,8 +158,7 @@ public:
 };
 
 xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::filesystem::path path, int fontIndex, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params)
-	: directwrite_fixed_size_font(std::make_shared<memory_stream>(file_stream(std::move(path))), fontIndex, size, gamma, matrix, params) {
-}
+	: directwrite_fixed_size_font(std::make_shared<memory_stream>(file_stream(std::move(path))), fontIndex, size, gamma, matrix, params) {}
 
 xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWriteFactoryPtr factory, IDWriteFontPtr font, float size, float gamma, const font_render_transformation_matrix& matrix, const create_struct& params) {
 	if (!font)
@@ -445,7 +443,6 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontge
 		success_or_throw(res.Family->GetFontCollection(&res.Collection));
 		success_or_throw(res.Font->CreateFontFace(&res.Face));
 		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
-
 	} else {
 		success_or_throw(DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&res.Factory)));
 		success_or_throw(res.Factory->RegisterFontFileLoader(&stream_based_dwrite_font_file_loader::GetInstance()), {DWRITE_E_ALREADYREGISTERED});
@@ -458,13 +455,112 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontge
 		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
 	}
 
+	IDWriteLocalizedStringsPtr familyNames;
+	success_or_throw(res.Family->GetFamilyNames(&familyNames));
+	uint32_t index;
+	if (BOOL exists; FAILED(familyNames->FindLocaleName(L"en-us", &index, &exists)) || !exists)
+		index = 0;
+	uint32_t length;
+	success_or_throw(familyNames->GetStringLength(index, &length));
+	std::wstring familyName(length + 1, L'\0');
+	success_or_throw(familyNames->GetString(index, familyName.data(), length + 1));
+	familyName.resize(length);
+	success_or_throw(res.Factory->CreateTextFormat(
+		familyName.c_str(),
+		res.Collection,
+		res.Font->GetWeight(),
+		res.Font->GetStyle(),
+		res.Font->GetStretch(),
+		info.Size,
+		L"en-us",
+		&res.Format));
+	success_or_throw(res.Factory->CreateTypography(&res.Typography));
+	for (const auto& feature : info.Params.Features)
+		success_or_throw(res.Typography->AddFontFeature(feature));
 	return res;
 }
 
 bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const {
 	try {
-		uint16_t glyphIndex;
-		success_or_throw(m_dwrite.Face->GetGlyphIndices(reinterpret_cast<const uint32_t*>(&codepoint), 1, &glyphIndex));
+		wchar_t buf[3]{};
+		UINT32 buflen;
+		if (codepoint < 0x10000) {
+			buf[0] = static_cast<wchar_t>(codepoint);
+			buflen = 1;
+		} else if (codepoint < 0x110000) {
+			buf[0] = static_cast<wchar_t>(0xD800 + ((codepoint - 0x10000) >> 10));
+			buf[1] = static_cast<wchar_t>(0xDC00 + ((codepoint - 0x10000) & 0x3FF));
+			buflen = 2;
+		} else {
+			return false;
+		}
+
+		IDWriteTextLayoutPtr layout;
+		success_or_throw(m_dwrite.Factory->CreateTextLayout(buf, buflen, m_dwrite.Format, 9999999, 9999999, &layout));
+		success_or_throw(layout->SetTypography(m_dwrite.Typography, {.startPosition = 0, .length = buflen}));
+
+		class DummyRenderer final : public IDWriteTextRenderer {
+		public:
+			uint16_t GlyphIndex = 0;
+
+			STDMETHOD(QueryInterface)(REFIID riid, void** ppv) override {
+				if (!ppv)
+					return E_INVALIDARG;
+
+				if (riid == __uuidof(IUnknown)
+					|| riid == __uuidof(IDWritePixelSnapping)
+					|| riid == __uuidof(IDWriteTextRenderer)) {
+					this->AddRef();
+					*ppv = this;
+					return S_OK;
+				}
+
+				return E_NOINTERFACE;
+			}
+			ULONG __stdcall AddRef() override {
+				return 1;
+			}
+			ULONG __stdcall Release() override {
+				return 0;
+			}
+			STDMETHOD(IsPixelSnappingDisabled)(_In_opt_ void* clientDrawingContext, _Out_ BOOL* isDisabled) override {
+				*isDisabled = false;
+				return S_OK;
+			}
+			STDMETHOD(GetCurrentTransform)(_In_opt_ void* clientDrawingContext, _Out_ DWRITE_MATRIX* transform) override {
+				*transform = {1, 0, 0, 1, 0, 0};
+				return S_OK;
+			}
+			STDMETHOD(GetPixelsPerDip)(_In_opt_ void* clientDrawingContext, _Out_ FLOAT* pixelsPerDip) override {
+				*pixelsPerDip = 96;
+				return S_OK;
+			}
+		    STDMETHOD(DrawGlyphRun)(
+		        _In_opt_ void* clientDrawingContext,
+		        FLOAT baselineOriginX,
+		        FLOAT baselineOriginY,
+		        DWRITE_MEASURING_MODE measuringMode,
+		        _In_ DWRITE_GLYPH_RUN const* glyphRun,
+		        _In_ DWRITE_GLYPH_RUN_DESCRIPTION const* glyphRunDescription,
+		        _In_opt_ IUnknown* clientDrawingEffect
+		        ) override {
+		        GlyphIndex = glyphRun->glyphIndices[0];
+		        return S_OK;
+		    }
+
+			STDMETHOD(DrawUnderline)(_In_opt_ void* clientDrawingContext, FLOAT baselineOriginX, FLOAT baselineOriginY, _In_ DWRITE_UNDERLINE const* underline, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+			STDMETHOD(DrawStrikethrough)(_In_opt_ void* clientDrawingContext, FLOAT baselineOriginX, FLOAT baselineOriginY, _In_ DWRITE_STRIKETHROUGH const* strikethrough, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+			STDMETHOD(DrawInlineObject)(_In_opt_ void* clientDrawingContext, FLOAT originX, FLOAT originY, _In_ IDWriteInlineObject* inlineObject, BOOL isSideways, BOOL isRightToLeft, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+		} dummyRenderer;
+		success_or_throw(layout->Draw(nullptr, &dummyRenderer, 0, 0));
+		
+		const auto glyphIndex = dummyRenderer.GlyphIndex;
 		if (!glyphIndex)
 			return false;
 
@@ -507,7 +603,6 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 		gm.AdvanceX = m_info->scale_from_font_unit(static_cast<float>(dgm.advanceWidth) * m_info->Matrix.m11);
 
 		return true;
-
 	} catch (...) {
 		return false;
 	}
@@ -653,9 +748,7 @@ stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_
 
 stream_based_dwrite_font_collection_loader::stream_based_dwrite_font_collection_enumerator::stream_based_dwrite_font_collection_enumerator(IDWriteFactoryPtr factoryPtr, std::shared_ptr<xivres::stream> pStream)
 	: m_factory(std::move(factoryPtr))
-	, m_stream(std::move(pStream)) {
-
-}
+	, m_stream(std::move(pStream)) {}
 
 HRESULT __stdcall stream_based_dwrite_font_file_loader::CreateStreamFromKey(void const* fontFileReferenceKey, uint32_t fontFileReferenceKeySize, IDWriteFontFileStream* * pFontFileStream) noexcept {
 	if (fontFileReferenceKeySize != sizeof(std::shared_ptr<xivres::stream>))
@@ -719,7 +812,6 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font
 		} catch (const std::out_of_range&) {
 			return E_INVALIDARG;
 		}
-
 	} else {
 		const auto size = static_cast<uint64_t>(m_stream->size());
 		if (fileOffset <= size && fileOffset + fragmentSize <= size && fragmentSize <= (std::numeric_limits<uint32_t>::max)()) {
@@ -736,7 +828,6 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font
 			}
 			delete pVec;
 			return E_FAIL;
-
 		} else
 			return E_INVALIDARG;
 	}
@@ -773,5 +864,4 @@ stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream* stre
 }
 
 stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::stream_based_dwrite_font_file_stream(std::shared_ptr<xivres::stream> pStream)
-	: m_stream(std::move(pStream)) {
-}
+	: m_stream(std::move(pStream)) {}

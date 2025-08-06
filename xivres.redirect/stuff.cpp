@@ -942,8 +942,8 @@ HANDLE WINAPI DETOUR_CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWOR
 }
 
 BOOL WINAPI DETOUR_SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove, PLARGE_INTEGER lpNewFilePointer, DWORD dwMoveMethod) {
+	std::shared_lock lock(s_handleMtx);
 	if (s_sqpackStreams.contains(hFile)) {
-		std::shared_lock lock(s_handleMtx);
 		if (const auto it = s_virtualFilePointers.find(hFile); it != s_virtualFilePointers.end()) {
 			auto& ptr = it->second;
 			switch (dwMoveMethod) {
@@ -968,12 +968,13 @@ BOOL WINAPI DETOUR_SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove
 		}
 	}
 
+	lock.unlock();
 	return s_SetFilePointerEx_original(hFile, liDistanceToMove, lpNewFilePointer, dwMoveMethod);
 }
 
 BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
+	std::shared_lock lock(s_handleMtx);
 	if (s_sqpackStreams.contains(hFile)) {
-		std::shared_lock lock(s_handleMtx);
 		if (const auto it = s_sqpackStreams.find(hFile); it != s_sqpackStreams.end()) {
 			const auto ptr = s_virtualFilePointers[hFile];
 			const auto& stream = *it->second;
@@ -986,16 +987,19 @@ BOOL WINAPI DETOUR_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesT
 			return TRUE;
 		}
 	}
+
+	lock.unlock();
 	return s_ReadFile_original(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 }
 
 BOOL WINAPI DETOUR_CloseHandle(HANDLE hObject) {
+	std::shared_lock lock(s_handleMtx);
 	if (s_sqpackStreams.contains(hObject)) {
-		std::lock_guard lock(s_handleMtx);
 		s_sqpackStreams.erase(hObject);
 		s_virtualFilePointers.erase(hObject);
 	}
 
+	lock.unlock();
 	return s_CloseHandle_original(hObject);
 }
 
@@ -1589,8 +1593,6 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 }
 
 void do_stuff() {
-	Sleep(4000);
-
 	std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hReadyEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr), &CloseHandle);
 	std::thread([&hReadyEvent] { continuous_update_mod_dirs(hReadyEvent.get()); }).detach();
 

@@ -84,6 +84,71 @@ namespace xivres::util::TrueType {
 		UnicodeFullRepertoire = 10,
 	};
 
+	struct FeatureTable {
+		BE<uint16_t> FeatureParamsOffset;
+		BE<uint16_t> LookupIndexCount;
+		BE<uint16_t> LookupListIndices[1];
+	};
+
+	struct FeatureRecord {
+		TagStruct FeatureTag;
+		BE<uint16_t> FeatureOffset;
+	};
+
+	struct FeatureList {
+		BE<uint16_t> Count;
+		FeatureRecord Records[1];
+
+		class View {
+			union {
+				const FeatureList* m_obj;
+				const char* m_bytes;
+			};
+			size_t m_length;
+
+		public:
+			View() : m_obj(nullptr), m_length(0) {}
+			View(std::nullptr_t) : View() {}
+			View(decltype(m_obj) pObject, size_t length)
+				: m_obj(pObject), m_length(length) {}
+			View(View&&) = default;
+			View(const View&) = default;
+			View& operator=(View&&) = default;
+			View& operator=(const View&) = default;
+			View& operator=(std::nullptr_t) { m_obj = nullptr; m_length = 0; return *this; }
+			View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
+			template<typename T>
+			View(std::span<T> data) : View() {
+				const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
+
+				if (data.size_bytes() < sizeof(uint16_t))
+					return;
+
+				if (2 * (*obj->Count + 1) > data.size_bytes())
+					return;
+
+				m_obj = obj;
+				m_length = data.size_bytes();
+			}
+
+			operator bool() const {
+				return !!m_obj;
+			}
+
+			decltype(m_obj) operator*() const {
+				return m_obj;
+			}
+
+			decltype(m_obj) operator->() const {
+				return m_obj;
+			}
+
+			[[nodiscard]] std::span<const FeatureRecord> Records() const {
+				return { m_obj->Records, *m_obj->Count };
+			}
+		};
+	};
+	
 	struct LookupList {
 		BE<uint16_t> Count;
 		BE<uint16_t> Offsets[1];
@@ -2407,13 +2472,11 @@ namespace xivres::util::TrueType {
 				return m_obj;
 			}
 
-			[[nodiscard]] std::span<const BE<uint16_t>> LookupListOffsets() const {
-				const auto p = reinterpret_cast<const BE<uint16_t>*>(m_bytes + *m_obj->HeaderV1_0.LookupListOffset);
-				return { p + 1, **p };
-			}
-
 			[[nodiscard]] std::map<std::pair<char32_t, char32_t>, int> ExtractAdvanceX(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
 				std::map<std::pair<char32_t, char32_t>, int> result;
+
+				FeatureList::View featureList(m_bytes + *m_obj->HeaderV1_0.FeatureListOffset, m_length - *m_obj->HeaderV1_0.FeatureListOffset);
+				const auto test = featureList.Records();
 
 				const auto lookupListOffset = *m_obj->HeaderV1_0.LookupListOffset;
 				LookupList::View lookupList(m_bytes + lookupListOffset, m_length - lookupListOffset);
