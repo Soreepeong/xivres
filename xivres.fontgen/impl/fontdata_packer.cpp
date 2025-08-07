@@ -24,12 +24,12 @@ float xivres::fontgen::fontdata_packer::progress_scaled() const {
 	return 1.f * static_cast<float>(m_nCurrentProgress) / static_cast<float>(m_nMaxProgress);
 }
 
-const char* xivres::fontgen::fontdata_packer::progress_description() const {
-	return m_pszProgressString;
+xivres::fontgen::fontdata_packer::progress_status_t xivres::fontgen::fontdata_packer::progress_description() const {
+	return m_status;
 }
 
 bool xivres::fontgen::fontdata_packer::is_running() const {
-	return m_pszProgressString;
+	return m_status != progress_status_t::idle;
 }
 
 const std::vector<std::shared_ptr<xivres::texture::memory_mipmap_stream>>& xivres::fontgen::fontdata_packer::compiled_mipmap_streams() const {
@@ -45,7 +45,7 @@ std::string xivres::fontgen::fontdata_packer::get_error_if_failed() const {
 }
 
 void xivres::fontgen::fontdata_packer::compile() {
-	if (m_pszProgressString)
+	if (m_status != progress_status_t::idle)
 		throw std::runtime_error("Compile already in progress");
 
 	m_nMaxProgress = 1;
@@ -60,43 +60,43 @@ void xivres::fontgen::fontdata_packer::compile() {
 			const auto lock = std::lock_guard(m_runningMtx);
 			cv.notify_all();
 			try {
-				m_pszProgressString = "Preparing source fonts...";
+				m_status = progress_status_t::prepare_source_fonts;
 				prepare_threadsafe_source_fonts();
 				if (m_bCancelRequested) {
-					m_pszProgressString = nullptr;
+					m_status = progress_status_t::idle;
 					return;
 				}
 
-				m_pszProgressString = "Preparing target fonts...";
+				m_status = progress_status_t::prepare_target_fonts;
 				prepare_target_font_basic_info();
 				if (m_bCancelRequested) {
-					m_pszProgressString = nullptr;
+					m_status = progress_status_t::idle;
 					return;
 				}
 
-				m_pszProgressString = "Discovering glyphs...";
+				m_status = progress_status_t::discover_glyphs;
 				prepare_target_codepoints();
 				if (m_bCancelRequested) {
-					m_pszProgressString = nullptr;
+					m_status = progress_status_t::idle;
 					return;
 				}
 
 				m_nMaxProgress = 3 * m_targetPlans.size();
-				m_pszProgressString = "Measuring glyphs...";
+				m_status = progress_status_t::measure_glyphs;
 				measure_glyphs();
 				if (m_bCancelRequested) {
-					m_pszProgressString = nullptr;
+					m_status = progress_status_t::idle;
 					return;
 				}
 
-				m_pszProgressString = "Laying out and drawing glyphs...";
+				m_status = progress_status_t::layout_and_draw;
 				layout_glyphs();
 
 				m_error.clear();
 			} catch (const std::exception& e) {
 				m_error = e.what();
 			}
-			m_pszProgressString = nullptr;
+			m_status = progress_status_t::idle;
 		}
 		m_workerThread.detach();
 	});

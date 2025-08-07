@@ -711,6 +711,18 @@ void xivres::textools::simple_ttmp2_writer::close(bool revert, const std::string
 	}
 
 	zipClose(m_zf, comment.empty() ? nullptr : comment.c_str());
+
+	if (m_zstream)
+		deflateEnd(&*m_zstream);
+	if (m_packed && m_packed->Z)
+		deflateEnd(&*m_packed->Z);
+
+	m_zffunc = {};
+	m_zf = nullptr;
+	m_ttmpl.reset();
+	m_zstream.reset();
+	m_packed.reset();
+
 	if (revert || m_errorState) {
 		if (exists(m_pathTemp))
 			remove(m_pathTemp);
@@ -720,17 +732,7 @@ void xivres::textools::simple_ttmp2_writer::close(bool revert, const std::string
 		rename(m_pathTemp, m_path);
 	}
 
-	if (m_zstream)
-		deflateEnd(&*m_zstream);
-	if (m_packed && m_packed->Z)
-		deflateEnd(&*m_packed->Z);
-
 	m_path.clear();
 	m_pathTemp.clear();
-	m_zffunc = {};
-	m_zf = nullptr;
-	m_ttmpl.reset();
-	m_zstream.reset();
-	m_packed.reset();
 	m_errorState = false;
 }
