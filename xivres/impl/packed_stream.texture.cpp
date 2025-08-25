@@ -348,10 +348,8 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 	size_t subBlockCount = 0;
 	for (auto& repeatedItem : blockDataList) {
 		for (auto& mipmapItem : repeatedItem) {
-			while (!mipmapItem.empty() && mipmapItem.back().AllZero)
-				mipmapItem.pop_back();
 			if (mipmapItem.empty())
-				mipmapItem.emplace_back(false, false, 1, std::vector<uint8_t>(1));
+				mipmapItem.emplace_back(false, 1, std::vector<uint8_t>(1));
 			for (const auto& block : mipmapItem)
 				entryBodyLength += align(sizeof(packed::block_header) + block.Data.size());
 			subBlockCount += mipmapItem.size();

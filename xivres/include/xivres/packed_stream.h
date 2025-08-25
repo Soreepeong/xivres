@@ -168,7 +168,6 @@ namespace xivres {
 	protected:
 		struct block_data_t {
 			bool Deflated{};
-			bool AllZero{};
 			uint32_t DecompressedSize{};
 			std::vector<uint8_t> Data;
 		};
