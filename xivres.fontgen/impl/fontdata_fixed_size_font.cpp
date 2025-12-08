@@ -170,6 +170,8 @@ std::shared_ptr<xivres::fontgen::fontdata_fixed_size_font> xivres::fontgen::game
 			candidates.push_back(i);
 		else if (family == game_font_family::KrnAXIS && name == "KrnAXIS")
 			candidates.push_back(i);
+		else if (family == game_font_family::tcaxis && name == "tcaxis")
+			candidates.push_back(i);
 	}
 
 	if (candidates.empty())
@@ -269,6 +271,13 @@ std::span<const xivres::fontgen::game_fontdata_definition> xivres::fontgen::get_
 		{"common/font/ChnAXIS_180.fdt", "ChnAXIS", "Regular", 18.f},
 		{"common/font/ChnAXIS_360.fdt", "ChnAXIS", "Regular", 36.f},
 	};
+	
+	static constexpr game_fontdata_definition fdtListTCAxis[]{
+		{"common/font/tcaxis_120.fdt", "tcaxis", "Regular", 12.f},
+		{"common/font/tcaxis_140.fdt", "tcaxis", "Regular", 14.f},
+		{"common/font/tcaxis_180.fdt", "tcaxis", "Regular", 18.f},
+		{"common/font/tcaxis_360.fdt", "tcaxis", "Regular", 36.f},
+	};
 
 	switch (fontType) {
 		case font_type::font:
@@ -282,6 +291,9 @@ std::span<const xivres::fontgen::game_fontdata_definition> xivres::fontgen::get_
 
 		case font_type::krn_axis:
 			return {fdtListKrnAxis};
+		
+		case font_type::tc_axis:
+			return {fdtListTCAxis};
 
 		default:
 			return {};
@@ -294,6 +306,7 @@ const char* xivres::fontgen::get_font_tex_filename_format(font_type fontType /*=
 		case font_type::font_lobby: return "common/font/font_lobby{}.tex";
 		case font_type::chn_axis: return "common/font/font_chn_{}.tex";
 		case font_type::krn_axis: return "common/font/font_krn_{}.tex";
+	    case font_type::tc_axis: return "common/font/font_tc_{}.tex";
 		default: return nullptr;
 	}
 }

@@ -17,6 +17,7 @@ namespace xivres::fontgen {
 		TrumpGothic,
 		ChnAXIS,
 		KrnAXIS,
+		tcaxis,
 	};
 
 	struct game_fontdata_definition {

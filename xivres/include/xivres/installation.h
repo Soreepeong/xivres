@@ -23,6 +23,7 @@ namespace xivres {
 		font_lobby,
 		chn_axis,
 		krn_axis,
+		tc_axis
 	};
 
 	class installation {
