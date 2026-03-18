@@ -34,8 +34,7 @@ static HRESULT success_or_throw(HRESULT hr, std::initializer_list<HRESULT> accep
 	} else {
 		throw std::runtime_error(std::format(
 			"Error (HRESULT=0x{:08X})",
-			static_cast<uint32_t>(hr),
-			xivres::util::unicode::convert<std::string>(std::wstring(pszMsg))
+			static_cast<uint32_t>(hr)
 		));
 	}
 }
@@ -314,7 +313,7 @@ std::string xivres::fontgen::directwrite_fixed_size_font::subfamily_name() const
 	uint32_t index;
 	BOOL exists;
 	success_or_throw(strings->FindLocaleName(L"en-us", &index, &exists));
-	if (exists)
+	if (!exists)
 		index = 0;
 
 	uint32_t length;
@@ -334,7 +333,7 @@ std::string xivres::fontgen::directwrite_fixed_size_font::family_name() const {
 	uint32_t index;
 	BOOL exists;
 	success_or_throw(strings->FindLocaleName(L"en-us", &index, &exists));
-	if (exists)
+	if (!exists)
 		index = 0;
 
 	uint32_t length;
@@ -792,7 +791,7 @@ HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font
 }
 
 HRESULT __stdcall stream_based_dwrite_font_file_loader::stream_based_dwrite_font_file_stream::GetFileSize(uint64_t* pFileSize) noexcept {
-	*pFileSize = static_cast<uint16_t>(m_stream->size());
+	*pFileSize = static_cast<uint64_t>(m_stream->size());
 	return S_OK;
 }
 

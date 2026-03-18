@@ -1,9 +1,15 @@
 {
   "name": "xivres-fontgen",
   "version-string": "1.0.0.0",
-  "builtin-baseline": "a2d8a7cbb15cac91d6c59cd967ef9d85105832c3",
+  "builtin-baseline": "717f2c1db552beed995736e41accdf4f6f4ca986",
   "dependencies": [
     "freetype",
+    {
+      "name": "harfbuzz",
+      "features": [
+        "freetype"
+      ]
+    },
     "nlohmann-json",
     "zlib"
   ]

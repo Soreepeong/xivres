@@ -8,13 +8,14 @@
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 
+#include <harfbuzz/hb.h>
+
 #include <filesystem>
 #include <mutex>
 
 #include "fixed_size_font.h"
 
 #include "util.truetype.h"
-#include "xivres/util.bitmap_copy.h"
 
 namespace xivres::fontgen {
 	class freetype_fixed_size_font : public default_abstract_fixed_size_font {
@@ -24,6 +25,7 @@ namespace xivres::fontgen {
 		struct create_struct {
 			int LoadFlags = FT_LOAD_DEFAULT;
 			FT_Render_Mode RenderMode = FT_RENDER_MODE_LIGHT;
+			std::vector<hb_feature_t> Features;
 
 			[[nodiscard]] std::wstring get_load_flags_string() const;
 
@@ -36,7 +38,6 @@ namespace xivres::fontgen {
 				std::vector<uint8_t> Data;
 				std::set<char32_t> Characters;
 				std::map<std::pair<char32_t, char32_t>, int> KerningPairs;
-				std::map<char32_t, glyph_metrics> AllGlyphMetrics;
 				std::vector<uint8_t> GammaTable;
 				FT_Matrix Matrix;
 				create_struct Params{};
@@ -47,6 +48,7 @@ namespace xivres::fontgen {
 			library_ptr_t m_library;
 			std::shared_ptr<const info_t> m_info;
 			FT_Face m_face{};
+			hb_font_t* m_hbFont = nullptr;
 
 		public:
 			freetype_face_wrapper();
