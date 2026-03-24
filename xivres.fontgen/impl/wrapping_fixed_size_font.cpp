@@ -1,6 +1,19 @@
 #include "../include/xivres.fontgen/wrapping_fixed_size_font.h"
 #include "xivres/util.unicode.h"
 
+std::vector<std::pair<char32_t, int>> xivres::fontgen::wrapping_fixed_size_font::get_negative_lsb_codepoints() const {
+	std::vector<std::pair<char32_t, int>> result;
+	glyph_metrics gm;
+	for (const auto codepoint : m_info->Codepoints) {
+		if (!m_font->try_get_glyph_metrics(translate_codepoint(codepoint), gm))
+			continue;
+
+		if (m_info->HorizontalOffset + gm.X1 < 0)
+			result.emplace_back(codepoint, gm.X1);
+	}
+	return result;
+}
+
 char32_t xivres::fontgen::wrapping_fixed_size_font::translate_codepoint(char32_t codepoint) const {
 	if (const auto it = m_info->MappedCodepoints.find(codepoint); it != m_info->MappedCodepoints.end())
 		return translate_codepoint(it->second);
@@ -44,11 +57,7 @@ bool xivres::fontgen::wrapping_fixed_size_font::draw(char32_t codepoint, util::b
 	if (!m_font->try_get_glyph_metrics(codepoint, gm))
 		return false;
 
-	const auto remainingOffset = gm.X1 + m_info->HorizontalOffset;
-	if (remainingOffset >= 0)
-		drawX += m_info->HorizontalOffset;
-	else
-		drawX -= gm.X1;
+	drawX += std::max(m_info->HorizontalOffset, -gm.X1);
 	drawY += m_info->BaselineShift;
 
 	return m_font->draw(codepoint, pBuf, drawX, drawY, destWidth, destHeight, fgColor, bgColor);
@@ -58,8 +67,6 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 	if (m_kerningPairs)
 		return *m_kerningPairs;
 
-	std::map<char32_t, int> NetHorizontalOffsets;
-	std::map<char32_t, glyph_metrics> AllGlyphMetrics;
 	std::map<util::unicode::blocks::negative_lsb_group, std::map<char32_t, int>> negativeLsbChars;
 
 	std::map<char32_t, std::set<char32_t>> reverseMappedCodepoints;
@@ -80,7 +87,6 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 		if (remainingOffset >= 0) {
 			gm.AdvanceX = gm.AdvanceX + m_info->LetterSpacing;
 			gm.translate(m_info->HorizontalOffset, m_info->BaselineShift);
-
 		} else {
 			gm.AdvanceX = gm.AdvanceX + m_info->LetterSpacing - gm.X1;
 			gm.translate(-gm.X1, m_info->BaselineShift);
@@ -194,7 +200,6 @@ xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(std::shared_
 	info->HorizontalOffset = wrapModifiers.HorizontalOffset;
 	info->BaselineShift = wrapModifiers.BaselineShift;
 
-	std::set<char32_t> codepoints;
 	for (const auto& c : m_font->all_codepoints()) {
 		auto found = false;
 		for (const auto& [c1, c2] : wrapModifiers.Codepoints) {

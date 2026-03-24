@@ -64,6 +64,8 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
+		[[nodiscard]] std::vector<std::pair<char32_t, int>> get_negative_lsb_codepoints() const;
+
 	private:
 		[[nodiscard]] char32_t translate_codepoint(char32_t codepoint) const;
 	};
