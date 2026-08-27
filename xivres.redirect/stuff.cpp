@@ -14,6 +14,8 @@
 #include <xivres/util.unicode.h>
 #include <xivres/xivstring.h>
 
+#include <libdeflate.h>
+
 #include "utils.h"
 
 class oplocking_file_stream : public xivres::default_base_stream {
@@ -247,10 +249,12 @@ private:
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash);
 int DETOUR_get_cutscene_language(void* p1);
 const char* DETOUR_resolve_string_indirection(const char* p);
+void DETOUR_read_sqpk_chunk(uintptr_t srcData, uintptr_t dstData);
 
 decltype(&DETOUR_find_existing_resource_handle) s_find_existing_resource_handle_original;
 decltype(&DETOUR_get_cutscene_language) s_get_cutscene_language_original;
 decltype(&DETOUR_resolve_string_indirection) s_resolve_string_indirection_original;
+decltype(&DETOUR_read_sqpk_chunk) s_read_sqpk_chunk_original;
 decltype(&CreateFileW) s_CreateFileW_original;
 decltype(&SetFilePointerEx) s_SetFilePointerEx_original;
 decltype(&ReadFile) s_ReadFile_original;
@@ -604,7 +608,7 @@ static const xivres::excel::exl::reader& get_exl() {
 			if (!e)
 				continue;
 
-			dynamic_cast<xivres::hotswap_packed_stream*>(e->Provider.get())->swap_stream(v);
+			e->swap_stream(v);
 		}
 	}
 	return ptr.get();
@@ -688,6 +692,36 @@ int DETOUR_get_cutscene_language(void* p1) {
 	if (s_config.ForcedCharacterLanguageLipSync != -1)
 		return s_config.ForcedCharacterLanguageLipSync;
 	return s_get_cutscene_language_original(p1);
+}
+
+struct sqpk_chunk_info {
+	uint32_t HeaderSize;
+	uint32_t Unknown;
+	uint32_t CompressedSize;
+	uint32_t DecompressedSize;
+};
+
+// https://github.com/goatcorp/Dalamud/blob/master/Dalamud.Boot/xivfixes.cpp (faster_decompression)
+void DETOUR_read_sqpk_chunk(uintptr_t srcData, uintptr_t dstData) {
+	const auto source = *reinterpret_cast<uint8_t**>(srcData + 8);
+	const auto dest = *reinterpret_cast<uint8_t**>(dstData + 0x78);
+
+	const auto header = *reinterpret_cast<sqpk_chunk_info*>(source);
+	if (!header.DecompressedSize)
+		return;
+
+	if (header.CompressedSize == 32000) {
+		memcpy(dest, source + header.HeaderSize, header.DecompressedSize);
+		return;
+	}
+
+	thread_local std::unique_ptr<libdeflate_decompressor, decltype(&libdeflate_free_decompressor)>
+		decompressor(libdeflate_alloc_decompressor(), &libdeflate_free_decompressor);
+
+	if (libdeflate_deflate_decompress(decompressor.get(), source + header.HeaderSize, header.CompressedSize, dest, header.DecompressedSize, nullptr) != LIBDEFLATE_SUCCESS) {
+		OutputDebugStringW(L"[DETOUR_read_sqpk_chunk] libdeflate decompression failed; falling back to original.\n");
+		s_read_sqpk_chunk_original(srcData, dstData);
+	}
 }
 
 void* DETOUR_find_existing_resource_handle(void* p1, uint32_t& categoryId, uint32_t& resourceType, uint32_t& resourceHash) {
@@ -1063,6 +1097,17 @@ static std::vector<void*> find_rsv_indirection_resolvers() {
 		res.push_back(reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta + (match.Match.data() - get_clean_exe_span().data()));
 	}
 	return res;
+}
+
+static void* find_read_sqpk_chunk_function() {
+	// https://github.com/goatcorp/Dalamud/blob/master/Dalamud.Boot/xivfixes.cpp (faster_decompression)
+	const auto [section, delta] = get_clean_text_section();
+	const auto res = utils::signature_finder()
+		.look_in(section)
+		.look_for_hex("48 89 5C 24 ?? 57 B8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 2B E0 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 4C 8B 49")
+		.find_one();
+	return reinterpret_cast<char*>(GetModuleHandleW(nullptr)) + delta +
+		(res.data() - get_clean_exe_span().data());
 }
 
 void update_raw_dirs(const std::filesystem::path& rawDir) {
@@ -1547,7 +1592,7 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 		for (const auto& [k, v] : s_availableReplacementStreams) {
 			if (const auto sqpackView = get_sqpack_view(xivres::sqpack_spec{k.category_id(), k.expac_id(), k.part_id()}, false)) {
 				if (const auto entry = sqpackView->find_entry(k))
-					dynamic_cast<xivres::hotswap_packed_stream*>(entry->Provider.get())->swap_stream();
+					entry->swap_stream();
 			}
 		}
 		s_availableReplacementStreams.clear();
@@ -1579,9 +1624,8 @@ void continuous_update_mod_dirs(HANDLE hReady) {
 		for (const auto& [k, v] : s_availableReplacementStreams) {
 			if (const auto sqpackView = get_sqpack_view(xivres::sqpack_spec{k.category_id(), k.expac_id(), k.part_id()}, false)) {
 				if (const auto entry = sqpackView->find_entry(k)) {
-					const auto hps = dynamic_cast<xivres::hotswap_packed_stream*>(entry->Provider.get());
-					if (hps->size() >= v->size())
-						hps->swap_stream(v);
+					if (entry->size() >= v->size())
+						entry->swap_stream(v);
 				}
 			}
 		}
@@ -1602,6 +1646,8 @@ void do_stuff() {
 
 	for (const auto p : find_rsv_indirection_resolvers())
 		MH_CreateHook(p, &DETOUR_resolve_string_indirection, reinterpret_cast<void**>(&s_resolve_string_indirection_original));
+
+	MH_CreateHook(find_read_sqpk_chunk_function(), &DETOUR_read_sqpk_chunk, reinterpret_cast<void**>(&s_read_sqpk_chunk_original));
 
 	if (void* pfn; utils::loaded_module::current_process().find_imported_function_pointer("kernel32.dll", "CreateFileW", 0, pfn)) {
 		utils::memory_tenderizer m(pfn, sizeof(void*), PAGE_READWRITE);

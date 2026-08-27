@@ -3,6 +3,7 @@
 
 #include <thread>
 
+#include "packed_stream.h"
 #include "sqpack.reader.h"
 #include "unpacked_stream.h"
 #include "util.listener_manager.h"
@@ -14,11 +15,33 @@ namespace xivres::sqpack {
 		class data_view_stream;
 
 	public:
-		struct entry_info {
-			uint32_t EntrySize{};
-			sqindex::data_locator Locator{};
+		class entry_info : public packed_stream {
+			uint32_t m_entrySize{};
+			sqindex::data_locator m_locator{};
+			std::shared_ptr<const packed_stream> m_baseStream;
+			std::shared_ptr<const packed_stream> m_stream;
 
-			std::shared_ptr<packed_stream> Provider;
+		public:
+			entry_info(xivres::path_spec pathSpec, std::shared_ptr<const packed_stream> baseStream)
+				: packed_stream(std::move(pathSpec))
+				, m_baseStream(std::move(baseStream)) {
+			}
+
+			[[nodiscard]] uint32_t entry_size() const { return m_entrySize; }
+			void reserve_entry_size(uint32_t size) { m_entrySize = (std::max)(m_entrySize, size); }
+			void finalize_entry_size();
+
+			[[nodiscard]] const sqindex::data_locator& locator() const { return m_locator; }
+			void locator(sqindex::data_locator v) { m_locator = v; }
+
+			[[nodiscard]] std::shared_ptr<const packed_stream> base_stream() const { return m_baseStream; }
+			void reset_base_stream(std::shared_ptr<const packed_stream> baseStream) { m_baseStream = std::move(baseStream); }
+
+			std::shared_ptr<const packed_stream> swap_stream(std::shared_ptr<const packed_stream> newStream = nullptr);
+
+			[[nodiscard]] std::streamsize size() const override { return m_entrySize; }
+			std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
+			[[nodiscard]] packed::type get_packed_type() const override;
 		};
 
 		struct add_result {
@@ -39,8 +62,9 @@ namespace xivres::sqpack {
 			std::shared_ptr<stream> Index2;
 			std::vector<std::shared_ptr<stream>> Data;
 			std::vector<entry_info*> Entries;
-			std::map<path_spec, std::unique_ptr<entry_info>, path_spec::AllHashComparator> HashOnlyEntries;
-			std::map<path_spec, std::unique_ptr<entry_info>, path_spec::FullPathComparator> FullPathEntries;
+
+			mutable std::map<path_spec, entry_info, path_spec::AllHashComparator> HashOnlyEntries;
+			mutable std::map<path_spec, entry_info, path_spec::FullPathComparator> FullPathEntries;
 
 			[[nodiscard]] entry_info* find_entry(const path_spec& pathSpec) const;
 			[[nodiscard]] entry_info& get_entry(const path_spec& pathSpec) const;
@@ -80,8 +104,8 @@ namespace xivres::sqpack {
 		const std::string DatName;
 
 	private:
-		std::map<path_spec, std::unique_ptr<entry_info>, path_spec::AllHashComparator> m_hashOnlyEntries;
-		std::map<path_spec, std::unique_ptr<entry_info>, path_spec::FullPathComparator> m_fullEntries;
+		std::map<path_spec, entry_info, path_spec::AllHashComparator> m_hashOnlyEntries;
+		std::map<path_spec, entry_info, path_spec::FullPathComparator> m_fullEntries;
 
 		std::vector<sqindex::segment_3_entry> m_sqpackIndexSegment3;
 		std::vector<sqindex::segment_3_entry> m_sqpackIndex2Segment3;
