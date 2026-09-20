@@ -2,7 +2,9 @@
 #define XIVRES_SCD_H_
 
 #include <chrono>
+#include <cstring>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include "stream.h"
@@ -45,12 +47,80 @@ namespace xivres::sound {
 		LE<uint32_t> Unknown_0x01C;
 	};
 
+	// Table 1's entries, named after Lumina's SoundBasicDesc (Data/Parsing/Scd/ScdSound.cs).
+	// `Type` is the useful part here: it distinguishes a genuine multichannel mix from the
+	// engine-switched multi-stem streams the game's music uses. Measured across FFXIV's 2175
+	// music .scd files: every 4- and 6-channel entry is DynamixStream (21 of them, which is
+	// exactly the set this project had been identifying by channel count alone), and every 1-
+	// and 2-channel entry is Normal.
+	enum class sound_type : uint8_t {
+		Normal = 1,
+		Random = 2,
+		Stereo = 3,
+		Cycle = 4,
+		Order = 5,
+		FourChannelSurround = 6,
+		Engine = 7,
+		Dialog = 8,
+		FixedPosition = 10,
+		DynamixStream = 11,
+		GroupRandom = 12,
+		GroupOrder = 13,
+		Atomosgear = 14,
+		ConditionalJump = 15,
+		Empty = 16,
+		MidiMusic = 128,
+	};
+
+	struct sound_descriptor_header {
+		uint8_t TrackCount;
+		uint8_t BusNumber;
+		uint8_t Priority;
+		sound_type Type;
+		LE<uint32_t> Attribute;
+		LE<float> Volume;
+		LE<uint16_t> LocalNumber;
+		uint8_t UserId;
+		int8_t PlayHistory;
+	};
+
+	static_assert(sizeof sound_descriptor_header == 0x10);
+
 	enum class sound_entry_format : uint32_t {
 		WaveFormatPcm = 0x01,
 		Ogg = 0x06,
 		WaveFormatAdpcm = 0x0C,
 		Empty = 0xFFFFFFFF,
 	};
+
+	// The last word of sound_entry_header, named after Lumina's AudioFlag
+	// (Data/Parsing/Scd/ScdAudio.cs). An earlier version of this reader guessed the low half
+	// was a count of aux chunks and walked that many; the two readings agree only while the
+	// value is 0 or 1, which across every sound entry of FFXIV's 2175 music .scd files it
+	// always is -- 0 in 2123 of them and 1 in 35. The format only ever describes one marker
+	// chunk, so the flag is what decides whether it is there.
+	enum class sound_entry_flags : uint32_t {
+		None = 0,
+		MarkerChunk = 0x01,
+		MonoSplit = 0x02,
+		VersionShiftBit = 0x01000000,
+	};
+
+	constexpr sound_entry_flags operator|(sound_entry_flags a, sound_entry_flags b) {
+		return static_cast<sound_entry_flags>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+	}
+
+	constexpr sound_entry_flags operator&(sound_entry_flags a, sound_entry_flags b) {
+		return static_cast<sound_entry_flags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+	}
+
+	constexpr sound_entry_flags operator~(sound_entry_flags a) {
+		return static_cast<sound_entry_flags>(~static_cast<uint32_t>(a));
+	}
+
+	constexpr bool has_flag(sound_entry_flags value, sound_entry_flags flag) {
+		return (value & flag) != sound_entry_flags::None;
+	}
 
 	struct sound_entry_header {
 		LE<uint32_t> StreamSize;
@@ -59,10 +129,11 @@ namespace xivres::sound {
 		LE<sound_entry_format> Format;
 		LE<uint32_t> LoopStartOffset;
 		LE<uint32_t> LoopEndOffset;
-		LE<uint32_t> StreamOffset;
-		LE<uint16_t> AuxChunkCount;
-		LE<uint16_t> Unknown_0x02E;
+		LE<uint32_t> StreamOffset;   // Lumina calls this SubInfoSize
+		LE<sound_entry_flags> Flags;
 	};
+
+	static_assert(sizeof sound_entry_header == 0x20);
 
 	static_assert(sizeof sound_entry_header == 0x20);
 
@@ -196,6 +267,21 @@ namespace xivres::sound {
 		};
 
 		[[nodiscard]] std::vector<std::vector<uint8_t>> read_table_1() const { return read_table(m_offsetsTable1, m_endOfTable1); }
+
+		// Table 1 holds one sound descriptor per sound; `sound_descriptor_header::Type` says
+		// what kind of stream it is. Returns nullopt when the table is absent or the entry is
+		// too short to hold a header, which the callers treat as "fall back to the channel
+		// count" rather than as an error.
+		[[nodiscard]] std::optional<sound_descriptor_header> read_sound_descriptor(size_t index) const {
+			if (index >= m_offsetsTable1.size())
+				return std::nullopt;
+			const auto entry = read_entry(m_offsetsTable1, m_endOfTable1, index);
+			if (entry.size() < sizeof(sound_descriptor_header))
+				return std::nullopt;
+			sound_descriptor_header header{};
+			std::memcpy(&header, entry.data(), sizeof header);
+			return header;
+		}
 
 		[[nodiscard]] std::vector<std::vector<uint8_t>> read_table_2() const { return read_table(m_offsetsTable2, m_endOfTable2); }
 

@@ -178,8 +178,9 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 		res.Buffer.resize(minSize);	
 		res.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]);
 	}
+
 	auto pos = sizeof *res.Header;
-	for (size_t i = 0; i < res.Header->AuxChunkCount; ++i) {
+	if (has_flag(res.Header->Flags, sound_entry_flags::MarkerChunk)) {
 		res.AuxChunks.emplace_back(reinterpret_cast<sound_entry_aux_chunk*>(&res.Buffer[pos]));
 		pos += res.AuxChunks.back()->ChunkSize;
 	}
@@ -197,7 +198,10 @@ void xivres::sound::writer::sound_item::export_to(std::vector<uint8_t>& res) con
 	auto hdr = Header;
 	hdr.StreamOffset = static_cast<uint32_t>(entrySize - Data.size() - sizeof hdr);
 	hdr.StreamSize = static_cast<uint32_t>(Data.size());
-	hdr.AuxChunkCount = static_cast<uint16_t>(AuxChunks.size());
+
+	hdr.Flags = AuxChunks.empty()
+		? *hdr.Flags & ~sound_entry_flags::MarkerChunk
+		: *hdr.Flags | sound_entry_flags::MarkerChunk;
 
 	res.reserve(res.size() + entrySize);
 	insert(hdr);
@@ -293,7 +297,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			.LoopStartOffset = loopStartOffset,
 			.LoopEndOffset = loopEndOffset,
 			.StreamOffset = static_cast<uint32_t>(oggHeaderBytes.size()),
-			.Unknown_0x02E = 0,
+			.Flags = sound_entry_flags::None,
 		},
 		.ExtraData = std::move(oggHeaderBytes),
 		.Data = std::move(dataPages),
@@ -336,7 +340,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 					.StreamSize = sectionHdr.Len,
 					.ChannelCount = wfex.nChannels,
 					.SamplingRate = wfex.nSamplesPerSec,
-					.Unknown_0x02E = 0,
+					.Flags = sound_entry_flags::None,
 				},
 				.Data = {sectionData.begin(), sectionData.end()},
 			};

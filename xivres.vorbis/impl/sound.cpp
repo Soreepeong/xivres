@@ -339,49 +339,6 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			}
 
 			loopStartOffset = oggDataSeekTable.empty() ? 0 : oggDataSeekTable.back();
-
-			if (const auto offset = static_cast<uint32_t>(loopStartBlockIndex - ogg_page_granulepos(&og))) {
-				// ogg packet sample block index and loop start don't align.
-				// pull loop start forward so that it matches ogg packet sample block index.
-
-				loopStartBlockIndex -= offset;
-				loopEndBlockIndex -= offset;
-
-				// adjust loopstart/loopend in ogg metadata.
-				// unnecessary, but for the sake of completeness.
-
-				vorbis_comment vc{};
-				vorbis_comment_init(&vc);
-				const auto vcCleanup = util::on_dtor([&vc] { vorbis_comment_clear(&vc); });
-				if (loopStartBlockIndex || loopEndBlockIndex) {
-					vorbis_comment_add_tag(&vc, "LoopStart", std::format("{}", loopStartBlockIndex).c_str());
-					vorbis_comment_add_tag(&vc, "LoopEnd", std::format("{}", loopEndBlockIndex).c_str());
-				}
-
-				ogg_stream_state os{};
-				if (const auto res = ogg_stream_init(&os, 0))
-					throw std::runtime_error(std::format("ogg_stream_init(reloop): {}", res));
-				auto osCleanup = util::on_dtor([&os] { ogg_stream_clear(&os); });
-
-				ogg_packet header{};
-				ogg_packet headerComments{};
-				ogg_packet headerCode{};
-				vorbis_analysis_headerout(&vd, &vc, &header, &headerComments, &headerCode);
-				ogg_stream_packetin(&os, &header);
-				ogg_stream_packetin(&os, &headerComments);
-				ogg_stream_packetin(&os, &headerCode);
-
-				headerBuffer.clear();
-				while (true) {
-					if (const auto res = ogg_stream_flush_fill(&os, &og, 0); res < 0)
-						throw std::runtime_error(std::format("ogg_stream_flush_fill(reloop): {}", res));
-					else if (res == 0)
-						break;
-
-					headerBuffer.insert(headerBuffer.end(), og.header, og.header + og.header_len);
-					headerBuffer.insert(headerBuffer.end(), og.body, og.body + og.body_len);
-				}
-			}
 		}
 
 		if (progressCallback && !progressCallback(currentBlockIndex))
@@ -430,13 +387,15 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 
 	ogg_stream_state os{};
 	util::on_dtor osCleanup;
+	
+	constexpr uint32_t NotFound = UINT32_MAX;
 
 	std::vector<uint8_t> header;
 	std::vector<uint8_t> data;
 	std::vector<uint32_t> seekTable;
 	std::vector<uint32_t> seekTableSamples;
 	uint32_t loopStartSample = 0, loopEndSample = 0;
-	uint32_t loopStartOffset = 0, loopEndOffset = 0;
+	uint32_t loopStartOffset = NotFound, loopEndOffset = NotFound;
 	ogg_page og{};
 	ogg_packet op{};
 	for (size_t packetIndex = 0, pageIndex = 0; ; ) {
@@ -470,7 +429,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 				header.insert(header.end(), og.body, og.body + og.body_len);
 			} else {
 				const auto sampleIndexAtEndOfPage = static_cast<uint32_t>(ogg_page_granulepos(&og));
-				if (loopStartSample && loopStartOffset == UINT32_MAX && loopStartSample <= sampleIndexAtEndOfPage)
+				if (loopStartSample && loopStartOffset == NotFound && loopStartSample <= sampleIndexAtEndOfPage)
 					loopStartOffset = seekTable.empty() ? 0 : seekTable.back();
 
 				seekTable.push_back(static_cast<uint32_t>(data.size()));
@@ -478,7 +437,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 				data.insert(data.end(), og.header, og.header + og.header_len);
 				data.insert(data.end(), og.body, og.body + og.body_len);
 
-				if (loopEndSample && loopEndOffset == UINT32_MAX && loopEndSample < sampleIndexAtEndOfPage)
+				if (loopEndSample && loopEndOffset == NotFound && loopEndSample < sampleIndexAtEndOfPage)
 					loopEndOffset = static_cast<uint32_t>(data.size());
 			}
 
@@ -503,13 +462,14 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			}
 
 			if (ogg_page_eos(&og)) {
-				if (loopEndSample && !loopEndOffset)
+				if (loopEndSample && loopEndOffset == NotFound)
 					loopEndOffset = static_cast<uint32_t>(data.size());
 
 				return make_from_ogg(
 					std::move(header), std::move(data),
 					static_cast<uint32_t>(vi.channels), static_cast<uint32_t>(vi.rate),
-					loopStartOffset, loopEndOffset,
+					loopStartOffset == NotFound ? 0 : loopStartOffset,
+					loopEndOffset == NotFound ? 0 : loopEndOffset,
 					std::span(seekTable)
 				);
 			}
