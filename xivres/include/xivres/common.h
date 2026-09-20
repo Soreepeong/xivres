@@ -15,7 +15,9 @@ namespace xivres {
 		German = 3,
 		French = 4,
 		ChineseSimplified = 5,
+		ChineseTraditional = 6,
 		Korean = 7,
+		TraditionalChinese = 8,
 	};
 
 	void to_json(nlohmann::json& j, const game_language& value);

@@ -2,6 +2,7 @@
 #define XIVRES_UNICODE_H_
 
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 
@@ -123,8 +124,8 @@ namespace xivres::util::unicode {
 		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), pfnCharMap, strict);
 	}
 
-	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
+	template<class TTo, class TFromElem>
+	TTo& convert(TTo& out, const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) requires (std::is_integral_v<TFromElem>) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
@@ -143,24 +144,27 @@ namespace xivres::util::unicode {
 		return convert(out, std::basic_string_view<TFromElem, TFromTraits>(in), pfnCharMap, strict);
 	}
 
-	template<class TTo, class TFromElem, typename = std::enable_if_t<std::is_integral_v<TFromElem>>>
-	TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
+	template<class TTo, class TFromElem>
+	TTo convert(const TFromElem* in, size_t length = (std::numeric_limits<size_t>::max)(), char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) requires (std::is_integral_v<TFromElem>) {
 		if (length == (std::numeric_limits<size_t>::max)())
 			length = std::char_traits<TFromElem>::length(in);
 
 		TTo out{};
 		return convert(out, std::basic_string_view<TFromElem>(in, length), pfnCharMap, strict);
 	}
+	
+	template <typename T>
+	concept HasNative = requires(const T& t) { t.native(); t.c_str(); };
 
-	inline const std::u8string& convert(const std::u8string& in) { return in; }
-
-	inline const std::u16string& convert(const std::u16string& in) { return in; }
-
-	inline const std::u32string& convert(const std::u32string& in) { return in; }
-
-	inline const std::string& convert(const std::string& in) { return in; }
-
-	inline const std::wstring& convert(const std::wstring& in) { return in; }
+	template <class TTo>
+	TTo convert(const std::filesystem::path& in, char32_t(*pfnCharMap)(char32_t) = nullptr, bool strict = false) {
+		return convert<TTo>(in.native(), pfnCharMap, strict);
+	}
+	
+	template <class TElem, class TTraits = std::char_traits<TElem>, class TAlloc = std::allocator<TElem>>
+	std::basic_string<TElem, TTraits, TAlloc> convert(std::basic_string<TElem, TTraits, TAlloc> in) {
+		return in;
+	}
 
 	namespace blocks {
 		enum purpose_flags : uint64_t {

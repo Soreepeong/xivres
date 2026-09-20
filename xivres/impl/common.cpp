@@ -21,8 +21,14 @@ void xivres::to_json(nlohmann::json& j, const game_language& value) {
 		case game_language::ChineseSimplified:
 			j = "ChineseSimplified";
 			break;
+		case game_language::ChineseTraditional:
+			j = "ChineseTraditional";
+			break;
 		case game_language::Korean:
 			j = "Korean";
+			break;
+		case game_language::TraditionalChinese:
+			j = "TraditionalChinese";
 			break;
 		case game_language::Unspecified:
 		default:
@@ -47,6 +53,10 @@ void xivres::from_json(const nlohmann::json& j, game_language& newValue) {
 		newValue = game_language::French;
 	else if (newValueString == "chs" || newValueString == "chinese" || newValueString == "chinesesimplified" || newValueString == "zh")
 		newValue = game_language::ChineseSimplified;
+	else if (newValueString == "cht" || newValueString == "chinesetraditional")
+		newValue = game_language::ChineseTraditional;
+	else if (newValueString == "tc" || newValueString == "chinesetraditional2" || newValueString == "traditionalchinesetc" || newValueString == "traditionalchinese")
+		newValue = game_language::TraditionalChinese;
 	else if (newValueString == "ko" || newValueString == "korean")
 		newValue = game_language::Korean;
 }
@@ -59,7 +69,9 @@ const char* xivres::game_language_code(game_language lang) {
 		case game_language::German: return "de";
 		case game_language::French: return "fr";
 		case game_language::ChineseSimplified: return "chs";
+		case game_language::ChineseTraditional: return "cht";
 		case game_language::Korean: return "ko";
+		case game_language::TraditionalChinese: return "tc";
 		default: throw std::out_of_range("Invalid language");
 	}
 }
