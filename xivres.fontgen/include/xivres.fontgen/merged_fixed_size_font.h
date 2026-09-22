@@ -19,7 +19,7 @@ namespace xivres::fontgen {
 	};
 
 	class merged_fixed_size_font : public default_abstract_fixed_size_font {
-		struct info_t {
+		struct info {
 			std::set<char32_t> Codepoints;
 			std::map<char32_t, size_t> UsedFontIndices;
 			float Size{};
@@ -29,7 +29,7 @@ namespace xivres::fontgen {
 		};
 
 		std::vector<std::shared_ptr<fixed_size_font>> m_fonts;
-		std::shared_ptr<const info_t> m_info;
+		std::shared_ptr<const info> m_info;
 		mutable std::optional<std::map<std::pair<char32_t, char32_t>, int>> m_kerningPairs;
 
 	public:
@@ -71,7 +71,7 @@ namespace xivres::fontgen {
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
 	private:
-		[[nodiscard]] static int get_vertical_adjustment(const info_t& info, const fixed_size_font& font);
+		[[nodiscard]] static int get_vertical_adjustment(const info& info, const fixed_size_font& font);
 	};
 }
 

@@ -180,6 +180,8 @@ namespace xivres {
 		[[nodiscard]] uint8_t category_id() const { return m_sqpack.category_id(); }
 		[[nodiscard]] uint8_t expac_id() const { return m_sqpack.ExpacId; }
 		[[nodiscard]] uint8_t part_id() const { return m_sqpack.PartId; }
+		[[nodiscard]] static uint32_t hash(std::string_view text);
+
 		[[nodiscard]] uint32_t path_hash() const { return m_pathHash; }
 		[[nodiscard]] uint32_t name_hash() const { return m_nameHash; }
 		[[nodiscard]] uint32_t full_path_hash() const { return m_fullPathHash; }

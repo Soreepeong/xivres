@@ -78,8 +78,12 @@ namespace xivres::textools {
 		std::vector<mod_pack_page::mod_pack_page_json> ModPackPages;
 		std::vector<mods_json> SimpleModsList;
 
+		static mod_pack_json from_stream(const stream& strm);
+
 		void for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices = {});
 		void for_each(std::function<void(const mods_json&)> cb, const nlohmann::json& choices = {}) const;
+		bool for_each_breakable(std::function<bool(mods_json&)> cb, const nlohmann::json& choices = {});
+		bool for_each_breakable(std::function<bool(const mods_json&)> cb, const nlohmann::json& choices = {}) const;
 	};
 	void to_json(nlohmann::json&, const mod_pack_json&);
 	void from_json(const nlohmann::json&, mod_pack_json&);
@@ -145,7 +149,7 @@ namespace xivres::textools {
 		};
 		static_assert(sizeof equipment_and_gimmick_parameter_entry == 5);
 
-		struct ex_skeleton_table_entry_t {
+		struct ex_skeleton_table_entry {
 			uint16_t RaceCode;
 			uint16_t SetId;
 			uint16_t SkelId;

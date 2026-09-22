@@ -13,7 +13,7 @@ namespace xivres::fontgen {
 	};
 
 	class wrapping_fixed_size_font : public default_abstract_fixed_size_font {
-		struct info_t {
+		struct info {
 			std::set<char32_t> Codepoints;
 			std::map<char32_t, char32_t> MappedCodepoints;
 			int LetterSpacing = 0;
@@ -22,7 +22,7 @@ namespace xivres::fontgen {
 		};
 
 		std::shared_ptr<const fixed_size_font> m_font;
-		std::shared_ptr<const info_t> m_info;
+		std::shared_ptr<const info> m_info;
 
 		mutable std::optional<std::map<std::pair<char32_t, char32_t>, int>> m_kerningPairs;
 

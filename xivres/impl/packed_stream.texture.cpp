@@ -274,7 +274,7 @@ std::unique_ptr<xivres::stream> xivres::texture_compressing_packer::pack() {
 	// then it will record mipmap offsets only up to the first occurrence of 1x1.
 	const auto repeatCount = ((mipmapOffsets.size() < 2 ? static_cast<size_t>(rawStreamSize) : mipmapOffsets[1]) - mipmapOffsets[0]) / texture::calc_raw_data_length(texHeader, 0);
 
-	std::vector<std::vector<std::vector<block_data_t>>> blockDataList(mipmapSizes.size());
+	std::vector<std::vector<std::vector<block_data>>> blockDataList(mipmapSizes.size());
 
 	if (!multithreaded()) {
 		for (size_t mipmapIndex = 0; mipmapIndex < mipmapOffsets.size(); ++mipmapIndex) {

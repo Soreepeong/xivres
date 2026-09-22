@@ -10,7 +10,7 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 
 	readOffset += sizeof locator;
 	for (const auto blockSize : m_stream->read_vector<uint16_t>(readOffset, blockCount)) {
-		m_blocks.emplace_back(block_info_t{
+		m_blocks.emplace_back(block_info{
 			.RequestOffsetPastHeader = 0,
 			.BlockOffset = m_blocks.empty() ? *header.HeaderSize : m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize,
 			.PaddedChunkSize = blockSize,

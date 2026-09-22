@@ -120,6 +120,7 @@ namespace xivres::sqpack {
 		add_result add_sqpack(const std::filesystem::path& indexPath, bool overwriteExisting = true, bool overwriteUnknownSegments = false);
 		add_result add_sqpack(const xivres::sqpack::reader& reader, bool overwriteExisting = true, bool overwriteUnknownSegments = false);
 		add_result add_file(path_spec pathSpec, const std::filesystem::path& path, bool overwriteExisting = true);
+		[[nodiscard]] const entry_info* find_entry(const path_spec& pathSpec) const;
 		void reserve_space(path_spec pathSpec, uint32_t size);
 
 		[[nodiscard]] sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr);

@@ -211,6 +211,14 @@ xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(cons
 	return result;
 }
 
+const xivres::sqpack::generator::entry_info* xivres::sqpack::generator::find_entry(const path_spec& pathSpec) const {
+	if (const auto it = m_hashOnlyEntries.find(pathSpec); it != m_hashOnlyEntries.end())
+		return &it->second;
+	if (const auto it = m_fullEntries.find(pathSpec); it != m_fullEntries.end())
+		return &it->second;
+	return nullptr;
+}
+
 xivres::sqpack::generator::add_result xivres::sqpack::generator::add_file(path_spec pathSpec, const std::filesystem::path& path, bool overwriteExisting) {
 	std::shared_ptr<packed_stream> provider;
 

@@ -165,46 +165,47 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_pack_json& p) {
 		p.SimpleModsList = it->get<decltype(p.SimpleModsList)>();
 }
 
-void xivres::textools::mod_pack_json::for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices) {
-	static const nlohmann::json emptyChoices;
+xivres::textools::mod_pack_json xivres::textools::mod_pack_json::from_stream(const stream& strm) {
+	const auto size = strm.size();
+	if (size > 16 * 1024 * 1024)
+		throw bad_data_error("File too big (>16MB).");
 
-	for (auto& entry : SimpleModsList)
-		cb(entry);
+	std::string buf(static_cast<size_t>(size), 0);
+	strm.read_fully(0, &buf[0], buf.size());
 
-	for (size_t pageIndex = 0; pageIndex < ModPackPages.size(); pageIndex++) {
-		auto& modPackPage = ModPackPages[pageIndex];
-		const auto& pageConf = choices.is_array() && pageIndex < choices.size() ? choices[pageIndex] : emptyChoices;
-		for (size_t modGroupIndex = 0; modGroupIndex < modPackPage.ModGroups.size(); modGroupIndex++) {
-			auto& modGroup = modPackPage.ModGroups[modGroupIndex];
-
-			std::set<size_t> indices;
-			if (!pageConf.is_array() || pageConf.size() <= modGroupIndex) {
-				for (size_t i = 0; i < modGroup.OptionList.size(); ++i)
-					indices.insert(i);
-			} else if (pageConf.at(modGroupIndex).is_array()) {
-				const auto tmp = pageConf.at(modGroupIndex).get<std::vector<size_t>>();
-				indices.insert(tmp.begin(), tmp.end());
-			} else {
-				indices.insert(pageConf.at(modGroupIndex).get<size_t>());
-			}
-
-			for (const auto k : indices) {
-				if (k >= modGroup.OptionList.size())
-					continue;
-
-				auto& option = modGroup.OptionList[k];
-				for (auto& modJson : option.ModsJsons)
-					cb(modJson);
-			}
+	std::istringstream in(buf);
+	mod_pack_json res;
+	while (!in.eof()) {
+		nlohmann::json j;
+		try {
+			in >> j;
+		} catch (...) {
+			if (in.eof())
+				break;
+			throw;
 		}
+		if (j.find("ModOffset") != j.end())
+			res.SimpleModsList.emplace_back(j.get<mods_json>());
+		else
+			return j.get<mod_pack_json>();
 	}
+	return res;
+}
+
+void xivres::textools::mod_pack_json::for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices) {
+	for_each_breakable([&cb](mods_json& entry) { cb(entry); return true; }, choices);
 }
 
 void xivres::textools::mod_pack_json::for_each(std::function<void(const mods_json&)> cb, const nlohmann::json& choices) const {
+	for_each_breakable([&cb](const mods_json& entry) { cb(entry); return true; }, choices);
+}
+
+bool xivres::textools::mod_pack_json::for_each_breakable(std::function<bool(mods_json&)> cb, const nlohmann::json& choices) {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
-		cb(entry);
+		if (!cb(entry))
+			return false;
 
 	for (size_t pageIndex = 0; pageIndex < ModPackPages.size(); pageIndex++) {
 		auto& modPackPage = ModPackPages[pageIndex];
@@ -229,10 +230,50 @@ void xivres::textools::mod_pack_json::for_each(std::function<void(const mods_jso
 
 				auto& option = modGroup.OptionList[k];
 				for (auto& modJson : option.ModsJsons)
-					cb(modJson);
+					if (!cb(modJson))
+						return false;
 			}
 		}
 	}
+	return true;
+}
+
+bool xivres::textools::mod_pack_json::for_each_breakable(std::function<bool(const mods_json&)> cb, const nlohmann::json& choices) const {
+	static const nlohmann::json emptyChoices;
+
+	for (auto& entry : SimpleModsList)
+		if (!cb(entry))
+			return false;
+
+	for (size_t pageIndex = 0; pageIndex < ModPackPages.size(); pageIndex++) {
+		auto& modPackPage = ModPackPages[pageIndex];
+		const auto& pageConf = choices.is_array() && pageIndex < choices.size() ? choices[pageIndex] : emptyChoices;
+		for (size_t modGroupIndex = 0; modGroupIndex < modPackPage.ModGroups.size(); modGroupIndex++) {
+			auto& modGroup = modPackPage.ModGroups[modGroupIndex];
+
+			std::set<size_t> indices;
+			if (!pageConf.is_array() || pageConf.size() <= modGroupIndex) {
+				for (size_t i = 0; i < modGroup.OptionList.size(); ++i)
+					indices.insert(i);
+			} else if (pageConf.at(modGroupIndex).is_array()) {
+				const auto tmp = pageConf.at(modGroupIndex).get<std::vector<size_t>>();
+				indices.insert(tmp.begin(), tmp.end());
+			} else {
+				indices.insert(pageConf.at(modGroupIndex).get<size_t>());
+			}
+
+			for (const auto k : indices) {
+				if (k >= modGroup.OptionList.size())
+					continue;
+
+				auto& option = modGroup.OptionList[k];
+				for (auto& modJson : option.ModsJsons)
+					if (!cb(modJson))
+						return false;
+			}
+		}
+	}
+	return true;
 }
 
 bool xivres::textools::mods_json::is_textools_metadata() const {
@@ -394,10 +435,10 @@ void xivres::textools::metafile::apply_gimmick_parameter_edits(gimmmick_paramete
 }
 
 void xivres::textools::metafile::apply_ex_skeleton_table_edits(ex_skeleton_table_file& est) const {
-	if (const auto estedit = get_span<ex_skeleton_table_entry_t>(meta_types::Est); !estedit.empty()) {
+	if (const auto estedit = get_span<ex_skeleton_table_entry>(meta_types::Est); !estedit.empty()) {
 		auto estpairs = est.to_pairs();
 		for (const auto& v : estedit) {
-			const auto key = ex_skeleton_table_file::descriptor_t{.SetId = v.SetId, .RaceCode = v.RaceCode};
+			const auto key = ex_skeleton_table_file::descriptor{.SetId = v.SetId, .RaceCode = v.RaceCode};
 			if (v.SkelId == 0)
 				estpairs.erase(key);
 			else

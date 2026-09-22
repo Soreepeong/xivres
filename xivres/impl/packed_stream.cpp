@@ -13,7 +13,7 @@ void xivres::compressing_packer::preload() {
 	m_preloadedStream.emplace(m_stream);
 }
 
-void xivres::compressing_packer::compress_block(uint32_t offset, uint32_t length, block_data_t& blockData) const {
+void xivres::compressing_packer::compress_block(uint32_t offset, uint32_t length, block_data& blockData) const {
 	if (cancelled())
 		return;
 

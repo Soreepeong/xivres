@@ -24,6 +24,30 @@ namespace xivres {
 	void from_json(const nlohmann::json& j, game_language& newValue);
 	const char* game_language_code(game_language);
 
+	enum class game_publisher : uint16_t {
+		Unspecified = 0,
+		SquareEnixJapan = 1,
+		SquareEnixAmerica = 2,
+		SquareEnixEurope = 3,
+		ShandaGames = 4,
+		ActozSoft = 5,
+		UserjoyGames = 6,
+	};
+
+	void to_json(nlohmann::json&, const game_publisher&);
+	void from_json(const nlohmann::json&, game_publisher&);
+
+	enum class game_release_publisher {
+		Unspecified,
+		SquareEnix,
+		ShandaGames,
+		ActozSoft,
+		UserjoyGames,
+	};
+
+	void to_json(nlohmann::json&, const game_release_publisher&);
+	void from_json(const nlohmann::json&, game_release_publisher&);
+
 	static constexpr uint32_t EntryAlignment = 128;
 
 	class bad_data_error : public std::runtime_error {

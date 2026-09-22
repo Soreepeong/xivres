@@ -163,7 +163,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 	if (!font)
 		return;
 
-	auto info = std::make_shared<info_t>();
+	auto info = std::make_shared<info>();
 	info->Factory = std::move(factory);
 	info->Font = std::move(font);
 	info->Params = params;
@@ -185,12 +185,12 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 				info->Characters.insert(static_cast<char32_t>(i));
 	}
 	{
-		dwrite_font_table kernDataRef(m_dwrite.Face, util::TrueType::Kern::DirectoryTableTag.NativeValue);
-		dwrite_font_table gposDataRef(m_dwrite.Face, util::TrueType::Gpos::DirectoryTableTag.NativeValue);
-		dwrite_font_table cmapDataRef(m_dwrite.Face, util::TrueType::Cmap::DirectoryTableTag.NativeValue);
-		util::TrueType::Kern::View kern(kernDataRef.get_span<char>());
-		util::TrueType::Gpos::View gpos(gposDataRef.get_span<char>());
-		util::TrueType::Cmap::View cmap(cmapDataRef.get_span<char>());
+		dwrite_font_table kernDataRef(m_dwrite.Face, util::truetype::Kern::DirectoryTableTag.NativeValue);
+		dwrite_font_table gposDataRef(m_dwrite.Face, util::truetype::Gpos::DirectoryTableTag.NativeValue);
+		dwrite_font_table cmapDataRef(m_dwrite.Face, util::truetype::Cmap::DirectoryTableTag.NativeValue);
+		util::truetype::Kern::View kern(kernDataRef.get_span<char>());
+		util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
+		util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
 		if (cmap && (kern || gpos)) {
 			const auto cmapVector = cmap.GetGlyphToCharMap();
 
@@ -220,7 +220,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 	if (!strm)
 		return;
 
-	auto info = std::make_shared<info_t>();
+	auto info = std::make_shared<info>();
 	info->Stream = std::move(strm);
 	info->Params = params;
 	info->FontIndex = fontIndex;
@@ -242,12 +242,12 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 				info->Characters.insert(static_cast<char32_t>(i));
 	}
 	{
-		dwrite_font_table kernDataRef(m_dwrite.Face, util::TrueType::Kern::DirectoryTableTag.NativeValue);
-		dwrite_font_table gposDataRef(m_dwrite.Face, util::TrueType::Gpos::DirectoryTableTag.NativeValue);
-		dwrite_font_table cmapDataRef(m_dwrite.Face, util::TrueType::Cmap::DirectoryTableTag.NativeValue);
-		util::TrueType::Kern::View kern(kernDataRef.get_span<char>());
-		util::TrueType::Gpos::View gpos(gposDataRef.get_span<char>());
-		util::TrueType::Cmap::View cmap(cmapDataRef.get_span<char>());
+		dwrite_font_table kernDataRef(m_dwrite.Face, util::truetype::Kern::DirectoryTableTag.NativeValue);
+		dwrite_font_table gposDataRef(m_dwrite.Face, util::truetype::Gpos::DirectoryTableTag.NativeValue);
+		dwrite_font_table cmapDataRef(m_dwrite.Face, util::truetype::Cmap::DirectoryTableTag.NativeValue);
+		util::truetype::Kern::View kern(kernDataRef.get_span<char>());
+		util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
+		util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
 		if (cmap && (kern || gpos)) {
 			const auto cmapVector = cmap.GetGlyphToCharMap();
 
@@ -428,8 +428,8 @@ const xivres::fontgen::fixed_size_font* xivres::fontgen::directwrite_fixed_size_
 	return this;
 }
 
-xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces_t xivres::fontgen::directwrite_fixed_size_font::face_from_info_t(const info_t& info) {
-	dwrite_interfaces_t res{};
+xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen::directwrite_fixed_size_font::face_from_info_t(const info& info) {
+	dwrite_interfaces res{};
 
 	if (!!info.Font != !!info.Factory)
 		throw std::invalid_argument("Both Font and Factory either must be set or not set.");

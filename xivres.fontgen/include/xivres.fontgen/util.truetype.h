@@ -11,7 +11,7 @@
 #include "xivres/util.unicode.h"
 
 #pragma pack(push, 2)
-namespace xivres::util::TrueType {
+namespace xivres::util::truetype {
 	union TagStruct {
 		char Tag[4];
 		uint32_t NativeValue;

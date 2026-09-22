@@ -182,8 +182,8 @@ float xivres::fontgen::freetype_fixed_size_font::font_size() const {
 }
 
 std::string xivres::fontgen::freetype_fixed_size_font::subfamily_name() const {
-	freetype_font_table nameDataRef(*m_face, util::TrueType::Name::DirectoryTableTag.ReverseNativeValue);
-	util::TrueType::Name::View name(nameDataRef.get_span<char>());
+	freetype_font_table nameDataRef(*m_face, util::truetype::Name::DirectoryTableTag.ReverseNativeValue);
+	util::truetype::Name::View name(nameDataRef.get_span<char>());
 	if (!name)
 		return {};
 
@@ -191,8 +191,8 @@ std::string xivres::fontgen::freetype_fixed_size_font::subfamily_name() const {
 }
 
 std::string xivres::fontgen::freetype_fixed_size_font::family_name() const {
-	freetype_font_table nameDataRef(*m_face, util::TrueType::Name::DirectoryTableTag.ReverseNativeValue);
-	util::TrueType::Name::View name(nameDataRef.get_span<char>());
+	freetype_font_table nameDataRef(*m_face, util::truetype::Name::DirectoryTableTag.ReverseNativeValue);
+	util::truetype::Name::View name(nameDataRef.get_span<char>());
 	if (!name)
 		return {};
 
@@ -285,7 +285,7 @@ std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivre
 	return std::move(uniqueGlyphPtr);
 }
 
-FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::create_face(FT_Library library, const info_t& info) {
+FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::create_face(FT_Library library, const info& info) {
 	FT_Face face;
 	success_or_throw(FT_New_Memory_Face(library, &info.Data[0], static_cast<FT_Long>(info.Data.size()), info.FaceIndex, &face));
 	try {
@@ -419,7 +419,7 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 
 xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper(std::vector<uint8_t> data, int faceIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct createStruct)
 	: m_library(return_first_arg_on_success<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType) {
-	auto info = std::make_shared<info_t>();
+	auto info = std::make_shared<info>();
 	info->Data = std::move(data);
 	info->Size = size;
 	info->GammaTable = util::bitmap_copy::create_gamma_table(gamma);
@@ -440,12 +440,12 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 	for (char32_t c = FT_Get_First_Char(m_face, &glyphIndex); glyphIndex; c = FT_Get_Next_Char(m_face, c, &glyphIndex))
 		info->Characters.insert(c);
 
-	freetype_font_table kernDataRef(m_face, util::TrueType::Kern::DirectoryTableTag.ReverseNativeValue);
-	freetype_font_table gposDataRef(m_face, util::TrueType::Gpos::DirectoryTableTag.ReverseNativeValue);
-	freetype_font_table cmapDataRef(m_face, util::TrueType::Cmap::DirectoryTableTag.ReverseNativeValue);
-	util::TrueType::Kern::View kern(kernDataRef.get_span<char>());
-	util::TrueType::Gpos::View gpos(gposDataRef.get_span<char>());
-	util::TrueType::Cmap::View cmap(cmapDataRef.get_span<char>());
+	freetype_font_table kernDataRef(m_face, util::truetype::Kern::DirectoryTableTag.ReverseNativeValue);
+	freetype_font_table gposDataRef(m_face, util::truetype::Gpos::DirectoryTableTag.ReverseNativeValue);
+	freetype_font_table cmapDataRef(m_face, util::truetype::Cmap::DirectoryTableTag.ReverseNativeValue);
+	util::truetype::Kern::View kern(kernDataRef.get_span<char>());
+	util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
+	util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
 	if (cmap && (kern || gpos)) {
 		const auto cmapVector = cmap.GetGlyphToCharMap();
 

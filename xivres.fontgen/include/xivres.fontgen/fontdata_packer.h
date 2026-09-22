@@ -7,7 +7,7 @@
 namespace xivres::fontgen {
 	class fontdata_packer {
 	public:
-		enum class progress_status_t {
+		enum class progress_status {
 			idle,
 			prepare_source_fonts,
 			prepare_target_fonts,
@@ -51,7 +51,7 @@ namespace xivres::fontgen {
 
 		uint64_t m_nMaxProgress = 1;
 		uint64_t m_nCurrentProgress = 0;
-		progress_status_t m_status = progress_status_t::idle;
+		progress_status m_status = progress_status::idle;
 
 		bool m_bCancelRequested = false;
 		std::thread m_workerThread;
@@ -114,7 +114,7 @@ namespace xivres::fontgen {
 			return std::unique_lock(m_runningMtx, std::defer_lock).try_lock_until(t);
 		}
 
-		[[nodiscard]] progress_status_t progress_description() const;
+		[[nodiscard]] progress_status progress_description() const;
 
 		[[nodiscard]] float progress_scaled() const;
 	};

@@ -28,7 +28,7 @@ namespace xivres::fontgen {
 	};
 
 	class fontdata_fixed_size_font : public default_abstract_fixed_size_font {
-		struct info_t {
+		struct info {
 			std::shared_ptr<const fontdata::stream> Font;
 			std::string FamilyName;
 			std::string SubfamilyName;
@@ -38,7 +38,7 @@ namespace xivres::fontgen {
 			std::vector<uint8_t> GammaTable;
 		};
 
-		std::shared_ptr<const info_t> m_info;
+		std::shared_ptr<const info> m_info;
 
 	public:
 		fontdata_fixed_size_font(std::shared_ptr<const fontdata::stream> strm, std::vector<std::shared_ptr<texture::memory_mipmap_stream>> mipmapStreams, std::string familyName, std::string subfamilyName);

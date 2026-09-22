@@ -24,12 +24,12 @@ float xivres::fontgen::fontdata_packer::progress_scaled() const {
 	return 1.f * static_cast<float>(m_nCurrentProgress) / static_cast<float>(m_nMaxProgress);
 }
 
-xivres::fontgen::fontdata_packer::progress_status_t xivres::fontgen::fontdata_packer::progress_description() const {
+xivres::fontgen::fontdata_packer::progress_status xivres::fontgen::fontdata_packer::progress_description() const {
 	return m_status;
 }
 
 bool xivres::fontgen::fontdata_packer::is_running() const {
-	return m_status != progress_status_t::idle;
+	return m_status != progress_status::idle;
 }
 
 const std::vector<std::shared_ptr<xivres::texture::memory_mipmap_stream>>& xivres::fontgen::fontdata_packer::compiled_mipmap_streams() const {
@@ -45,7 +45,7 @@ std::string xivres::fontgen::fontdata_packer::get_error_if_failed() const {
 }
 
 void xivres::fontgen::fontdata_packer::compile() {
-	if (m_status != progress_status_t::idle)
+	if (m_status != progress_status::idle)
 		throw std::runtime_error("Compile already in progress");
 
 	m_nMaxProgress = 1;
@@ -60,43 +60,43 @@ void xivres::fontgen::fontdata_packer::compile() {
 			const auto lock = std::lock_guard(m_runningMtx);
 			cv.notify_all();
 			try {
-				m_status = progress_status_t::prepare_source_fonts;
+				m_status = progress_status::prepare_source_fonts;
 				prepare_threadsafe_source_fonts();
 				if (m_bCancelRequested) {
-					m_status = progress_status_t::idle;
+					m_status = progress_status::idle;
 					return;
 				}
 
-				m_status = progress_status_t::prepare_target_fonts;
+				m_status = progress_status::prepare_target_fonts;
 				prepare_target_font_basic_info();
 				if (m_bCancelRequested) {
-					m_status = progress_status_t::idle;
+					m_status = progress_status::idle;
 					return;
 				}
 
-				m_status = progress_status_t::discover_glyphs;
+				m_status = progress_status::discover_glyphs;
 				prepare_target_codepoints();
 				if (m_bCancelRequested) {
-					m_status = progress_status_t::idle;
+					m_status = progress_status::idle;
 					return;
 				}
 
 				m_nMaxProgress = 3 * m_targetPlans.size();
-				m_status = progress_status_t::measure_glyphs;
+				m_status = progress_status::measure_glyphs;
 				measure_glyphs();
 				if (m_bCancelRequested) {
-					m_status = progress_status_t::idle;
+					m_status = progress_status::idle;
 					return;
 				}
 
-				m_status = progress_status_t::layout_and_draw;
+				m_status = progress_status::layout_and_draw;
 				layout_glyphs();
 
 				m_error.clear();
 			} catch (const std::exception& e) {
 				m_error = e.what();
 			}
-			m_status = progress_status_t::idle;
+			m_status = progress_status::idle;
 		}
 		m_workerThread.detach();
 	});

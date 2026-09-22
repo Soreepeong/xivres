@@ -120,7 +120,7 @@ std::unique_ptr<xivres::stream> xivres::standard_compressing_packer::pack() {
 	const auto rawStreamSize = static_cast<uint32_t>(unpacked().size());
 
 	const auto blockAlignment = align<uint32_t>(rawStreamSize, packed::MaxBlockDataSize);
-	std::vector<block_data_t> blockDataList(blockAlignment.Count);
+	std::vector<block_data> blockDataList(blockAlignment.Count);
 
 	if (!multithreaded()) {
 		blockAlignment.iterate_chunks_breakable([&](const uint32_t index, const uint32_t offset, const uint32_t length) {

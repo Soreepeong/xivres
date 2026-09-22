@@ -6,7 +6,7 @@
 
 namespace xivres {
 	class model_unpacker : public base_unpacker {
-		struct block_info_t {
+		struct block_info {
 			uint32_t RequestOffsetPastHeader;
 			uint32_t BlockOffset;
 			uint16_t PaddedChunkSize;
@@ -14,13 +14,13 @@ namespace xivres {
 			uint16_t GroupIndex;
 			uint16_t GroupBlockIndex;
 			
-			friend bool operator<(uint32_t r, const block_info_t& info) {
+			friend bool operator<(uint32_t r, const block_info& info) {
 				return r < info.RequestOffsetPastHeader;
 			}
 		};
 
 		model::header m_header;
-		std::vector<block_info_t> m_blocks;
+		std::vector<block_info> m_blocks;
 
 	public:
 		model_unpacker(const packed::file_header& header, std::shared_ptr<const packed_stream> strm);

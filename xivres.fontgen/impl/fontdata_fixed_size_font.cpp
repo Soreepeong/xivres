@@ -114,7 +114,7 @@ xivres::fontgen::fontdata_fixed_size_font::fontdata_fixed_size_font(std::shared_
 			throw std::invalid_argument("All mipmap streams must be in A8R8G8B8 format.");
 	}
 
-	auto info = std::make_shared<info_t>();
+	auto info = std::make_shared<info>();
 	info->Font = std::move(strm);
 	info->FamilyName = std::move(familyName);
 	info->SubfamilyName = std::move(subfamilyName);

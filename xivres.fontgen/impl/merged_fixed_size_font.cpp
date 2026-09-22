@@ -1,6 +1,6 @@
 #include "../include/xivres.fontgen/merged_fixed_size_font.h"
 
-int xivres::fontgen::merged_fixed_size_font::get_vertical_adjustment(const info_t& info, const xivres::fontgen::fixed_size_font& font) {
+int xivres::fontgen::merged_fixed_size_font::get_vertical_adjustment(const info& info, const xivres::fontgen::fixed_size_font& font) {
 	switch (info.Alignment) {
 		case vertical_alignment::Top:
 			return 0;
@@ -119,7 +119,7 @@ std::string xivres::fontgen::merged_fixed_size_font::family_name() const {
 }
 
 xivres::fontgen::merged_fixed_size_font::merged_fixed_size_font(std::vector<std::pair<std::shared_ptr<fixed_size_font>, codepoint_merge_mode>> fonts, vertical_alignment verticalAlignment) {
-	auto info = std::make_shared<info_t>();
+	auto info = std::make_shared<info>();
 	if (fonts.empty())
 		fonts.emplace_back(std::make_shared<empty_fixed_size_font>(), codepoint_merge_mode::AddAll);
 

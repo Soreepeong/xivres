@@ -61,6 +61,90 @@ void xivres::from_json(const nlohmann::json& j, game_language& newValue) {
 		newValue = game_language::Korean;
 }
 
+void xivres::to_json(nlohmann::json& j, const game_publisher& value) {
+	switch (value) {
+		case game_publisher::SquareEnixJapan:
+			j = "SquareEnixJapan";
+			break;
+		case game_publisher::SquareEnixAmerica:
+			j = "SquareEnixAmerica";
+			break;
+		case game_publisher::SquareEnixEurope:
+			j = "SquareEnixEurope";
+			break;
+		case game_publisher::ShandaGames:
+			j = "ShandaGames";
+			break;
+		case game_publisher::ActozSoft:
+			j = "ActozSoft";
+			break;
+		case game_publisher::UserjoyGames:
+			j = "UserjoyGames";
+			break;
+		case game_publisher::Unspecified:
+		default:
+			j = "Unspecified";
+	}
+}
+
+void xivres::from_json(const nlohmann::json& j, game_publisher& newValue) {
+	const auto newValueString = util::unicode::convert<std::string>(j.get<std::string>(), &util::unicode::lower);
+
+	newValue = game_publisher::Unspecified;
+	if (newValueString.empty())
+		return;
+
+	if (newValueString == "squareenixjapan" || newValueString == "japan")
+		newValue = game_publisher::SquareEnixJapan;
+	else if (newValueString == "squareenixamerica" || newValueString == "northamerica")
+		newValue = game_publisher::SquareEnixAmerica;
+	else if (newValueString == "squareenixeurope" || newValueString == "europe")
+		newValue = game_publisher::SquareEnixEurope;
+	else if (newValueString == "shandagames" || newValueString == "china")
+		newValue = game_publisher::ShandaGames;
+	else if (newValueString == "actozsoft" || newValueString == "korea")
+		newValue = game_publisher::ActozSoft;
+	else if (newValueString == "userjoygames" || newValueString == "taiwan")
+		newValue = game_publisher::UserjoyGames;
+}
+
+void xivres::to_json(nlohmann::json& j, const game_release_publisher& value) {
+	switch (value) {
+		case game_release_publisher::SquareEnix:
+			j = "SquareEnix";
+			break;
+		case game_release_publisher::ShandaGames:
+			j = "ShandaGames";
+			break;
+		case game_release_publisher::ActozSoft:
+			j = "ActozSoft";
+			break;
+		case game_release_publisher::UserjoyGames:
+			j = "UserjoyGames";
+			break;
+		case game_release_publisher::Unspecified:
+		default:
+			j = "Unspecified";
+	}
+}
+
+void xivres::from_json(const nlohmann::json& j, game_release_publisher& newValue) {
+	const auto newValueString = util::unicode::convert<std::string>(j.get<std::string>(), &util::unicode::lower);
+
+	newValue = game_release_publisher::Unspecified;
+	if (newValueString.empty())
+		return;
+
+	if (newValueString == "squareenix" || newValueString == "international")
+		newValue = game_release_publisher::SquareEnix;
+	else if (newValueString == "shandagames" || newValueString == "chinese")
+		newValue = game_release_publisher::ShandaGames;
+	else if (newValueString == "actozsoft" || newValueString == "korean")
+		newValue = game_release_publisher::ActozSoft;
+	else if (newValueString == "userjoygames" || newValueString == "taiwanese")
+		newValue = game_release_publisher::UserjoyGames;
+}
+
 const char* xivres::game_language_code(game_language lang) {
 	switch (lang) {
 		case game_language::Unspecified: return nullptr;

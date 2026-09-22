@@ -227,7 +227,7 @@ std::streamsize xivres::model_passthrough_packer::translate_read(std::streamoff 
 std::unique_ptr<xivres::stream> xivres::model_compressing_packer::pack() {
 	const auto unpackedHeader = unpacked().read_fully<model::header>(0);
 
-	std::vector<std::vector<block_data_t>> blockDataList;
+	std::vector<std::vector<block_data>> blockDataList;
 	blockDataList.reserve(11);
 
 	if (!multithreaded()) {

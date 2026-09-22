@@ -68,8 +68,10 @@ namespace xivres::util {
 					if (onUnbind)
 						onUnbind();
 
-					m_cv.wait(lock, [this, callbackId]() { return m_callbackUseCounters[callbackId] == 0; });
-					m_callbackUseCounters.erase(callbackId);
+					if (!*destructed) {
+						m_cv.wait(lock, [this, callbackId]() { return m_callbackUseCounters[callbackId] == 0; });
+						m_callbackUseCounters.erase(callbackId);
+					}
 				} };
 			}
 

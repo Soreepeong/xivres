@@ -166,7 +166,7 @@ namespace xivres {
 		[[nodiscard]] virtual std::unique_ptr<stream> pack() = 0;
 
 	protected:
-		struct block_data_t {
+		struct block_data {
 			bool Deflated{};
 			uint32_t DecompressedSize{};
 			std::vector<uint8_t> Data;
@@ -190,7 +190,7 @@ namespace xivres {
 
 		void preload();
 
-		void compress_block(uint32_t offset, uint32_t length, block_data_t& blockData) const;
+		void compress_block(uint32_t offset, uint32_t length, block_data& blockData) const;
 	};
 
 	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<compressing_packer, TPacker>>>

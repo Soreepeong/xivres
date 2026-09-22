@@ -159,6 +159,13 @@ xivres::path_spec& xivres::path_spec::operator+=(const path_spec& r) {
 	return *this;
 }
 
+uint32_t xivres::path_spec::hash(std::string_view text) {
+	std::string s;
+	s.reserve(text.size());
+	util::unicode::convert(s, text, &util::unicode::lower);
+	return ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+}
+
 xivres::path_spec& xivres::path_spec::replace_stem(const std::string& newStem) {
 	if (m_parts.empty())
 		void();

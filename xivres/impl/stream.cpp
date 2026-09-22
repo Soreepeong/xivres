@@ -62,7 +62,7 @@ struct xivres::file_stream::data {
 
 	data(std::filesystem::path path)
 		: m_path(std::move(path))
-		, m_hFile(CreateFileW(m_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr)) {
+		, m_hFile(CreateFileW(m_path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr)) {
 		if (m_hFile == INVALID_HANDLE_VALUE)
 			throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()));
 	}

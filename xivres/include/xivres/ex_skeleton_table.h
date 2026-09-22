@@ -11,31 +11,31 @@
 namespace xivres {
 	class ex_skeleton_table_file {
 	public:
-		struct descriptor_t {
+		struct descriptor {
 			uint16_t SetId;
 			uint16_t RaceCode;
 
-			bool operator<(const descriptor_t& r) const {
+			bool operator<(const descriptor& r) const {
 				return RaceCode == r.RaceCode ? SetId < r.SetId : RaceCode < r.RaceCode;
 			}
 
-			bool operator<=(const descriptor_t& r) const {
+			bool operator<=(const descriptor& r) const {
 				return RaceCode == r.RaceCode ? SetId <= r.SetId : RaceCode <= r.RaceCode;
 			}
 
-			bool operator>(const descriptor_t& r) const {
+			bool operator>(const descriptor& r) const {
 				return RaceCode == r.RaceCode ? SetId > r.SetId : RaceCode > r.RaceCode;
 			}
 
-			bool operator>=(const descriptor_t& r) const {
+			bool operator>=(const descriptor& r) const {
 				return RaceCode == r.RaceCode ? SetId >= r.SetId : RaceCode >= r.RaceCode;
 			}
 
-			bool operator==(const descriptor_t& r) const {
+			bool operator==(const descriptor& r) const {
 				return SetId == r.SetId && RaceCode == r.RaceCode;
 			}
 
-			bool operator!=(const descriptor_t& r) const {
+			bool operator!=(const descriptor& r) const {
 				return SetId != r.SetId || RaceCode != r.RaceCode;
 			}
 		};
@@ -56,7 +56,7 @@ namespace xivres {
 			: m_data(strm.read_vector<uint8_t>()) {
 		}
 
-		ex_skeleton_table_file(const std::map<descriptor_t, uint16_t>& pairs)
+		ex_skeleton_table_file(const std::map<descriptor, uint16_t>& pairs)
 			: m_data(4) {
 			from_pairs(pairs);
 		}
@@ -95,20 +95,20 @@ namespace xivres {
 			return *reinterpret_cast<const uint32_t*>(&m_data[0]);
 		}
 
-		[[nodiscard]] descriptor_t& descriptor(size_t index) {
-			return reinterpret_cast<descriptor_t*>(&m_data[4])[index];
+		[[nodiscard]] descriptor& descriptor_at(size_t index) {
+			return reinterpret_cast<descriptor*>(&m_data[4])[index];
 		}
 
-		[[nodiscard]] const descriptor_t& descriptor(size_t index) const {
-			return reinterpret_cast<const descriptor_t*>(&m_data[4])[index];
+		[[nodiscard]] const descriptor& descriptor_at(size_t index) const {
+			return reinterpret_cast<const descriptor*>(&m_data[4])[index];
 		}
 
-		[[nodiscard]] std::span<descriptor_t> descriptors() {
-			return {reinterpret_cast<descriptor_t*>(&m_data[4]), count()};
+		[[nodiscard]] std::span<descriptor> descriptors() {
+			return {reinterpret_cast<descriptor*>(&m_data[4]), count()};
 		}
 
-		[[nodiscard]] std::span<const descriptor_t> descriptors() const {
-			return {reinterpret_cast<const descriptor_t*>(&m_data[4]), count()};
+		[[nodiscard]] std::span<const descriptor> descriptors() const {
+			return {reinterpret_cast<const descriptor*>(&m_data[4]), count()};
 		}
 
 		[[nodiscard]] uint16_t& skel_id(size_t index) {
@@ -127,20 +127,20 @@ namespace xivres {
 			return {reinterpret_cast<const uint16_t*>(&m_data[4 + descriptors().size_bytes()]), count()};
 		}
 
-		[[nodiscard]] std::map<descriptor_t, uint16_t> to_pairs() const {
-			std::map<descriptor_t, uint16_t> res;
+		[[nodiscard]] std::map<descriptor, uint16_t> to_pairs() const {
+			std::map<descriptor, uint16_t> res;
 			for (size_t i = 0, i_ = count(); i < i_; ++i)
-				res.emplace(descriptor(i), skel_id(i));
+				res.emplace(descriptor_at(i), skel_id(i));
 			return res;
 		}
 
-		void from_pairs(const std::map<descriptor_t, uint16_t>& pairs) {
+		void from_pairs(const std::map<descriptor, uint16_t>& pairs) {
 			m_data.resize(4 + pairs.size() * 6);
 			count() = static_cast<uint32_t>(pairs.size());
 
 			size_t i = 0;
 			for (const auto& [desc, skelId] : pairs) {
-				descriptor(i) = desc;
+				descriptor_at(i) = desc;
 				skel_id(i) = skelId;
 				i++;
 			}

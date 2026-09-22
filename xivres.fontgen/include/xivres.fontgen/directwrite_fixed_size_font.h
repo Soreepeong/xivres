@@ -50,7 +50,7 @@ namespace xivres::fontgen {
 		};
 
 	private:
-		struct info_t {
+		struct info {
 			IDWriteFactoryPtr Factory;
 			IDWriteFontPtr Font;
 			std::shared_ptr<stream> Stream;
@@ -69,7 +69,7 @@ namespace xivres::fontgen {
 			}
 		};
 
-		struct dwrite_interfaces_t {
+		struct dwrite_interfaces {
 			IDWriteFactoryPtr Factory;
 			IDWriteFactory3Ptr Factory3;
 			IDWriteFontCollectionPtr Collection;
@@ -81,8 +81,8 @@ namespace xivres::fontgen {
 			IDWriteTypographyPtr Typography;
 		};
 
-		dwrite_interfaces_t m_dwrite;
-		std::shared_ptr<const info_t> m_info;
+		dwrite_interfaces m_dwrite;
+		std::shared_ptr<const info> m_info;
 		mutable std::vector<uint8_t> m_drawBuffer;
 
 	public:
@@ -121,7 +121,7 @@ namespace xivres::fontgen {
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
 	private:
-		[[nodiscard]] static dwrite_interfaces_t face_from_info_t(const info_t& info);
+		[[nodiscard]] static dwrite_interfaces face_from_info_t(const info& info);
 
 		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const;
 	};

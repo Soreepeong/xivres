@@ -34,7 +34,7 @@ namespace xivres::fontgen {
 
 	private:
 		class freetype_face_wrapper {
-			struct info_t {
+			struct info {
 				std::vector<uint8_t> Data;
 				std::set<char32_t> Characters;
 				std::map<std::pair<char32_t, char32_t>, int> KerningPairs;
@@ -46,7 +46,7 @@ namespace xivres::fontgen {
 			};
 
 			library_ptr_t m_library;
-			std::shared_ptr<const info_t> m_info;
+			std::shared_ptr<const info> m_info;
 			FT_Face m_face{};
 			hb_font_t* m_hbFont = nullptr;
 
@@ -79,7 +79,7 @@ namespace xivres::fontgen {
 			[[nodiscard]] const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const;
 
 		private:
-			static FT_Face create_face(FT_Library library, const info_t& info);
+			static FT_Face create_face(FT_Library library, const info& info);
 		};
 
 		freetype_face_wrapper m_face;
