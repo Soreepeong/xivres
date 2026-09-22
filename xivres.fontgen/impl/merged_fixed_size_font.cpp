@@ -119,7 +119,7 @@ std::string xivres::fontgen::merged_fixed_size_font::family_name() const {
 }
 
 xivres::fontgen::merged_fixed_size_font::merged_fixed_size_font(std::vector<std::pair<std::shared_ptr<fixed_size_font>, codepoint_merge_mode>> fonts, vertical_alignment verticalAlignment) {
-	auto info = std::make_shared<info>();
+	auto info = std::make_shared<struct info>();
 	if (fonts.empty())
 		fonts.emplace_back(std::make_shared<empty_fixed_size_font>(), codepoint_merge_mode::AddAll);
 

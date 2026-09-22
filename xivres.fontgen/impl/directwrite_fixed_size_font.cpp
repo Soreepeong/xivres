@@ -163,7 +163,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 	if (!font)
 		return;
 
-	auto info = std::make_shared<info>();
+	auto info = std::make_shared<struct info>();
 	info->Factory = std::move(factory);
 	info->Font = std::move(font);
 	info->Params = params;
@@ -220,7 +220,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 	if (!strm)
 		return;
 
-	auto info = std::make_shared<info>();
+	auto info = std::make_shared<struct info>();
 	info->Stream = std::move(strm);
 	info->Params = params;
 	info->FontIndex = fontIndex;

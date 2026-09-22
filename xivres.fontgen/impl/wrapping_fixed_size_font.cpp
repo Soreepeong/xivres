@@ -195,7 +195,7 @@ std::string xivres::fontgen::wrapping_fixed_size_font::family_name() const {
 
 xivres::fontgen::wrapping_fixed_size_font::wrapping_fixed_size_font(std::shared_ptr<const fixed_size_font> font, const wrap_modifiers& wrapModifiers)
 	: m_font(std::move(font)) {
-	auto info = std::make_shared<info>();
+	auto info = std::make_shared<struct info>();
 	info->LetterSpacing = wrapModifiers.LetterSpacing;
 	info->HorizontalOffset = wrapModifiers.HorizontalOffset;
 	info->BaselineShift = wrapModifiers.BaselineShift;

@@ -55,15 +55,19 @@ namespace xivres::fontgen {
 
 			}
 			~as_mutable_rect_pointer_struct() { m.set_from(r); }
-		} as_mutable_rect_pointer() {
+		};
+
+		as_mutable_rect_pointer_struct as_mutable_rect_pointer() {
 			return as_mutable_rect_pointer_struct(*this);
 		}
 
-		[[nodiscard]] struct as_const_rect_pointer_struct {
+		struct as_const_rect_pointer_struct {
 			RECT r;
 			operator RECT* () { return &r; }
 			as_const_rect_pointer_struct(const glyph_metrics& m) : r(m) {}
-		} as_const_rect_pointer() const {
+		};
+
+		[[nodiscard]] as_const_rect_pointer_struct as_const_rect_pointer() const {
 			return as_const_rect_pointer_struct(*this);
 		}
 #endif

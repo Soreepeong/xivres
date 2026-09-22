@@ -419,7 +419,7 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 
 xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper(std::vector<uint8_t> data, int faceIndex, float size, float gamma, const font_render_transformation_matrix& matrix, create_struct createStruct)
 	: m_library(return_first_arg_on_success<FT_Library>(FT_Init_FreeType), &FT_Done_FreeType) {
-	auto info = std::make_shared<info>();
+	auto info = std::make_shared<struct info>();
 	info->Data = std::move(data);
 	info->Size = size;
 	info->GammaTable = util::bitmap_copy::create_gamma_table(gamma);
