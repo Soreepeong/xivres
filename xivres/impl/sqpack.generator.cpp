@@ -46,9 +46,15 @@ xivres::sqpack::generator::entry_info& xivres::sqpack::generator::sqpack_views::
 std::shared_ptr<const xivres::packed_stream> xivres::sqpack::generator::entry_info::swap_stream(std::shared_ptr<const packed_stream> newStream) {
 	if (newStream && newStream->size() > m_entrySize)
 		throw std::invalid_argument("Provided strm requires more space than reserved size");
+	const auto lock = std::scoped_lock(m_streamMtx);
 	auto oldStream{std::move(m_stream)};
 	m_stream = std::move(newStream);
 	return oldStream;
+}
+
+std::shared_ptr<const xivres::packed_stream> xivres::sqpack::generator::entry_info::current_stream() const {
+	const auto lock = std::scoped_lock(m_streamMtx);
+	return m_stream ? m_stream : m_baseStream;
 }
 
 void xivres::sqpack::generator::entry_info::finalize_entry_size() {
@@ -77,7 +83,8 @@ std::streamsize xivres::sqpack::generator::entry_info::read(std::streamoff offse
 		length = m_entrySize - offset;
 
 	auto target = std::span(static_cast<uint8_t*>(buf), static_cast<size_t>(length));
-	const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : placeholder_packed_stream::instance();
+	const auto current = current_stream();
+	const auto& underlyingStream = current ? *current : placeholder_packed_stream::instance();
 	const auto underlyingStreamLength = underlyingStream.size();
 	const auto dataLength = offset < underlyingStreamLength ? (std::min)(length, underlyingStreamLength - offset) : 0;
 
@@ -93,17 +100,18 @@ std::streamsize xivres::sqpack::generator::entry_info::read(std::streamoff offse
 }
 
 uint64_t xivres::sqpack::generator::entry_info::data_size() const {
-	const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : placeholder_packed_stream::instance();
-	return (std::min<uint64_t>)(m_entrySize, underlyingStream.size());
+	const auto current = current_stream();
+	return (std::min<uint64_t>)(m_entrySize, current ? current->size() : placeholder_packed_stream::instance().size());
 }
 
 void xivres::sqpack::generator::entry_info::hold_until(std::chrono::steady_clock::time_point until) const {
-	if (const auto& underlyingStream = m_stream ? m_stream : m_baseStream)
-		underlyingStream->hold_until(until);
+	if (const auto current = current_stream())
+		current->hold_until(until);
 }
 
 xivres::packed::type xivres::sqpack::generator::entry_info::get_packed_type() const {
-	return m_stream ? m_stream->get_packed_type() : m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
+	const auto current = current_stream();
+	return current ? current->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }
 
 xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::operator+=(add_result& r) {
@@ -753,21 +761,24 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 	std::vector<sqdata::header> dataSubheaders;
 
-	std::vector<entry_info> entries;
-	entries.reserve(m_fullEntries.size() + m_hashOnlyEntries.size());
-	for (auto& val : m_fullEntries | std::views::values)
-		entries.emplace_back(std::move(val));
-	for (auto& val : m_hashOnlyEntries | std::views::values)
-		entries.emplace_back(std::move(val));
+	auto fullEntries = std::move(m_fullEntries);
+	auto hashOnlyEntries = std::move(m_hashOnlyEntries);
 	m_fullEntries.clear();
 	m_hashOnlyEntries.clear();
 
+	std::vector<entry_info*> entries;
+	entries.reserve(fullEntries.size() + hashOnlyEntries.size());
+	for (auto& val : fullEntries | std::views::values)
+		entries.emplace_back(&val);
+	for (auto& val : hashOnlyEntries | std::views::values)
+		entries.emplace_back(&val);
+
 	std::map<std::pair<uint32_t, uint32_t>, std::vector<entry_info*>> pairHashes;
 	std::map<uint32_t, std::vector<entry_info*>> fullHashes;
-	for (auto& entry : entries) {
-		const auto& pathSpec = entry.path_spec();
-		pairHashes[std::make_pair(pathSpec.path_hash(), pathSpec.name_hash())].emplace_back(&entry);
-		fullHashes[pathSpec.full_path_hash()].emplace_back(&entry);
+	for (const auto entry : entries) {
+		const auto& pathSpec = entry->path_spec();
+		pairHashes[std::make_pair(pathSpec.path_hash(), pathSpec.name_hash())].emplace_back(entry);
+		fullHashes[pathSpec.full_path_hash()].emplace_back(entry);
 	}
 
 	std::vector<sqindex::data_locator> locators;
@@ -778,7 +789,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 		for (size_t i = 0;;) {
 			for (; i < entries.size() && waiter.pending() < (std::max<size_t>)(8, 2 * waiter.pool().concurrency()); ++i) {
-				waiter.submit([i, entry = &entries[i]](const util::thread_pool::base_task& task) {
+				waiter.submit([i, entry = entries[i]](const util::thread_pool::base_task& task) {
 					task.throw_if_cancelled();
 					return std::make_pair(i, entry->base_stream()->read_vector<char>());
 				});
@@ -789,7 +800,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 			if (!resultPair)
 				break;
 
-			auto& entry = entries[resultPair->first];
+			auto& entry = *entries[resultPair->first];
 			auto& data = resultPair->second;
 			const auto entrySize = static_cast<uint32_t>(entry.base_stream()->size());
 			entry.reset_base_stream(nullptr);

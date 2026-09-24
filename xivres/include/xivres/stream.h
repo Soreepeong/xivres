@@ -46,17 +46,18 @@ namespace xivres {
 		}
 
 		template<typename T>
-		[[nodiscard]] std::vector<T> read_vector(std::streamoff offset, size_t count, size_t maxCount = SIZE_MAX) const {
+		[[nodiscard]] std::vector<T> read_vector(std::streamoff offset = 0, size_t count = SIZE_MAX, size_t maxCount = SIZE_MAX) const {
+			if (count == SIZE_MAX) {
+				const auto streamSize = size();
+				if (offset < 0 || offset > streamSize)
+					throw std::out_of_range("offset is outside the stream");
+				count = static_cast<size_t>(static_cast<uint64_t>(streamSize - offset) / sizeof(T));
+			}
 			if (count > maxCount)
 				throw std::runtime_error("trying to read too many");
 			std::vector<T> result(count);
 			read_fully(offset, std::span(result));
 			return result;
-		}
-
-		template<typename T>
-		[[nodiscard]] std::vector<T> read_vector(size_t maxCount = SIZE_MAX) const {
-			return read_vector<T>(0, (std::min)(maxCount, static_cast<size_t>(size() / sizeof(T))));
 		}
 
 		template<typename T>

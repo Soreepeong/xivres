@@ -13,9 +13,15 @@ xivres::hotswap_packed_stream::hotswap_packed_stream(const xivres::path_spec& pa
 std::shared_ptr<const xivres::packed_stream> xivres::hotswap_packed_stream::swap_stream(std::shared_ptr<const packed_stream> newStream) {
 	if (newStream && newStream->size() > m_reservedSize)
 		throw std::invalid_argument("Provided strm requires more space than reserved size");
+	const auto lock = std::scoped_lock(m_streamMtx);
 	auto oldStream{ std::move(m_stream) };
 	m_stream = std::move(newStream);
 	return oldStream;
+}
+
+std::shared_ptr<const xivres::packed_stream> xivres::hotswap_packed_stream::current_stream() const {
+	const auto lock = std::scoped_lock(m_streamMtx);
+	return m_stream ? m_stream : m_baseStream;
 }
 
 std::shared_ptr<const xivres::packed_stream> xivres::hotswap_packed_stream::base_stream() const {
@@ -33,7 +39,8 @@ std::streamsize xivres::hotswap_packed_stream::read(std::streamoff offset, void*
 		length = m_reservedSize - offset;
 
 	auto target = std::span(static_cast<uint8_t*>(buf), static_cast<size_t>(length));
-	const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : placeholder_packed_stream::instance();
+	const auto current = current_stream();
+	const auto& underlyingStream = current ? *current : placeholder_packed_stream::instance();
 	const auto underlyingStreamLength = underlyingStream.size();
 	const auto dataLength = offset < underlyingStreamLength ? (std::min)(length, underlyingStreamLength - offset) : 0;
 
@@ -49,10 +56,11 @@ std::streamsize xivres::hotswap_packed_stream::read(std::streamoff offset, void*
 }
 
 void xivres::hotswap_packed_stream::hold_until(std::chrono::steady_clock::time_point until) const {
-	if (const auto& underlyingStream = m_stream ? m_stream : m_baseStream)
-		underlyingStream->hold_until(until);
+	if (const auto current = current_stream())
+		current->hold_until(until);
 }
 
 xivres::packed::type xivres::hotswap_packed_stream::get_packed_type() const {
-	return m_stream ? m_stream->get_packed_type() : m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
+	const auto current = current_stream();
+	return current ? current->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }

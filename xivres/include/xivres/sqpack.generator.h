@@ -22,11 +22,14 @@ namespace xivres::sqpack {
 		class entry_info : public packed_stream {
 			uint32_t m_entrySize{};
 			sqindex::data_locator m_locator{};
+			mutable std::mutex m_streamMtx;
 			std::shared_ptr<const packed_stream> m_baseStream;
 			std::shared_ptr<const packed_stream> m_stream;
 
 			std::optional<std::pair<sqindex::data_locator, uint64_t>> m_originalPlace;
 			bool m_keepsOriginalPlace = false;
+
+			[[nodiscard]] std::shared_ptr<const packed_stream> current_stream() const;
 
 		public:
 			entry_info(xivres::path_spec pathSpec, std::shared_ptr<const packed_stream> baseStream)
@@ -45,14 +48,23 @@ namespace xivres::sqpack {
 			bool try_keep_original_place();
 			[[nodiscard]] bool keeps_original_place() const { return m_keepsOriginalPlace; }
 
-			[[nodiscard]] std::shared_ptr<const packed_stream> base_stream() const { return m_baseStream; }
+			[[nodiscard]] std::shared_ptr<const packed_stream> base_stream() const {
+				const auto lock = std::scoped_lock(m_streamMtx);
+				return m_baseStream;
+			}
+
 			void reset_base_stream(std::shared_ptr<const packed_stream> baseStream) {
+				const auto lock = std::scoped_lock(m_streamMtx);
 				m_baseStream = std::move(baseStream);
 				m_originalPlace.reset();
 			}
 
 			std::shared_ptr<const packed_stream> swap_stream(std::shared_ptr<const packed_stream> newStream = nullptr);
-			[[nodiscard]] bool swapped() const { return !!m_stream; }
+
+			[[nodiscard]] bool swapped() const {
+				const auto lock = std::scoped_lock(m_streamMtx);
+				return !!m_stream;
+			}
 
 			[[nodiscard]] uint64_t data_size() const;
 
