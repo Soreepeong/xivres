@@ -10,6 +10,11 @@ namespace xivres::util::unicode {
 	constexpr char32_t UReplacement = U'\uFFFD';
 	constexpr char32_t UInvalid = U'\uFFFF';
 
+	constexpr bool is_space(char32_t c) {
+		return (0x09 <= c && c <= 0x0D) || c == 0x20 || c == 0x85 || c == 0xA0 || c == 0x1680
+			|| (0x2000 <= c && c <= 0x200A) || c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000;
+	}
+
 	char32_t u8uint32_to_u32(uint32_t n);
 
 	uint32_t u32_to_u8uint32(char32_t codepoint);

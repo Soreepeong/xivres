@@ -8,6 +8,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "util.unicode.h"
+
 namespace xivres::util {
 	template<typename T>
 	T clamp(T value, T minValue, T maxValue) {
@@ -59,17 +61,34 @@ namespace xivres::util {
 	}
 
 	template<class TElem, class TTraits, class TAlloc>
-	std::basic_string<TElem, TTraits, TAlloc> trim(std::basic_string<TElem, TTraits, TAlloc> s, bool left = true, bool right = true) {
-		auto view = std::basic_string_view<TElem, TTraits>(s);
-		if (left) {
-			while (!view.empty() && (view.front() < 255 && std::isspace(view.front())))
-				view = view.substr(1);
+	[[nodiscard]] std::basic_string<TElem, TTraits, TAlloc> trim(const std::basic_string<TElem, TTraits, TAlloc>& s, bool left = true, bool right = true) {
+		size_t firstNonSpace = s.size(), lastNonSpaceEnd = 0;
+		for (size_t i = 0; i < s.size();) {
+			char32_t c;
+			const auto length = unicode::decode(c, &s[i], s.size() - i, true);
+			if (!unicode::is_space(c)) {
+				firstNonSpace = (std::min)(firstNonSpace, i);
+				lastNonSpaceEnd = i + length;
+			}
+			i += length;
 		}
-		if (right) {
-			while (!view.empty() && (view.back() < 255 && std::isspace(view.back())))
-				view = view.substr(0, view.size() - 1);
-		}
-		return { view.begin(), view.end() };
+
+		const auto from = left ? firstNonSpace : 0;
+		const auto to = right ? lastNonSpaceEnd : s.size();
+		return from < to ? s.substr(from, to - from) : std::basic_string<TElem, TTraits, TAlloc>();
+	}
+
+	template<class TElem, class TTraits, class TAlloc>
+	[[nodiscard]] std::basic_string<TElem, TTraits, TAlloc> trim_ascii(const std::basic_string<TElem, TTraits, TAlloc>& s, bool left = true, bool right = true) {
+		const auto isSpace = [](TElem c) { return c == 0x20 || (0x09 <= c && c <= 0x0D); };
+		size_t from = 0, to = s.size();
+		if (left)
+			while (from < to && isSpace(s[from]))
+				++from;
+		if (right)
+			while (from < to && isSpace(s[to - 1]))
+				--to;
+		return s.substr(from, to - from);
 	}
 
 	template<class TElem, class TTraits, class TAlloc>

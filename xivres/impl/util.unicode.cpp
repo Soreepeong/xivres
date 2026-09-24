@@ -99,12 +99,12 @@ size_t xivres::util::unicode::decode(EncodingTag<char8_t>, char32_t& out, const 
 			if (0x80 != (in[3] & 0xC0)) goto invalid;
 			if (0x80 != (in[4] & 0xC0)) goto invalid;
 			out = (
-				((static_cast<char32_t>(in[0]) & 0x07) << 24) |
+				((static_cast<char32_t>(in[0]) & 0x03) << 24) |
 				((static_cast<char32_t>(in[1]) & 0x3F) << 18) |
 				((static_cast<char32_t>(in[2]) & 0x3F) << 12) |
 				((static_cast<char32_t>(in[3]) & 0x3F) << 6) |
 				((static_cast<char32_t>(in[4]) & 0x3F) << 0));
-			return 4;
+			return 5;
 		}
 
 		if (0xFC == (*in & 0xFE)) {
@@ -115,13 +115,13 @@ size_t xivres::util::unicode::decode(EncodingTag<char8_t>, char32_t& out, const 
 			if (0x80 != (in[4] & 0xC0)) goto invalid;
 			if (0x80 != (in[5] & 0xC0)) goto invalid;
 			out = (
-				((static_cast<char32_t>(in[0]) & 0x07) << 30) |
+				((static_cast<char32_t>(in[0]) & 0x01) << 30) |
 				((static_cast<char32_t>(in[1]) & 0x3F) << 24) |
 				((static_cast<char32_t>(in[2]) & 0x3F) << 18) |
 				((static_cast<char32_t>(in[3]) & 0x3F) << 12) |
 				((static_cast<char32_t>(in[4]) & 0x3F) << 6) |
 				((static_cast<char32_t>(in[5]) & 0x3F) << 0));
-			return 5;
+			return 6;
 		}
 	}
 

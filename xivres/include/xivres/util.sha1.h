@@ -23,6 +23,7 @@
 #define XIVRES_INTERNAL_TINYSHA1_H_
 
 #include <cstdint>
+#include <cstring>
 #include <span>
 
 #include "common.h"
@@ -35,30 +36,20 @@ namespace xivres::util {
 		typedef uint8_t digest8_t[20];
 
 	private:
+		static constexpr size_t BlockSize = 64;
+
 		digest32_t m_digest;
-		uint8_t m_block[64];
+		uint8_t m_block[BlockSize];
 		size_t m_blockByteIndex;
-		size_t m_byteCount;
+		uint64_t m_byteCount;
 
 	public:
 		hash_sha1() {
 			reset();
 		}
 
-		hash_sha1(const hash_sha1& s) {
-			*this = s;
-		}
-
-		hash_sha1& operator=(const hash_sha1& s) {
-			if (this == &s)
-				return *this;
-			memcpy(m_digest, s.m_digest, 5 * sizeof(uint32_t));
-			memcpy(m_block, s.m_block, 64);
-			m_blockByteIndex = s.m_blockByteIndex;
-			m_byteCount = s.m_byteCount;
-			return *this;
-		}
-
+		hash_sha1(const hash_sha1&) = default;
+		hash_sha1& operator=(const hash_sha1&) = default;
 		hash_sha1(hash_sha1&&) = delete;
 		hash_sha1& operator=(hash_sha1&&) = delete;
 		~hash_sha1() = default;
@@ -75,98 +66,71 @@ namespace xivres::util {
 		}
 
 		hash_sha1& process_byte(uint8_t octet) {
-			this->m_block[this->m_blockByteIndex++] = octet;
-			++this->m_byteCount;
-			if (m_blockByteIndex == 64) {
-				this->m_blockByteIndex = 0;
-				process_block();
-			}
-			return *this;
+			return process_bytes(&octet, 1);
 		}
 
 		hash_sha1& process_block(const void* const start, const void* const end) {
-			auto begin = static_cast<const uint8_t*>(start);
-			const auto finish = static_cast<const uint8_t*>(end);
-			while (begin != finish) {
-				process_byte(*begin);
-				begin++;
-			}
-			return *this;
+			return process_bytes(start, static_cast<size_t>(static_cast<const uint8_t*>(end) - static_cast<const uint8_t*>(start)));
 		}
 
 		hash_sha1& process_bytes(const void* const data, size_t len) {
-			const auto block = static_cast<const uint8_t*>(data);
-			process_block(block, block + len);
+			auto p = static_cast<const uint8_t*>(data);
+			m_byteCount += len;
+
+			if (m_blockByteIndex) {
+				const auto available = (std::min)(len, BlockSize - m_blockByteIndex);
+				memcpy(&m_block[m_blockByteIndex], p, available);
+				m_blockByteIndex += available;
+				p += available;
+				len -= available;
+				if (m_blockByteIndex < BlockSize)
+					return *this;
+				m_blockByteIndex = 0;
+				process_block(m_block);
+			}
+
+			for (; len >= BlockSize; p += BlockSize, len -= BlockSize)
+				process_block(p);
+
+			memcpy(m_block, p, len);
+			m_blockByteIndex = len;
 			return *this;
 		}
 
-		const uint32_t* get_digest(digest32_t digest) {
-			size_t bitCount = this->m_byteCount * 8;
-			process_byte(0x80);
-			if (this->m_blockByteIndex > 56) {
-				while (m_blockByteIndex != 0) {
-					process_byte(0);
-				}
-				while (m_blockByteIndex < 56) {
-					process_byte(0);
-				}
-			} else {
-				while (m_blockByteIndex < 56) {
-					process_byte(0);
-				}
-			}
-			process_byte(0);
-			process_byte(0);
-			process_byte(0);
-			process_byte(0);
-			process_byte(static_cast<unsigned char>((bitCount >> 24) & 0xFF));
-			process_byte(static_cast<unsigned char>((bitCount >> 16) & 0xFF));
-			process_byte(static_cast<unsigned char>((bitCount >> 8) & 0xFF));
-			process_byte(static_cast<unsigned char>((bitCount) & 0xFF));
+		const uint32_t* get_digest(digest32_t digest) const {
+			auto finished = *this;
+			const auto bitCount = m_byteCount * 8;
 
-			memcpy(digest, m_digest, 5 * sizeof(uint32_t));
+			uint8_t padding[BlockSize + 8]{0x80};
+			const auto zeroes = (BlockSize * 2 - 8 - 1 - m_blockByteIndex) % BlockSize;
+			for (size_t i = 0; i < 8; ++i)
+				padding[1 + zeroes + i] = static_cast<uint8_t>(bitCount >> (56 - 8 * i));
+			finished.process_bytes(padding, 1 + zeroes + 8);
+
+			memcpy(digest, finished.m_digest, sizeof finished.m_digest);
 			return digest;
 		}
 
-		const uint8_t* get_digest_bytes(digest8_t digest) {
+		const uint8_t* get_digest_bytes(digest8_t digest) const {
 			digest32_t d32;
 			get_digest(d32);
-			size_t di = 0;
-			digest[di++] = ((d32[0] >> 24) & 0xFF);
-			digest[di++] = ((d32[0] >> 16) & 0xFF);
-			digest[di++] = ((d32[0] >> 8) & 0xFF);
-			digest[di++] = ((d32[0]) & 0xFF);
-
-			digest[di++] = ((d32[1] >> 24) & 0xFF);
-			digest[di++] = ((d32[1] >> 16) & 0xFF);
-			digest[di++] = ((d32[1] >> 8) & 0xFF);
-			digest[di++] = ((d32[1]) & 0xFF);
-
-			digest[di++] = ((d32[2] >> 24) & 0xFF);
-			digest[di++] = ((d32[2] >> 16) & 0xFF);
-			digest[di++] = ((d32[2] >> 8) & 0xFF);
-			digest[di++] = ((d32[2]) & 0xFF);
-
-			digest[di++] = ((d32[3] >> 24) & 0xFF);
-			digest[di++] = ((d32[3] >> 16) & 0xFF);
-			digest[di++] = ((d32[3] >> 8) & 0xFF);
-			digest[di++] = ((d32[3]) & 0xFF);
-
-			digest[di++] = ((d32[4] >> 24) & 0xFF);
-			digest[di++] = ((d32[4] >> 16) & 0xFF);
-			digest[di++] = ((d32[4] >> 8) & 0xFF);
-			digest[di++] = ((d32[4]) & 0xFF);
+			for (size_t i = 0; i < 5; ++i) {
+				digest[i * 4 + 0] = static_cast<uint8_t>(d32[i] >> 24);
+				digest[i * 4 + 1] = static_cast<uint8_t>(d32[i] >> 16);
+				digest[i * 4 + 2] = static_cast<uint8_t>(d32[i] >> 8);
+				digest[i * 4 + 3] = static_cast<uint8_t>(d32[i]);
+			}
 			return digest;
 		}
 
 	private:
-		void process_block() {
+		void process_block(const uint8_t* block) {
 			uint32_t w[80];
 			for (size_t i = 0; i < 16; i++) {
-				w[i] = (m_block[i * 4 + 0] << 24);
-				w[i] |= (m_block[i * 4 + 1] << 16);
-				w[i] |= (m_block[i * 4 + 2] << 8);
-				w[i] |= (m_block[i * 4 + 3]);
+				w[i] = static_cast<uint32_t>(block[i * 4 + 0]) << 24;
+				w[i] |= static_cast<uint32_t>(block[i * 4 + 1]) << 16;
+				w[i] |= static_cast<uint32_t>(block[i * 4 + 2]) << 8;
+				w[i] |= static_cast<uint32_t>(block[i * 4 + 3]);
 			}
 			for (size_t i = 16; i < 80; i++) {
 				w[i] = left_rotate((w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]), 1);
