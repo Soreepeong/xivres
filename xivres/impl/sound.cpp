@@ -44,12 +44,17 @@ std::vector<uint8_t> xivres::sound::reader::get_header_bytes(const stream& strm)
 	std::vector<uint8_t> res;
 	res.resize(static_cast<size_t>((std::min<uint64_t>)(InitialBufferSize, strm.size())));
 	strm.read_fully(0, std::span(res));
+	if (res.size() < sizeof(sound::header) + sizeof(sound::offsets))
+		throw std::invalid_argument("too small to be a sound file");
 
 	const auto& header = *reinterpret_cast<sound::header*>(res.data());
 	if (header.HeaderSize != sizeof header)
 		throw std::invalid_argument("invalid HeaderSize");
 
 	const auto& offsets = *reinterpret_cast<sound::offsets*>(&res[header.HeaderSize]);
+	if (offsets.Table5Offset < sizeof(sound::header) + sizeof(sound::offsets)
+		|| std::cmp_greater(static_cast<uint64_t>(offsets.Table5Offset) + 16, strm.size()))
+		throw std::invalid_argument("invalid Table5Offset");
 	res.resize(static_cast<size_t>(0) + offsets.Table5Offset + 16);
 	if (res.size() > InitialBufferSize)
 		strm.read_fully(InitialBufferSize, std::span(res).subspan(InitialBufferSize));

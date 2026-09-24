@@ -91,6 +91,7 @@ namespace xivres::sqpack {
 
 			[[nodiscard]] uint64_t original_size() const { return m_originalSize; }
 			[[nodiscard]] bool reads_original(uint64_t offset, uint64_t length) const;
+			[[nodiscard]] const entry_info* entry_at(uint64_t offset) const;
 
 		private:
 			[[nodiscard]] std::span<entry_info*>::iterator entry_at_or_before(uint64_t offset) const;

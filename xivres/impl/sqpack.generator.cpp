@@ -574,6 +574,13 @@ std::streamsize xivres::sqpack::generator::data_view_stream::read(std::streamoff
 	return static_cast<std::streamsize>(total);
 }
 
+const xivres::sqpack::generator::entry_info* xivres::sqpack::generator::data_view_stream::entry_at(uint64_t offset) const {
+	const auto it = entry_at_or_before(offset);
+	if (it == m_entries.end() || offset >= (*it)->locator().offset() + (*it)->entry_size())
+		return nullptr;
+	return *it;
+}
+
 bool xivres::sqpack::generator::data_view_stream::reads_original(uint64_t offset, uint64_t length) const {
 	if (!m_original || offset < m_header.size() || length > m_originalSize || offset > m_originalSize - length)
 		return false;
