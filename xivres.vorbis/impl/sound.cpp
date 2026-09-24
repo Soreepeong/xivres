@@ -338,7 +338,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 				dataBuffers.back().insert(dataBuffers.back().end(), og.body, og.body + og.body_len);
 			}
 
-			loopStartOffset = oggDataSeekTable.empty() ? 0 : oggDataSeekTable.back();
+			loopStartOffset = dataBufferTotalSize;
 		}
 
 		if (progressCallback && !progressCallback(currentBlockIndex))
@@ -430,7 +430,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			} else {
 				const auto sampleIndexAtEndOfPage = static_cast<uint32_t>(ogg_page_granulepos(&og));
 				if (loopStartSample && loopStartOffset == NotFound && loopStartSample <= sampleIndexAtEndOfPage)
-					loopStartOffset = seekTable.empty() ? 0 : seekTable.back();
+					loopStartOffset = static_cast<uint32_t>(data.size());
 
 				seekTable.push_back(static_cast<uint32_t>(data.size()));
 				seekTableSamples.push_back(sampleIndexAtEndOfPage);
