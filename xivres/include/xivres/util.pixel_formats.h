@@ -192,7 +192,7 @@ namespace xivres::util {
 		TElem A : AB; // actually opacity
 
 		bgra_bitfields_base(TElem value) {
-			memcpy(this, &value, sizeof(*this));
+			std::memcpy(this, &value, sizeof(*this));
 		}
 
 		using base_type::MaxR;

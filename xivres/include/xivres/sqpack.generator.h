@@ -127,6 +127,9 @@ namespace xivres::sqpack {
 			static constexpr uint64_t MaxBufferedEntrySize = (INTPTR_MAX == INT64_MAX ? 1024ULL : 64ULL) * 1048576;
 			static constexpr std::chrono::seconds ReaderTimeout{30};
 			static constexpr std::chrono::seconds StreamMinimumHold{15};
+			static constexpr std::chrono::seconds StreamPredictedMinimumHold{2};
+
+			util::listener_manager<sqpack_view_entry_cache, void, const path_spec&, std::optional<std::chrono::steady_clock::duration>> OnStreamWindowPredicted;
 
 			bool read(const entry_info& entry, bool streamed, uint64_t offset, std::span<uint8_t> out);
 
@@ -151,6 +154,8 @@ namespace xivres::sqpack {
 			struct stream_state {
 				clock::time_point LastWindow;
 				clock::duration LongestInterval{};
+				bool Predicted = false;
+				std::optional<clock::duration> PredictedInterval;
 			};
 
 			std::mutex m_mtx;

@@ -79,7 +79,7 @@ namespace xivres::util {
 
 			if (m_blockByteIndex) {
 				const auto available = (std::min)(len, BlockSize - m_blockByteIndex);
-				memcpy(&m_block[m_blockByteIndex], p, available);
+				std::memcpy(&m_block[m_blockByteIndex], p, available);
 				m_blockByteIndex += available;
 				p += available;
 				len -= available;
@@ -92,7 +92,7 @@ namespace xivres::util {
 			for (; len >= BlockSize; p += BlockSize, len -= BlockSize)
 				process_block(p);
 
-			memcpy(m_block, p, len);
+			std::memcpy(m_block, p, len);
 			m_blockByteIndex = len;
 			return *this;
 		}
@@ -107,7 +107,7 @@ namespace xivres::util {
 				padding[1 + zeroes + i] = static_cast<uint8_t>(bitCount >> (56 - 8 * i));
 			finished.process_bytes(padding, 1 + zeroes + 8);
 
-			memcpy(digest, finished.m_digest, sizeof finished.m_digest);
+			std::memcpy(digest, finished.m_digest, sizeof finished.m_digest);
 			return digest;
 		}
 
@@ -185,35 +185,35 @@ namespace xivres {
 		uint8_t Value[20]{};
 
 		bool operator==(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) == 0;
+			return std::memcmp(r.Value, Value, sizeof Value) == 0;
 		}
 
 		bool operator!=(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) != 0;
+			return std::memcmp(r.Value, Value, sizeof Value) != 0;
 		}
 
 		bool operator<(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) < 0;
+			return std::memcmp(r.Value, Value, sizeof Value) < 0;
 		}
 
 		bool operator<=(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) <= 0;
+			return std::memcmp(r.Value, Value, sizeof Value) <= 0;
 		}
 
 		bool operator>(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) > 0;
+			return std::memcmp(r.Value, Value, sizeof Value) > 0;
 		}
 
 		bool operator>=(const sha1_value& r) const {
-			return memcmp(r.Value, Value, sizeof Value) >= 0;
+			return std::memcmp(r.Value, Value, sizeof Value) >= 0;
 		}
 
 		bool operator==(const char (&r)[20]) const {
-			return memcmp(r, Value, sizeof Value) == 0;
+			return std::memcmp(r, Value, sizeof Value) == 0;
 		}
 
 		bool operator!=(const char (&r)[20]) const {
-			return memcmp(r, Value, sizeof Value) != 0;
+			return std::memcmp(r, Value, sizeof Value) != 0;
 		}
 
 		[[nodiscard]] bool IsZero() const {

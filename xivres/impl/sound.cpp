@@ -1,5 +1,6 @@
 #include "../include/xivres/sound.h"
 
+#include <algorithm>
 #include <ranges>
 
 #include "../include/xivres/common.h"
@@ -69,13 +70,12 @@ xivres::sound::reader::reader(std::shared_ptr<stream> strm)
 	, m_endOfTable5(!m_soundEntryOffsets.empty() && m_soundEntryOffsets.front() ? m_soundEntryOffsets.front() : m_endOfSoundEntries)
 	, m_endOfTable2(!m_offsetsTable5.empty() && m_offsetsTable5.front() ? m_offsetsTable5.front() : m_endOfTable5)
 	, m_endOfTable1(!m_offsetsTable2.empty() && m_offsetsTable2.front() ? m_offsetsTable2.front() : m_endOfTable2)
-	, m_endOfTable4(!m_offsetsTable1.empty() && m_offsetsTable1.front() ? m_offsetsTable1.front() : m_endOfTable1) {
-}
+	, m_endOfTable4(!m_offsetsTable1.empty() && m_offsetsTable1.front() ? m_offsetsTable1.front() : m_endOfTable1) {}
 
 std::vector<uint32_t> xivres::sound::reader::sound_item::marked_sample_block_indices() const {
 	std::vector<uint32_t> res;
 	for (const auto& chunk : AuxChunks) {
-		if (memcmp(chunk->Name, sound_entry_aux_chunk::Name_Mark, sizeof chunk->Name) != 0)
+		if (std::memcmp(chunk->Name, sound_entry_aux_chunk::Name_Mark, sizeof chunk->Name) != 0)
 			continue;
 
 		res.reserve(*chunk->Data.Mark.Count);
@@ -108,19 +108,29 @@ std::vector<uint8_t> xivres::sound::reader::sound_item::get_wav_file() const {
 		res.insert(res.end(), reinterpret_cast<const uint8_t*>(&v), reinterpret_cast<const uint8_t*>(&v) + sizeof v);
 	};
 	const auto totalLength = static_cast<uint32_t>(size_t()
-		+ 12 // "RIFF"####"WAVE"
-		+ 8 + headerSpan.size() // "fmt "####<header>
-		+ 8 + Data.size() // "data"####<data>
+		+ sizeof(riff_wave_header)
+		+ sizeof(riff_chunk_header) + headerSpan.size()
+		+ sizeof(riff_chunk_header) + Data.size()
 	);
+
+	riff_wave_header wave{};
+	std::memcpy(wave.Riff.Id, riff_chunk_header::Id_Riff, sizeof wave.Riff.Id);
+	wave.Riff.Size = totalLength - static_cast<uint32_t>(sizeof wave.Riff);
+	std::memcpy(wave.Format, riff_wave_header::Format_Wave, sizeof wave.Format);
+
+	riff_chunk_header format{};
+	std::memcpy(format.Id, riff_chunk_header::Id_Format, sizeof format.Id);
+	format.Size = static_cast<uint32_t>(headerSpan.size());
+
+	riff_chunk_header data{};
+	std::memcpy(data.Id, riff_chunk_header::Id_Data, sizeof data.Id);
+	data.Size = static_cast<uint32_t>(Data.size());
+
 	res.reserve(totalLength);
-	insert(LE<uint32_t>(0x46464952U)); // "RIFF"
-	insert(LE<uint32_t>(totalLength - 8));
-	insert(LE<uint32_t>(0x45564157U)); // "WAVE"
-	insert(LE<uint32_t>(0x20746D66U)); // "fmt "
-	insert(LE<uint32_t>(static_cast<uint32_t>(headerSpan.size())));
+	insert(wave);
+	insert(format);
 	res.insert(res.end(), headerSpan.begin(), headerSpan.end());
-	insert(LE<uint32_t>(0x61746164U)); // "data"
-	insert(LE<uint32_t>(static_cast<uint32_t>(Data.size())));
+	insert(data);
 	res.insert(res.end(), Data.begin(), Data.end());
 	return res;
 }
@@ -173,9 +183,9 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 	sound_item res{};
 	res.Buffer = read_entry(m_soundEntryOffsets, m_endOfSoundEntries, static_cast<uint32_t>(entryIndex));
 	res.Header = reinterpret_cast<sound_entry_header*>(res.Buffer.data());
-	
+
 	if (const auto minSize = sizeof *res.Header + res.Header->StreamOffset + res.Header->StreamSize; res.Buffer.size() < minSize) {
-		res.Buffer.resize(minSize);	
+		res.Buffer.resize(minSize);
 		res.Header = reinterpret_cast<sound_entry_header*>(res.Buffer.data());
 	}
 
@@ -187,6 +197,184 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 	res.ExtraData = std::span(res.Buffer).subspan(pos, res.Header->StreamOffset + sizeof *res.Header - pos);
 	res.Data = std::span(res.Buffer).subspan(sizeof *res.Header + res.Header->StreamOffset, res.Header->StreamSize);
 	return res;
+}
+
+namespace {
+	std::optional<double> flac_bytes_per_second(std::span<const uint8_t> stream, uint32_t streamSize) {
+		using xivres::sound::flac_magic_and_stream_info;
+		if (stream.size() < sizeof(flac_magic_and_stream_info))
+			return std::nullopt;
+
+		const auto& info = *reinterpret_cast<const flac_magic_and_stream_info*>(stream.data());
+		if (std::memcmp(info.Magic, flac_magic_and_stream_info::Magic_Value, sizeof info.Magic) != 0 || info.block_type() != flac_magic_and_stream_info::BlockType_StreamInfo)
+			return std::nullopt;
+
+		const auto samplingRate = info.sampling_rate();
+		const auto sampleCount = info.sample_count();
+		if (!samplingRate || !sampleCount)
+			return std::nullopt;
+		return static_cast<double>(streamSize) * samplingRate / static_cast<double>(sampleCount);
+	}
+
+	std::optional<double> riff_bytes_per_second(std::span<const uint8_t> stream) {
+		using xivres::sound::riff_chunk_header;
+		using xivres::sound::riff_wave_header;
+		using xivres::sound::wave_format_ex;
+		if (stream.size() < sizeof(riff_wave_header))
+			return std::nullopt;
+
+		const auto& header = *reinterpret_cast<const riff_wave_header*>(stream.data());
+		if (std::memcmp(header.Riff.Id, riff_chunk_header::Id_Riff, sizeof header.Riff.Id) != 0 || std::memcmp(header.Format, riff_wave_header::Format_Wave, sizeof header.Format) != 0)
+			return std::nullopt;
+
+		for (size_t pos = sizeof header; pos + sizeof(riff_chunk_header) <= stream.size();) {
+			const auto& chunk = *reinterpret_cast<const riff_chunk_header*>(&stream[pos]);
+			if (std::memcmp(chunk.Id, riff_chunk_header::Id_Format, sizeof chunk.Id) == 0) {
+				if (pos + sizeof chunk + offsetof(wave_format_ex, nBlockAlign) > stream.size())
+					return std::nullopt;
+				if (const auto avgBytesPerSec = reinterpret_cast<const wave_format_ex*>(&stream[pos + sizeof chunk])->nAvgBytesPerSec)
+					return avgBytesPerSec;
+				return std::nullopt;
+			}
+			pos += sizeof chunk + chunk.Size + (chunk.Size & 1);
+		}
+		return std::nullopt;
+	}
+
+	const xivres::sound::sound_entry_ogg_header* ogg_header(std::span<const uint8_t> extraData) {
+		using xivres::sound::sound_entry_ogg_header;
+		if (extraData.size() < sizeof(sound_entry_ogg_header))
+			return nullptr;
+
+		const auto& tbl = *reinterpret_cast<const sound_entry_ogg_header*>(extraData.data());
+		if (tbl.HeaderSize != sizeof tbl || extraData.size() < size_t() + tbl.HeaderSize + tbl.SeekTableSize)
+			return nullptr;
+		return &tbl;
+	}
+
+	void deobfuscate(std::span<uint8_t> bytes, const xivres::sound::sound_entry_ogg_header& tbl, uint32_t streamSize, size_t position) {
+		if (tbl.Version == 0x2) {
+			if (tbl.EncodeByte) {
+				for (size_t i = position; i < tbl.VorbisHeaderSize && i - position < bytes.size(); i++)
+					bytes[i - position] ^= tbl.EncodeByte;
+			}
+		} else if (tbl.Version == 0x3) {
+			const auto byte1 = static_cast<uint8_t>(streamSize & 0x7F);
+			const auto byte2 = static_cast<uint8_t>(streamSize & 0x3F);
+			for (size_t i = 0; i < bytes.size(); i++)
+				bytes[i] ^= xivres::sound::sound_entry_ogg_header::Version3XorTable[(byte2 + position + i) & 0xFF] ^ byte1;
+		}
+	}
+
+	std::optional<uint64_t> last_ogg_granule(std::span<const uint8_t> tail) {
+		using xivres::sound::ogg_page_header;
+		if (tail.size() < sizeof(ogg_page_header))
+			return std::nullopt;
+
+		for (size_t i = tail.size() - sizeof(ogg_page_header) + 1; i-- > 0;) {
+			const auto& page = *reinterpret_cast<const ogg_page_header*>(&tail[i]);
+			if (std::memcmp(page.Magic, ogg_page_header::Magic_Value, sizeof page.Magic) != 0 || page.Version != 0)
+				continue;
+
+			if (const uint64_t granule = page.GranulePosition; granule && granule != ogg_page_header::GranulePosition_None)
+				return granule;
+		}
+		return std::nullopt;
+	}
+
+	std::optional<double> vorbis_bytes_per_second(std::span<const uint8_t> bytes) {
+		using xivres::sound::vorbis_identification_header;
+		if (bytes.size() < sizeof(vorbis_identification_header))
+			return std::nullopt;
+
+		for (size_t i = 0; i + sizeof(vorbis_identification_header) <= bytes.size(); i++) {
+			const auto& ident = *reinterpret_cast<const vorbis_identification_header*>(&bytes[i]);
+			if (ident.PacketType != vorbis_identification_header::PacketType_Identification
+				|| std::memcmp(ident.Magic, vorbis_identification_header::Magic_Value, sizeof ident.Magic) != 0)
+				continue;
+
+			const int32_t maximum = ident.BitrateMaximum;
+			const int32_t nominal = ident.BitrateNominal;
+			const int32_t minimum = ident.BitrateMinimum;
+			if (nominal > 0)
+				return nominal / 8.;
+			if (maximum > 0 && minimum > 0)
+				return (maximum + minimum) / 16.;
+			return std::nullopt;
+		}
+		return std::nullopt;
+	}
+}
+
+std::optional<double> xivres::sound::reader::stream_bytes_per_second(size_t entryIndex) const {
+	if (entryIndex >= m_soundEntryOffsets.size() || !m_soundEntryOffsets[entryIndex])
+		return std::nullopt;
+
+	const auto entryOffset = m_soundEntryOffsets[entryIndex];
+	const auto header = m_stream->read_fully<sound_entry_header>(entryOffset);
+	if (!header.StreamSize)
+		return std::nullopt;
+
+	constexpr uint32_t StreamPeekSize = 128;
+	std::vector<uint8_t> buf(sizeof header + header.StreamOffset + (std::min<uint32_t>)(header.StreamSize, StreamPeekSize));
+	m_stream->read_fully(entryOffset, std::span(buf));
+
+	auto pos = sizeof header;
+	if (has_flag(header.Flags, sound_entry_flags::MarkerChunk)) {
+		if (pos + 8 > sizeof header + header.StreamOffset)
+			return std::nullopt;
+		pos += reinterpret_cast<const sound_entry_aux_chunk*>(&buf[pos])->ChunkSize;
+	}
+	if (pos > sizeof header + header.StreamOffset)
+		return std::nullopt;
+
+	const auto extraData = std::span<const uint8_t>(buf).subspan(pos, sizeof header + header.StreamOffset - pos);
+	const auto stream = std::span(buf).subspan(sizeof header + header.StreamOffset);
+
+	std::vector<uint8_t> vorbisHeader;
+	const auto ogg = header.Format == sound_entry_format::Ogg ? ogg_header(extraData) : nullptr;
+	if (ogg) {
+		const auto encoded = extraData.subspan(size_t() + ogg->HeaderSize + ogg->SeekTableSize);
+		vorbisHeader.assign(encoded.begin(), encoded.begin() + (std::min<size_t>)({ogg->VorbisHeaderSize, encoded.size(), StreamPeekSize}));
+		deobfuscate(vorbisHeader, *ogg, header.StreamSize, 0);
+		deobfuscate(stream, *ogg, header.StreamSize, ogg->VorbisHeaderSize);
+	}
+
+	for (const auto& candidate : {std::span<const uint8_t>(vorbisHeader), std::span<const uint8_t>(stream)}) {
+		if (const auto rate = flac_bytes_per_second(candidate, header.StreamSize))
+			return rate;
+		if (const auto rate = riff_bytes_per_second(candidate))
+			return rate;
+	}
+
+	switch (*header.Format) {
+		case sound_entry_format::Ogg: {
+			if (ogg && header.SamplingRate) {
+				constexpr uint32_t OggTailSize = 72 * 1024;
+				const auto tailSize = (std::min<uint32_t>)(header.StreamSize, OggTailSize);
+				std::vector<uint8_t> tail(tailSize);
+				m_stream->read_fully(entryOffset + sizeof header + header.StreamOffset + header.StreamSize - tailSize, std::span(tail));
+				deobfuscate(tail, *ogg, header.StreamSize, size_t() + ogg->VorbisHeaderSize + header.StreamSize - tailSize);
+				if (const auto sampleCount = last_ogg_granule(tail))
+					return static_cast<double>(header.StreamSize) * header.SamplingRate / static_cast<double>(*sampleCount);
+			}
+
+			if (const auto rate = vorbis_bytes_per_second(vorbisHeader))
+				return rate;
+			return vorbis_bytes_per_second(stream);
+		}
+
+		case sound_entry_format::WaveFormatPcm:
+		case sound_entry_format::WaveFormatAdpcm:
+			if (extraData.size() >= sizeof(wave_format_ex)) {
+				if (const auto avgBytesPerSec = reinterpret_cast<const wave_format_ex*>(extraData.data())->nAvgBytesPerSec)
+					return avgBytesPerSec;
+			}
+			return std::nullopt;
+
+		default:
+			return std::nullopt;
+	}
 }
 
 void xivres::sound::writer::sound_item::export_to(std::vector<uint8_t>& res) const {
@@ -224,7 +412,7 @@ void xivres::sound::writer::sound_item::set_mark_chunks(uint32_t loopStartSample
 	markHeader.LoopEndSampleBlockIndex = loopEndSampleBlockIndex;
 	markHeader.Count = static_cast<uint32_t>(marks.size());
 	if (!marks.empty())
-		memcpy(&buf[12], marks.data(), marks.size_bytes());
+		std::memcpy(&buf[12], marks.data(), marks.size_bytes());
 }
 
 xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_reader_sound_item(const reader::sound_item& item) {
@@ -447,12 +635,12 @@ std::vector<uint8_t> xivres::sound::writer::export_to_bytes() const {
 		.HeaderSize = sizeof header,
 		.FileSize = static_cast<uint32_t>(requiredSize),
 	};
-	memcpy(reinterpret_cast<header*>(res.data())->SedbSignature,
-			header::SedbSignature_Value,
-			sizeof(header::SedbSignature_Value));
-	memcpy(reinterpret_cast<header*>(res.data())->SscfSignature,
-			header::SscfSignature_Value,
-			sizeof(header::SscfSignature_Value));
+	std::memcpy(reinterpret_cast<header*>(res.data())->SedbSignature,
+		header::SedbSignature_Value,
+		sizeof(header::SedbSignature_Value));
+	std::memcpy(reinterpret_cast<header*>(res.data())->SscfSignature,
+		header::SscfSignature_Value,
+		sizeof(header::SscfSignature_Value));
 
 	*reinterpret_cast<offsets*>(&res[sizeof header]) = {
 		.Table1And4EntryCount = static_cast<uint16_t>(m_table1.size()),

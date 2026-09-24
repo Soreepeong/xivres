@@ -8,6 +8,7 @@
 #include "../include/xivres/packed_stream.placeholder.h"
 #include "../include/xivres/packed_stream.standard.h"
 #include "../include/xivres/packed_stream.texture.h"
+#include "../include/xivres/sound.h"
 
 xivres::packed_stream* xivres::sqpack::generator::add_result::any() const {
 	if (!Added.empty())
@@ -135,8 +136,21 @@ xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::op
 }
 
 namespace {
-	// A gap longer than this between two windows of a stream is taken as the stream having stopped and started again.
 	constexpr std::chrono::seconds StreamMaximumInterval{60};
+	constexpr uint64_t StreamWindowSize = 0x30000;
+
+	std::optional<std::chrono::steady_clock::duration> predict_window_interval(const xivres::sqpack::generator::entry_info& entry) {
+		try {
+			// The entry is owned elsewhere and outlives this.
+			const auto unpacked = std::make_shared<xivres::unpacked_stream>(std::shared_ptr<const xivres::packed_stream>(std::shared_ptr<void>(), &entry));
+			const auto bytesPerSecond = xivres::sound::reader(unpacked).stream_bytes_per_second(0);
+			if (!bytesPerSecond || *bytesPerSecond <= 0)
+				return std::nullopt;
+			return std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(StreamWindowSize / *bytesPerSecond));
+		} catch (...) {
+			return std::nullopt;
+		}
+	}
 }
 
 bool xivres::sqpack::generator::sqpack_view_entry_cache::read(const entry_info& entry, bool streamed, uint64_t offset, std::span<uint8_t> out) {
@@ -205,7 +219,7 @@ bool xivres::sqpack::generator::sqpack_view_entry_cache::read_streamed(const ent
 		return false;
 
 	const auto now = clock::now();
-	clock::duration hold;
+	bool predict;
 	{
 		const auto lock = std::scoped_lock(m_mtx);
 		expire_locked(now);
@@ -218,7 +232,26 @@ bool xivres::sqpack::generator::sqpack_view_entry_cache::read_streamed(const ent
 				state.LongestInterval = {};
 		}
 		state.LastWindow = now;
-		hold = (std::max<clock::duration>)(state.LongestInterval * 3 / 2, StreamMinimumHold);
+		predict = !std::exchange(state.Predicted, true);
+	}
+
+	// Reads from the file, so not under the lock.
+	const auto predicted = predict ? predict_window_interval(entry) : std::nullopt;
+	if (predict)
+		OnStreamWindowPredicted(entry.path_spec(), predicted);
+
+	clock::duration hold;
+	{
+		const auto lock = std::scoped_lock(m_mtx);
+		auto& state = m_streams[&entry];
+		if (predict)
+			state.PredictedInterval = predicted;
+
+		const auto observed = state.LongestInterval * 3 / 2;
+		if (state.PredictedInterval)
+			hold = (std::max<clock::duration>)({*state.PredictedInterval * 3 / 2, observed, StreamPredictedMinimumHold});
+		else
+			hold = (std::max<clock::duration>)(observed, StreamMinimumHold);
 	}
 
 	entry.hold_until(now + hold);
@@ -398,7 +431,7 @@ namespace {
 
 		data.resize(sizeof(sqpack::header) + sizeof(sqpack::sqindex::header));
 		auto& header1 = *reinterpret_cast<sqpack::header*>(data.data());
-		memcpy(header1.Signature, sqpack::header::Signature_Value, sizeof(sqpack::header::Signature_Value));
+		std::memcpy(header1.Signature, sqpack::header::Signature_Value, sizeof(sqpack::header::Signature_Value));
 		header1.HeaderSize = sizeof(sqpack::header);
 		header1.Unknown1 = sqpack::header::Unknown1_Value;
 		header1.Type = sqpack::file_type::SqIndex;
@@ -725,7 +758,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 		.FullPath = {},
 	});
 
-	memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
+	std::memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
 	dataHeader.HeaderSize = sizeof header;
 	dataHeader.Unknown1 = header::Unknown1_Value;
 	dataHeader.Type = file_type::SqData;
@@ -751,7 +784,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 
 void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict, size_t /*cores*/) {
 	header dataHeader{};
-	memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
+	std::memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
 	dataHeader.HeaderSize = sizeof header;
 	dataHeader.Unknown1 = header::Unknown1_Value;
 	dataHeader.Type = file_type::SqData;

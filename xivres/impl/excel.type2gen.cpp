@@ -75,7 +75,7 @@ void xivres::excel::type2gen::set_row(uint32_t id, game_language language, std::
 std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(uint32_t startId, const std::map<uint32_t, std::vector<char>>& rows, game_language language) const {
 	exd::header exdHeader;
 	const auto exdHeaderSpan = span_cast<char>(1, &exdHeader);
-	memcpy(exdHeader.Signature, exd::header::Signature_Value, 4);
+	std::memcpy(exdHeader.Signature, exd::header::Signature_Value, 4);
 	exdHeader.Version = exd::header::Version_Value;
 
 	size_t dataSize = 0;
@@ -231,7 +231,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 	{
 		exh::header exhHeader;
 		const auto exhHeaderSpan = span_cast<char>(1, &exhHeader);
-		memcpy(exhHeader.Signature, exh::header::Signature_Value, 4);
+		std::memcpy(exhHeader.Signature, exh::header::Signature_Value, 4);
 		exhHeader.Version = exh::header::Version_Value;
 		exhHeader.FixedDataSize = static_cast<uint16_t>(FixedDataSize);
 		exhHeader.ColumnCount = static_cast<uint16_t>(Columns.size());

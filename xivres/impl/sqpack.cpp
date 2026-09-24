@@ -5,7 +5,7 @@
 void xivres::sqpack::header::verify_or_throw(file_type supposedType) const {
 	if (HeaderSize != sizeof header)
 		throw bad_data_error("sizeof Header != 0x400");
-	if (memcmp(Signature, Signature_Value, sizeof Signature) != 0)
+	if (std::memcmp(Signature, Signature_Value, sizeof Signature) != 0)
 		throw bad_data_error("Invalid SqPack signature");
 	Sha1.verify(this, offsetof(xivres::sqpack::header, Sha1), "SqPack Header SHA-1");
 	if (!util::all_same_value(Padding_0x024))

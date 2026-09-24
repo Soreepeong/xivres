@@ -176,6 +176,7 @@ namespace xivres::sound {
 		uint8_t Padding_0x01C[4]{};
 	};
 
+	// NOLINTNEXTLINE(performance-enum-size)
 	enum class wave_format_tag : uint16_t {
 		Pcm = 1,
 		Adpcm = 2,
@@ -203,7 +204,89 @@ namespace xivres::sound {
 		short wNumCoef;
 		adpcm_coef_set aCoef[32];
 	};
+
+	struct riff_chunk_header {
+		static constexpr char Id_Riff[4]{ 'R', 'I', 'F', 'F' };
+		static constexpr char Id_Format[4]{ 'f', 'm', 't', ' ' };
+		static constexpr char Id_Data[4]{ 'd', 'a', 't', 'a' };
+
+		char Id[4]{};
+		LE<uint32_t> Size;
+	};
+
+	struct riff_wave_header {
+		static constexpr char Format_Wave[4]{ 'W', 'A', 'V', 'E' };
+
+		riff_chunk_header Riff;
+		char Format[4]{};
+	};
+
+	struct flac_magic_and_stream_info {
+		static constexpr char Magic_Value[4]{ 'f', 'L', 'a', 'C' };
+		static constexpr uint32_t BlockType_StreamInfo = 0;
+
+		char Magic[4]{};
+		BE<uint32_t> BlockHeader;
+		// - 1: is it last block?
+		// - 7: block type
+		// - 24: block length
+		BE<uint16_t> MinBlockSize;
+		BE<uint16_t> MaxBlockSize;
+		uint8_t MinFrameSize[3]{};
+		uint8_t MaxFrameSize[3]{};
+		BE<uint64_t> Format;
+		// - sampling rate: 20
+		// - channels: 3
+		// - bits per sample: 5
+		// - sample count: 36
+		uint8_t Md5[16]{};
+
+		[[nodiscard]] bool is_last_block() const { return *BlockHeader >> 31; }
+		[[nodiscard]] uint32_t block_type() const { return (*BlockHeader >> 24) & 0x7F; }
+		[[nodiscard]] uint32_t block_length() const { return *BlockHeader & 0xFFFFFF; }
+		[[nodiscard]] uint32_t sampling_rate() const { return static_cast<uint32_t>(*Format >> 44); }
+		[[nodiscard]] uint32_t channels() const { return static_cast<uint32_t>((*Format >> 41) & 0x7) + 1; }
+		[[nodiscard]] uint32_t bits_per_sample() const { return static_cast<uint32_t>((*Format >> 36) & 0x1F) + 1; }
+		[[nodiscard]] uint64_t sample_count() const { return *Format & 0xF'FFFF'FFFFULL; }
+	};
+
+	// Followed by SegmentCount bytes of segment table.
+	struct ogg_page_header {
+		static constexpr char Magic_Value[4]{ 'O', 'g', 'g', 'S' };
+		static constexpr uint64_t GranulePosition_None = UINT64_MAX;
+
+		char Magic[4]{};
+		uint8_t Version{};
+		uint8_t HeaderType{};
+		LE<uint64_t> GranulePosition;
+		LE<uint32_t> SerialNumber;
+		LE<uint32_t> SequenceNumber;
+		LE<uint32_t> Checksum;
+		uint8_t SegmentCount{};
+	};
+
+	struct vorbis_identification_header {
+		static constexpr uint8_t PacketType_Identification = 1;
+		static constexpr char Magic_Value[6]{ 'v', 'o', 'r', 'b', 'i', 's' };
+
+		uint8_t PacketType{};
+		char Magic[6]{};
+		LE<uint32_t> Version;
+		uint8_t Channels{};
+		LE<uint32_t> SamplingRate;
+		LE<int32_t> BitrateMaximum;
+		LE<int32_t> BitrateNominal;
+		LE<int32_t> BitrateMinimum;
+		uint8_t BlockSizes{};
+		uint8_t Framing{};
+	};
 #pragma pack(pop)
+
+	static_assert(sizeof riff_chunk_header == 8);
+	static_assert(sizeof riff_wave_header == 12);
+	static_assert(sizeof flac_magic_and_stream_info == 4 + 4 + 34);
+	static_assert(sizeof ogg_page_header == 27);
+	static_assert(sizeof vorbis_identification_header == 30);
 
 	class reader {
 		const std::shared_ptr<stream> m_stream;
@@ -268,10 +351,6 @@ namespace xivres::sound {
 
 		[[nodiscard]] std::vector<std::vector<uint8_t>> read_table_1() const { return read_table(m_offsetsTable1, m_endOfTable1); }
 
-		// Table 1 holds one sound descriptor per sound; `sound_descriptor_header::Type` says
-		// what kind of stream it is. Returns nullopt when the table is absent or the entry is
-		// too short to hold a header, which the callers treat as "fall back to the channel
-		// count" rather than as an error.
 		[[nodiscard]] std::optional<sound_descriptor_header> read_sound_descriptor(size_t index) const {
 			if (index >= m_offsetsTable1.size())
 				return std::nullopt;
@@ -299,6 +378,8 @@ namespace xivres::sound {
 		[[nodiscard]] size_t sound_item_count() const { return m_soundEntryOffsets.size(); }
 
 		[[nodiscard]] sound_item read_sound_item(size_t entryIndex) const;
+
+		[[nodiscard]] std::optional<double> stream_bytes_per_second(size_t entryIndex) const;
 	};
 
 	class writer {

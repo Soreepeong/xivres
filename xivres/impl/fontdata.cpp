@@ -4,9 +4,9 @@
 #include "../include/xivres/util.h"
 
 xivres::fontdata::stream::stream() {
-	memcpy(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature);
-	memcpy(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature);
-	memcpy(m_knhd.Signature, kerning_header::Signature_Value, sizeof m_knhd.Signature);
+	std::memcpy(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature);
+	std::memcpy(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature);
+	std::memcpy(m_knhd.Signature, kerning_header::Signature_Value, sizeof m_knhd.Signature);
 	m_fcsv.FontTableHeaderOffset = sizeof m_fcsv;
 	m_fcsv.KerningHeaderOffset = sizeof m_fcsv + sizeof m_fthd;
 }
@@ -18,14 +18,14 @@ xivres::fontdata::stream::stream(const xivres::stream& strm, bool strict)
 	, m_knhd(strm.read_fully<kerning_header>(m_fcsv.KerningHeaderOffset))
 	, m_kerningEntries(strm.read_vector<kerning_entry>(static_cast<std::streamoff>(m_fcsv.KerningHeaderOffset + sizeof m_knhd),(std::min)(m_knhd.EntryCount, m_fthd.KerningEntryCount), 0x1000000)) {
 	if (strict) {
-		if (0 != memcmp(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature))
+		if (0 != std::memcmp(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature))
 			throw bad_data_error("fcsv.Signature != \"fcsv0100\"");
 		if (m_fcsv.FontTableHeaderOffset != sizeof header)
 			throw bad_data_error("FontTableHeaderOffset != sizeof header");
 		if (!util::all_same_value(m_fcsv.Padding_0x10))
 			throw bad_data_error("fcsv.Padding_0x10 != 0");
 
-		if (0 != memcmp(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature))
+		if (0 != std::memcmp(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature))
 			throw bad_data_error("fthd.Signature != \"fthd\"");
 		if (!util::all_same_value(m_fthd.Padding_0x0C))
 			throw bad_data_error("fthd.Padding_0x0C != 0");
@@ -34,7 +34,7 @@ xivres::fontdata::stream::stream(const xivres::stream& strm, bool strict)
 		if (m_fthd.KerningEntryCount > 65535)
 			throw bad_data_error("fthd.KerningEntryCount > 65535");
 
-		if (0 != memcmp(m_knhd.Signature, kerning_header::Signature_Value, sizeof m_knhd.Signature))
+		if (0 != std::memcmp(m_knhd.Signature, kerning_header::Signature_Value, sizeof m_knhd.Signature))
 			throw bad_data_error("knhd.Signature != \"knhd\"");
 		if (!util::all_same_value(m_knhd.Padding_0x08))
 			throw bad_data_error("knhd.Padding_0x08 != 0");

@@ -55,7 +55,7 @@ namespace xivres {
 
 		[[nodiscard]] std::vector<uint8_t> data_bytes() const {
 			std::vector<uint8_t> res(std::span(m_data).size_bytes());
-			memcpy(&res[0], &m_data[0], res.size());
+			std::memcpy(&res[0], &m_data[0], res.size());
 			return res;
 		}
 
