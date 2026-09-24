@@ -46,6 +46,11 @@ std::streamsize xivres::hotswap_packed_stream::read(std::streamoff offset, void*
 	return length;
 }
 
+void xivres::hotswap_packed_stream::hold_until(std::chrono::steady_clock::time_point until) const {
+	if (const auto& underlyingStream = m_stream ? m_stream : m_baseStream)
+		underlyingStream->hold_until(until);
+}
+
 xivres::packed::type xivres::hotswap_packed_stream::get_packed_type() const {
 	return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type());
 }

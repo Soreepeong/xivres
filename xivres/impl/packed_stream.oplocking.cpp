@@ -23,52 +23,55 @@ xivres::packed::type xivres::oplocking_packed_stream::get_packed_type() const {
 }
 
 std::streamsize xivres::oplocking_packed_stream::size() const {
-	if (!open())
-		return 0;
-
-	return m_packedStream->size();
+	const auto packedStream = packed();
+	return packedStream ? packedStream->size() : 0;
 }
 
 std::streamsize xivres::oplocking_packed_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (!open())
-		return 0;
+	const auto packedStream = packed();
+	return packedStream ? packedStream->read(offset, buf, length) : 0;
+}
 
-	return m_packedStream->read(offset, buf, length);
+void xivres::oplocking_packed_stream::hold_until(std::chrono::steady_clock::time_point until) const {
+	const auto lock = std::lock_guard(m_mtx);
+	if (m_file)
+		m_file->hold_until(until);
 }
 
 void xivres::oplocking_packed_stream::close() {
+	const auto lock = std::lock_guard(m_mtx);
 	m_packedStream.reset();
-	m_oplockingStream.reset();
+	m_file.reset();
 }
 
-bool xivres::oplocking_packed_stream::open() const {
-	if (m_oplockingStream && !m_oplockingStream->done() && m_packedStream)
-		return true;
+std::shared_ptr<xivres::packed_stream> xivres::oplocking_packed_stream::packed() const {
+	const auto lock = std::lock_guard(m_mtx);
 
-	if (!m_oplockingStream || m_oplockingStream->done()) {
+	if (!m_file) {
 		if (!exists(m_path))
-			return false;
-
-		m_oplockingStream = std::make_shared<oplocking_file_stream>(m_path, false);
-		if (m_oplockingStream->done())
-			return false;
+			return nullptr;
+		m_file = std::make_shared<oplocking_file_stream>(m_path, true);
 	}
 
-	if (m_oplockingStream && !m_oplockingStream->done()) {
-		switch (m_packedType) {
-			case packed::type::standard:
-				m_packedStream = std::make_shared<passthrough_packed_stream<standard_passthrough_packer>>(path_spec(), m_oplockingStream);
-				break;
-			case packed::type::model:
-				m_packedStream = std::make_shared<passthrough_packed_stream<model_passthrough_packer>>(path_spec(), m_oplockingStream);
-				break;
-			case packed::type::texture:
-				m_packedStream = std::make_shared<passthrough_packed_stream<texture_passthrough_packer>>(path_spec(), m_oplockingStream);
-				break;
-			default:
-				return false;
-		}
-	}
+	if (m_file->done())
+		return nullptr;
 
-	return true;
+	if (m_packedStream && m_packedGeneration == m_file->generation())
+		return m_packedStream;
+
+	m_packedGeneration = m_file->generation();
+	switch (m_packedType) {
+		case packed::type::standard:
+			m_packedStream = std::make_shared<passthrough_packed_stream<standard_passthrough_packer>>(path_spec(), m_file);
+			break;
+		case packed::type::model:
+			m_packedStream = std::make_shared<passthrough_packed_stream<model_passthrough_packer>>(path_spec(), m_file);
+			break;
+		case packed::type::texture:
+			m_packedStream = std::make_shared<passthrough_packed_stream<texture_passthrough_packer>>(path_spec(), m_file);
+			break;
+		default:
+			return nullptr;
+	}
+	return m_packedStream;
 }

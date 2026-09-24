@@ -1,6 +1,7 @@
 #ifndef XIVRES_PACKEDSTREAM_H_
 #define XIVRES_PACKEDSTREAM_H_
 
+#include <chrono>
 #include <thread>
 #include <type_traits>
 
@@ -36,6 +37,8 @@ namespace xivres {
 		}
 
 		[[nodiscard]] virtual packed::type get_packed_type() const = 0;
+
+		virtual void hold_until(std::chrono::steady_clock::time_point until) const {}
 
 		unpacked_stream get_unpacked(std::span<uint8_t> obfuscatedHeaderRewrite = {}) const;
 

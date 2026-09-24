@@ -91,6 +91,16 @@ std::streamsize xivres::sqpack::generator::entry_info::read(std::streamoff offse
 	return length;
 }
 
+uint64_t xivres::sqpack::generator::entry_info::data_size() const {
+	const auto& underlyingStream = m_stream ? *m_stream : m_baseStream ? *m_baseStream : placeholder_packed_stream::instance();
+	return (std::min<uint64_t>)(m_entrySize, underlyingStream.size());
+}
+
+void xivres::sqpack::generator::entry_info::hold_until(std::chrono::steady_clock::time_point until) const {
+	if (const auto& underlyingStream = m_stream ? m_stream : m_baseStream)
+		underlyingStream->hold_until(until);
+}
+
 xivres::packed::type xivres::sqpack::generator::entry_info::get_packed_type() const {
 	return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type());
 }
@@ -115,39 +125,107 @@ xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::op
 	return *this;
 }
 
-void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::clear() {
-	m_view = nullptr;
-	m_entry = nullptr;
-	if (!m_bufferTemporary.empty())
-		std::vector<uint8_t>().swap(m_bufferTemporary);
+namespace {
+	// A gap longer than this between two windows of a stream is taken as the stream having stopped and started again.
+	constexpr std::chrono::seconds StreamMaximumInterval{60};
 }
 
-void xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry::set(const data_view_stream* view, const entry_info* entry) {
-	m_view = view;
-	m_entry = entry;
+bool xivres::sqpack::generator::sqpack_view_entry_cache::read(const entry_info& entry, bool streamed, uint64_t offset, std::span<uint8_t> out) {
+	if (streamed)
+		return read_streamed(entry, offset);
 
-	if (entry->entry_size() <= SmallEntryBufferSize) {
-		if (!m_bufferTemporary.empty())
-			std::vector<uint8_t>().swap(m_bufferTemporary);
-		if (m_bufferPreallocated.size() != SmallEntryBufferSize)
-			m_bufferPreallocated.resize(SmallEntryBufferSize);
-		m_bufferActive = std::span(m_bufferPreallocated.begin(), entry->entry_size());
-	} else {
-		m_bufferTemporary.resize(entry->entry_size());
-		m_bufferActive = std::span(m_bufferTemporary);
+	const auto now = clock::now();
+	const auto thread = std::this_thread::get_id();
+	std::shared_ptr<buffer> buf;
+	{
+		const auto lock = std::lock_guard(m_mtx);
+		expire_locked(now);
+
+		auto& current = m_readers[thread];
+		if (current.Entry != &entry || offset == 0) {
+			current = {};
+			if (const auto it = m_buffers.find(&entry); it != m_buffers.end())
+				buf = it->second.lock();
+			if (!buf) {
+				if (offset != 0 || entry.entry_size() > MaxBufferedEntrySize) {
+					m_readers.erase(thread);
+					return false;
+				}
+				buf = std::make_shared<buffer>();
+				m_buffers.insert_or_assign(&entry, buf);
+			}
+			current.Entry = &entry;
+			current.Buffer = buf;
+		} else
+			buf = current.Buffer;
+		current.LastRead = now;
 	}
-	entry->read_fully(0, m_bufferActive);
+
+	{
+		const auto lock = std::lock_guard(buf->FillMtx);
+		if (!buf->Filled) {
+			buf->Filled = true;
+			try {
+				buf->Data.resize(static_cast<size_t>(entry.data_size()));
+				entry.read_fully(0, buf->Data.data(), static_cast<std::streamsize>(buf->Data.size()));
+			} catch (...) {
+				buf->Failed = true;
+				std::vector<uint8_t>().swap(buf->Data);
+			}
+		}
+	}
+
+	const auto& data = buf->Data;
+	const auto done = buf->Failed || offset + out.size() >= data.size();
+	if (!buf->Failed) {
+		const auto available = offset < data.size() ? static_cast<size_t>((std::min<uint64_t>)(out.size(), data.size() - offset)) : 0;
+		std::copy_n(data.begin() + static_cast<ptrdiff_t>(offset), available, out.begin());
+		std::fill(out.begin() + static_cast<ptrdiff_t>(available), out.end(), 0);
+	}
+
+	if (done) {
+		const auto lock = std::scoped_lock(m_mtx);
+		if (const auto it = m_readers.find(thread); it != m_readers.end() && it->second.Buffer == buf)
+			m_readers.erase(it);
+	}
+	return !buf->Failed;
 }
 
-xivres::sqpack::generator::sqpack_view_entry_cache::buffered_entry* xivres::sqpack::generator::sqpack_view_entry_cache::GetBuffer(const data_view_stream* view, const entry_info* entry) {
-	if (m_lastActiveEntry.is_same(view, entry))
-		return &m_lastActiveEntry;
+bool xivres::sqpack::generator::sqpack_view_entry_cache::read_streamed(const entry_info& entry, uint64_t offset) {
+	if (offset != 0)
+		return false;
 
-	if (entry->entry_size() > LargeEntryBufferSizeMax)
-		return nullptr;
+	const auto now = clock::now();
+	clock::duration hold;
+	{
+		const auto lock = std::scoped_lock(m_mtx);
+		expire_locked(now);
 
-	m_lastActiveEntry.set(view, entry);
-	return &m_lastActiveEntry;
+		auto& state = m_streams[&entry];
+		if (state.LastWindow != clock::time_point{}) {
+			if (const auto interval = now - state.LastWindow; interval <= StreamMaximumInterval)
+				state.LongestInterval = (std::max)(state.LongestInterval, interval);
+			else
+				state.LongestInterval = {};
+		}
+		state.LastWindow = now;
+		hold = (std::max<clock::duration>)(state.LongestInterval * 3 / 2, StreamMinimumHold);
+	}
+
+	entry.hold_until(now + hold);
+	return false;
+}
+
+void xivres::sqpack::generator::sqpack_view_entry_cache::expire_locked(clock::time_point now) {
+	std::erase_if(m_readers, [now](const auto& item) { return now - item.second.LastRead > ReaderTimeout; });
+	std::erase_if(m_buffers, [](const auto& item) { return item.second.expired(); });
+	std::erase_if(m_streams, [now](const auto& item) { return now - item.second.LastWindow > StreamMaximumInterval; });
+}
+
+void xivres::sqpack::generator::sqpack_view_entry_cache::flush() {
+	const auto lock = std::lock_guard(m_mtx);
+	m_readers.clear();
+	m_buffers.clear();
 }
 
 xivres::sqpack::generator::generator(std::string ex, std::string name, uint64_t maxFileSize)
@@ -397,13 +475,14 @@ namespace {
 	}
 }
 
-xivres::sqpack::generator::data_view_stream::data_view_stream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<const stream> original, std::shared_ptr<sqpack_view_entry_cache> buffer)
+xivres::sqpack::generator::data_view_stream::data_view_stream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<const stream> original, std::shared_ptr<sqpack_view_entry_cache> buffer, bool streamed)
 	: m_header(ConcatDataHeaders(header, subheader))
 	, m_entries(entries)
 	, m_original(std::move(original))
 	, m_originalSize(m_original ? static_cast<uint64_t>(m_original->size()) : 0)
 	, m_size(sizeof header + sizeof subheader + subheader.DataSize)
-	, m_buffer(std::move(buffer)) {
+	, m_buffer(std::move(buffer))
+	, m_streamed(streamed) {
 }
 
 std::span<xivres::sqpack::generator::entry_info*>::iterator xivres::sqpack::generator::data_view_stream::entry_at_or_before(uint64_t offset) const {
@@ -434,9 +513,7 @@ std::streamsize xivres::sqpack::generator::data_view_stream::read(std::streamoff
 			const auto available = (std::min)(out.size(), static_cast<size_t>(entry.entry_size() - relativeOffset));
 			if (entry.keeps_original_place() && !entry.swapped())
 				ReadOriginalOrZeroes(m_original.get(), m_originalSize, pos, out.subspan(0, available));
-			else if (const auto cached = m_buffer ? m_buffer->GetBuffer(this, &entry) : nullptr)
-				std::copy_n(&cached->buffer()[static_cast<size_t>(relativeOffset)], available, out.begin());
-			else
+			else if (!m_buffer || !m_buffer->read(entry, m_streamed, relativeOffset, out.subspan(0, available)))
 				entry.read_fully(static_cast<std::streamoff>(relativeOffset), out.data(), static_cast<std::streamsize>(available));
 			out = out.subspan(available);
 			pos += available;
@@ -473,7 +550,7 @@ bool xivres::sqpack::generator::data_view_stream::reads_original(uint64_t offset
 	return true;
 }
 
-xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer) {
+xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer, bool streamed) {
 	header dataHeader{};
 	std::vector<sqdata::header> dataSubheaders;
 	std::vector<std::pair<size_t, size_t>> dataEntryRanges;
@@ -644,7 +721,8 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 			dataSubheaders[i],
 			std::span(res.Entries).subspan(dataEntryRanges[i].first, dataEntryRanges[i].second),
 			keepLayout && i < m_originalData.size() ? m_originalData[i] : nullptr,
-			dataBuffer));
+			dataBuffer,
+			streamed));
 
 	return res;
 }

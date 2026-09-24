@@ -1,6 +1,7 @@
 #ifndef XIVRES_STREAMOPLOCKING_H_
 #define XIVRES_STREAMOPLOCKING_H_
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 
@@ -12,7 +13,9 @@ namespace xivres {
 		std::unique_ptr<data> m_data;
 
 	public:
-		oplocking_file_stream(std::filesystem::path path, bool reopenOnChange);
+		static constexpr std::chrono::milliseconds IdleDelay{1000};
+
+		oplocking_file_stream(std::filesystem::path path, bool acceptChanges);
 		oplocking_file_stream(oplocking_file_stream&&) = delete;
 		oplocking_file_stream(const oplocking_file_stream&) = delete;
 		oplocking_file_stream& operator=(oplocking_file_stream&&) = delete;
@@ -21,9 +24,11 @@ namespace xivres {
 
 		[[nodiscard]] const std::filesystem::path& path() const;
 
-		void open() const;
-		void invalidate();
 		[[nodiscard]] bool done() const;
+
+		[[nodiscard]] uint64_t generation() const;
+
+		void hold_until(std::chrono::steady_clock::time_point until) const;
 
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;

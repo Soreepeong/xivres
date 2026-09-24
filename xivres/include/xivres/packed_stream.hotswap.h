@@ -20,6 +20,8 @@ namespace xivres {
 
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 
+		void hold_until(std::chrono::steady_clock::time_point until) const override;
+
 		[[nodiscard]] packed::type get_packed_type() const override;
 	};
 }

@@ -1,6 +1,9 @@
 #ifndef XIVRES_SQPACKGENERATOR_H_
 #define XIVRES_SQPACKGENERATOR_H_
 
+#include <chrono>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <thread>
 
@@ -51,8 +54,11 @@ namespace xivres::sqpack {
 			std::shared_ptr<const packed_stream> swap_stream(std::shared_ptr<const packed_stream> newStream = nullptr);
 			[[nodiscard]] bool swapped() const { return !!m_stream; }
 
+			[[nodiscard]] uint64_t data_size() const;
+
 			[[nodiscard]] std::streamsize size() const override { return m_entrySize; }
 			std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
+			void hold_until(std::chrono::steady_clock::time_point until) const override;
 			[[nodiscard]] packed::type get_packed_type() const override;
 		};
 
@@ -63,9 +69,10 @@ namespace xivres::sqpack {
 			const uint64_t m_originalSize;
 			const uint64_t m_size;
 			const std::shared_ptr<sqpack_view_entry_cache> m_buffer;
+			const bool m_streamed;
 
 		public:
-			data_view_stream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<const stream> original, std::shared_ptr<sqpack_view_entry_cache> buffer);
+			data_view_stream(const header& header, const sqdata::header& subheader, std::span<entry_info*> entries, std::shared_ptr<const stream> original, std::shared_ptr<sqpack_view_entry_cache> buffer, bool streamed);
 
 			std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 			[[nodiscard]] std::streamsize size() const override { return static_cast<std::streamsize>(m_size); }
@@ -104,33 +111,43 @@ namespace xivres::sqpack {
 		};
 
 		class sqpack_view_entry_cache {
-			static constexpr auto SmallEntryBufferSize = (INTPTR_MAX == INT64_MAX ? 256 : 8) * 1048576;
-			static constexpr auto LargeEntryBufferSizeMax = (INTPTR_MAX == INT64_MAX ? 1024 : 64) * 1048576;
-
 		public:
-			class buffered_entry {
-				const data_view_stream* m_view = nullptr;
-				const entry_info* m_entry = nullptr;
-				std::vector<uint8_t> m_bufferPreallocated;
-				std::vector<uint8_t> m_bufferTemporary;
-				std::span<uint8_t> m_bufferActive;
+			static constexpr uint64_t MaxBufferedEntrySize = (INTPTR_MAX == INT64_MAX ? 1024 : 64) * 1048576;
+			static constexpr std::chrono::seconds ReaderTimeout{30};
+			static constexpr std::chrono::seconds StreamMinimumHold{15};
 
-			public:
-				bool empty() const { return m_view == nullptr || m_entry == nullptr; }
-				bool is_same(const data_view_stream* view, const entry_info* entry) const { return m_view == view && m_entry == entry; }
-				void clear();
-				auto get() const { return std::make_pair(m_view, m_entry); }
-				void set(const data_view_stream* view, const entry_info* entry);
-				const auto& buffer() const { return m_bufferActive; }
-			};
+			bool read(const entry_info& entry, bool streamed, uint64_t offset, std::span<uint8_t> out);
+
+			void flush();
 
 		private:
-			buffered_entry m_lastActiveEntry;
+			using clock = std::chrono::steady_clock;
 
-		public:
-			buffered_entry* GetBuffer(const data_view_stream* view, const entry_info* entry);
+			struct buffer {
+				std::mutex FillMtx;
+				bool Filled = false;
+				bool Failed = false;
+				std::vector<uint8_t> Data;
+			};
 
-			void Flush() { m_lastActiveEntry.clear(); }
+			struct reader {
+				const entry_info* Entry = nullptr;
+				std::shared_ptr<buffer> Buffer;
+				clock::time_point LastRead;
+			};
+
+			struct stream_state {
+				clock::time_point LastWindow;
+				clock::duration LongestInterval{};
+			};
+
+			std::mutex m_mtx;
+			std::map<const entry_info*, std::weak_ptr<buffer>> m_buffers;
+			std::map<std::thread::id, reader> m_readers;
+			std::map<const entry_info*, stream_state> m_streams;
+
+			void expire_locked(clock::time_point now);
+			bool read_streamed(const entry_info& entry, uint64_t offset);
 		};
 
 		const std::string DatExpac;
@@ -160,7 +177,7 @@ namespace xivres::sqpack {
 		[[nodiscard]] const entry_info* find_entry(const path_spec& pathSpec) const;
 		void reserve_space(path_spec pathSpec, uint32_t size);
 
-		[[nodiscard]] sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr);
+		[[nodiscard]] sqpack_views export_to_views(bool strict, const std::shared_ptr<sqpack_view_entry_cache>& dataBuffer = nullptr, bool streamed = false);
 		void export_to_files(const std::filesystem::path& dir, bool strict = false, size_t cores = std::thread::hardware_concurrency());
 
 		[[nodiscard]] std::unique_ptr<default_base_stream> get(const path_spec& pathSpec) const;
