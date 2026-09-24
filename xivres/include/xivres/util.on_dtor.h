@@ -55,7 +55,7 @@ namespace xivres::util {
 		}
 
 		on_dtor& wrap(std::function<void(std::function<void()>)> wrapper) {
-			m_fn = [fn = std::move(m_fn), wrapper = std::move(wrapper)]() {
+			m_fn = [fn = std::move(m_fn), wrapper = std::move(wrapper)] {
 				wrapper(fn);
 			};
 			return *this;
@@ -128,26 +128,23 @@ namespace xivres::util {
 
 	public:
 		wrap_value_with_context(T value, std::function<void()> fn) noexcept
-			: on_dtor(fn)
+			: on_dtor(std::move(fn))
 			, m_value(std::move(value)) {
 		}
 
-		template<typename = std::enable_if_t<std::is_default_constructible_v<T>>>
-		wrap_value_with_context() noexcept
+		wrap_value_with_context() noexcept requires std::is_default_constructible_v<T>
 			: on_dtor(nullptr)
 			, m_value{} {
 		}
 
-		template<typename = std::enable_if_t<std::is_default_constructible_v<T>>>
-		wrap_value_with_context(wrap_value_with_context&& r) noexcept
+		wrap_value_with_context(wrap_value_with_context&& r) noexcept requires std::is_default_constructible_v<T>
 			: on_dtor(std::move(r))
 			, m_value(std::move(r.m_value)) {
 			if constexpr (std::is_trivial_v<T>)
 				r.m_value = {};
 		}
 
-		template<typename = std::enable_if_t<std::is_default_constructible_v<T>>>
-		wrap_value_with_context& operator=(wrap_value_with_context&& r) noexcept {
+		wrap_value_with_context& operator=(wrap_value_with_context&& r) noexcept requires std::is_default_constructible_v<T> {
 			m_value = std::move(r.m_value);
 			on_dtor::operator=(std::move(r));
 			if constexpr (std::is_trivial_v<T>)
@@ -155,13 +152,11 @@ namespace xivres::util {
 			return *this;
 		}
 
-		template<typename = std::enable_if_t<std::is_default_constructible_v<T>>>
-		wrap_value_with_context(std::nullptr_t) noexcept
+		wrap_value_with_context(std::nullptr_t) noexcept requires std::is_default_constructible_v<T>
 			: on_dtor() {
 		}
 
-		template<typename = std::enable_if_t<std::is_default_constructible_v<T>>>
-		wrap_value_with_context& operator=(std::nullptr_t) noexcept {
+		wrap_value_with_context& operator=(std::nullptr_t) noexcept requires std::is_default_constructible_v<T> {
 			on_dtor::operator=(nullptr);
 			return *this;
 		}

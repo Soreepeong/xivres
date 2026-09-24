@@ -5,7 +5,7 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 	: base_unpacker(header, std::move(strm)) {
 	const auto underlyingSize = m_stream->size();
 	auto readOffset = static_cast<std::streamoff>(sizeof(packed::file_header));
-	const auto locator = m_stream->read_fully<packed::model_block_locator>(static_cast<std::streamoff>(readOffset));
+	const auto locator = m_stream->read_fully<packed::model_block_locator>(readOffset);
 	const auto blockCount = static_cast<size_t>(locator.FirstBlockIndices.Index[2]) + locator.BlockCount.Index[2];
 
 	readOffset += sizeof locator;
@@ -14,6 +14,7 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 			.RequestOffsetPastHeader = 0,
 			.BlockOffset = m_blocks.empty() ? *header.HeaderSize : m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize,
 			.PaddedChunkSize = blockSize,
+			.DecompressedSize = 0,
 			.GroupIndex = UINT16_MAX,
 			.GroupBlockIndex = 0,
 		});
@@ -55,7 +56,7 @@ xivres::model_unpacker::model_unpacker(const packed::file_header& header, std::s
 	for (auto& block : m_blocks) {
 		packed::block_header blockHeader;
 
-		if (block.BlockOffset == underlyingSize)
+		if (std::cmp_equal(block.BlockOffset, underlyingSize))
 			blockHeader.DecompressedSize = blockHeader.CompressedSize = 0;
 		else
 			m_stream->read_fully(block.BlockOffset, &blockHeader, sizeof blockHeader);
@@ -83,17 +84,17 @@ std::streamsize xivres::model_unpacker::read(std::streamoff offset, void* buf, s
 	if (!length)
 		return 0;
 
-	block_decoder info(*this, buf, length, offset);
+	block_decoder info(buf, length, offset);
 	info.forward_copy(util::span_cast<uint8_t>(1, &m_header));
 	if (info.complete() || m_blocks.empty())
 		return info.filled();
 
-	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), info.current_offset());
+	auto it = std::ranges::upper_bound(m_blocks, info.current_offset(), {}, &block_info::RequestOffsetPastHeader);
 	if (it != m_blocks.begin())
 		--it;
 
-	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
-	info.multithreaded(std::distance(it, itEnd) >= MinBlockCountForMultithreadedDecompression);
+	const auto itEnd = std::ranges::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length), {}, &block_info::RequestOffsetPastHeader);
+	info.multithreaded(std::cmp_greater_equal(std::distance(it, itEnd), MinBlockCountForMultithreadedDecompression));
 
 	const auto preloadFrom = static_cast<std::streamoff>(it->BlockOffset);
 	const auto preloadTo = static_cast<std::streamoff>(itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().PaddedChunkSize: itEnd->BlockOffset);

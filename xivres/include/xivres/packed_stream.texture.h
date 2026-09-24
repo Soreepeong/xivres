@@ -16,7 +16,7 @@ namespace xivres {
 		size_t m_repeatCount{};
 
 	public:
-		using passthrough_packer<packed::type::texture>::passthrough_packer;
+		using passthrough_packer::passthrough_packer;
 
 		[[nodiscard]] std::streamsize size() override;
 

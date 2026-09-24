@@ -14,14 +14,16 @@
 
 using namespace std::string_literals;
 
-template<typename T>
-T JsonValueOrDefault(const nlohmann::json& json, const char* key, T defaultValue, T nullDefaultValue) {
-	if (const auto it = json.find(key); it != json.end()) {
-		if (it->is_null())
-			return nullDefaultValue;
-		return it->get<T>();
+namespace {
+	template<typename T>
+	T JsonValueOrDefault(const nlohmann::json& json, const char* key, T defaultValue, T nullDefaultValue) {
+		if (const auto it = json.find(key); it != json.end()) {
+			if (it->is_null())
+				return nullDefaultValue;
+			return it->get<T>();
+		}
+		return defaultValue;
 	}
-	return defaultValue;
 }
 
 void xivres::textools::to_json(nlohmann::json& j, const mod_pack& p) {
@@ -167,11 +169,11 @@ void xivres::textools::from_json(const nlohmann::json& j, mod_pack_json& p) {
 
 xivres::textools::mod_pack_json xivres::textools::mod_pack_json::from_stream(const stream& strm) {
 	const auto size = strm.size();
-	if (size > 16 * 1024 * 1024)
+	if (size > 16LL * 1024 * 1024)
 		throw bad_data_error("File too big (>16MB).");
 
 	std::string buf(static_cast<size_t>(size), 0);
-	strm.read_fully(0, &buf[0], buf.size());
+	strm.read_fully(0, buf.data(), size);
 
 	std::istringstream in(buf);
 	mod_pack_json res;
@@ -200,7 +202,7 @@ void xivres::textools::mod_pack_json::for_each(std::function<void(const mods_jso
 	for_each_breakable([&cb](const mods_json& entry) { cb(entry); return true; }, choices);
 }
 
-bool xivres::textools::mod_pack_json::for_each_breakable(std::function<bool(mods_json&)> cb, const nlohmann::json& choices) {
+bool xivres::textools::mod_pack_json::for_each_breakable(const std::function<bool(mods_json&)>& cb, const nlohmann::json& choices) {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -238,7 +240,7 @@ bool xivres::textools::mod_pack_json::for_each_breakable(std::function<bool(mods
 	return true;
 }
 
-bool xivres::textools::mod_pack_json::for_each_breakable(std::function<bool(const mods_json&)> cb, const nlohmann::json& choices) const {
+bool xivres::textools::mod_pack_json::for_each_breakable(const std::function<bool(const mods_json&)>& cb, const nlohmann::json& choices) const {
 	static const nlohmann::json emptyChoices;
 
 	for (auto& entry : SimpleModsList)
@@ -314,14 +316,14 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 	, AllEntries(span_cast<entry_locator>(Data, Header.FirstEntryLocatorOffset, Header.EntryCount)) {
 	if (srell::u8csmatch matches;
 		regex_search(TargetPath, matches, CharacterMetaPathTest)) {
-		PrimaryType = matches["PrimaryType"].str();
-		PrimaryId = static_cast<uint16_t>(std::strtol(matches["PrimaryId"].str().c_str(), nullptr, 10));
-		SecondaryType = matches["SecondaryType"].str();
-		SecondaryId = static_cast<uint16_t>(std::strtol(matches["SecondaryId"].str().c_str(), nullptr, 10));
+		PrimaryType = matches.str("PrimaryType");
+		PrimaryId = static_cast<uint16_t>(std::strtol(matches.str("PrimaryId").c_str(), nullptr, 10));
+		SecondaryType = matches.str("SecondaryType");
+		SecondaryId = static_cast<uint16_t>(std::strtol(matches.str("SecondaryId").c_str(), nullptr, 10));
 		if (SecondaryType.empty())
-			TargetImcPath = matches["FullPathPrefix"].str() + matches["PrimaryCode"].str() + matches["PrimaryId"].str() + ".imc";
+			TargetImcPath = matches.str("FullPathPrefix") + matches.str("PrimaryCode") + matches.str("PrimaryId") + ".imc";
 		else
-			TargetImcPath = matches["FullPathPrefix"].str() + matches["SecondaryCode"].str() + matches["SecondaryId"].str() + ".imc";
+			TargetImcPath = matches.str("FullPathPrefix") + matches.str("SecondaryCode") + matches.str("SecondaryId") + ".imc";
 		for (auto& c : PrimaryType) {
 			if (c < 128)
 				c = std::tolower(c);
@@ -331,7 +333,7 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 				c = std::tolower(c);
 		}
 		if (PrimaryType == "equipment") {
-			auto slot = matches["Slot"].str();
+			auto slot = matches.str("Slot");
 			for (auto& c : slot) {
 				if (c < 128)
 					c = std::tolower(c);
@@ -364,8 +366,8 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 		}
 
 	} else if (regex_search(TargetPath, matches, HousingMetaPathTest)) {
-		PrimaryType = matches["PrimaryType"].str();
-		PrimaryId = static_cast<uint16_t>(std::strtol(matches["PrimaryId"].str().c_str(), nullptr, 10));
+		PrimaryType = matches.str("PrimaryType");
+		PrimaryId = static_cast<uint16_t>(std::strtol(matches.str("PrimaryId").c_str(), nullptr, 10));
 		ItemType = item_types::Housing;
 
 	} else {
@@ -375,16 +377,16 @@ xivres::textools::metafile::metafile(std::string gamePath, const stream& stream)
 	if (srell::u8csmatch matches;
 		regex_search(SourcePath, matches, CharacterMetaPathTest)) {
 		if (SecondaryType.empty())
-			SourceImcPath = matches["FullPathPrefix"].str() + matches["PrimaryCode"].str() + matches["PrimaryId"].str() + ".imc";
+			SourceImcPath = matches.str("FullPathPrefix") + matches.str("PrimaryCode") + matches.str("PrimaryId") + ".imc";
 		else
-			SourceImcPath = matches["FullPathPrefix"].str() + matches["SecondaryCode"].str() + matches["SecondaryId"].str() + ".imc";
+			SourceImcPath = matches.str("FullPathPrefix") + matches.str("SecondaryCode") + matches.str("SecondaryId") + ".imc";
 
 	} else {
 		throw bad_data_error("Unsupported meta file");
 	}
 }
 
-void xivres::textools::metafile::apply_image_change_data_edits(std::function<image_change_data::file&()> reader) const {
+void xivres::textools::metafile::apply_image_change_data_edits(const std::function<image_change_data::file&()>& reader) const {
 	if (const auto imcedit = get_span<image_change_data::entry>(meta_types::Imc); !imcedit.empty()) {
 		auto& imc = reader();
 		using imc_t = image_change_data::image_change_data_type;
@@ -399,7 +401,7 @@ void xivres::textools::metafile::apply_image_change_data_edits(std::function<ima
 	}
 }
 
-void xivres::textools::metafile::apply_equipment_deformer_parameter_edits(std::function<equipment_deformer_parameter_file&(item_types, uint32_t)> reader) const {
+void xivres::textools::metafile::apply_equipment_deformer_parameter_edits(const std::function<equipment_deformer_parameter_file&(item_types, uint32_t)>& reader) const {
 	if (const auto eqdpedit = get_span<equipment_deformer_parameter_entry>(meta_types::Eqdp); !eqdpedit.empty()) {
 		for (const auto& v : eqdpedit) {
 			auto& eqdp = reader(ItemType, v.RaceCode);
@@ -472,8 +474,7 @@ void xivres::textools::simple_ttmp2_writer::begin_packed(int compressionLevel) {
 	if (m_packed)
 		throw std::logic_error("Packing has already begun");
 
-	constexpr uint32_t bufferSize = 65536;
-	zip_fileinfo zi{};
+	constexpr zip_fileinfo zi{};
 
 	if (const auto err = zipOpenNewFileInZip3_64(
 		m_zf, "TTMPD.mpd", &zi,
@@ -494,7 +495,6 @@ void xivres::textools::simple_ttmp2_writer::begin_packed(int compressionLevel) {
 }
 
 void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stream) {
-	constexpr uint32_t bufferSize = 65536;
 	if (!m_zf)
 		throw std::logic_error("No file is open");
 	if (!m_packed)
@@ -506,6 +506,8 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 	util::thread_pool::pool::current().release_working_status([&lock] { lock.lock(); });
 
 	try {
+		constexpr uint32_t bufferSize = 65536;
+
 		auto& mods_json = m_ttmpl->SimpleModsList.emplace_back();
 		mods_json.Name = stream.path_spec().text();
 		mods_json.Category = "Raw File Imports";
@@ -569,8 +571,6 @@ void xivres::textools::simple_ttmp2_writer::add_packed(const packed_stream& stre
 }
 
 void xivres::textools::simple_ttmp2_writer::end_packed() {
-	constexpr uint32_t bufferSize = 65536;
-
 	if (!m_zf)
 		throw std::logic_error("No file is open");
 	if (!m_packed)
@@ -580,6 +580,8 @@ void xivres::textools::simple_ttmp2_writer::end_packed() {
 
 	try {
 		if (m_packed->Z) {
+			constexpr uint32_t bufferSize = 65536;
+
 			auto pooledBuffer2 = util::thread_pool::pooled_byte_buffer();
 			if (!pooledBuffer2)
 				pooledBuffer2.emplace();
@@ -617,8 +619,7 @@ void xivres::textools::simple_ttmp2_writer::add_file(const std::string& path, co
 	if (!m_zf)
 		throw std::logic_error("No file is open");
 
-	constexpr uint32_t bufferSize = 65536;
-	zip_fileinfo zi{};
+	constexpr zip_fileinfo zi{};
 
 	if (m_packed && !m_packed->Complete)
 		throw std::logic_error("Cannot add file while packing is in progress");
@@ -634,6 +635,8 @@ void xivres::textools::simple_ttmp2_writer::add_file(const std::string& path, co
 		throw std::runtime_error(std::format("zipOpenNewFileInZip3_64 error({})", err));
 
 	try {
+		constexpr uint32_t bufferSize = 65536;
+
 		auto pooledBuffer = util::thread_pool::pooled_byte_buffer();
 		if (!pooledBuffer)
 			pooledBuffer.emplace();

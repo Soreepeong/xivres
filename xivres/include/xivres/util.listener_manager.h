@@ -40,7 +40,7 @@ namespace xivres::util {
 			ListenerManagerImplBase_& operator=(const ListenerManagerImplBase_&) = delete;
 
 			virtual ~ListenerManagerImplBase_() {
-				std::lock_guard lock(*m_lock);
+				std::scoped_lock lock(*m_lock);
 				m_callbacks.clear();
 				*m_destructed = true;
 			}
@@ -52,15 +52,15 @@ namespace xivres::util {
 			/// \brief Adds a callback function to call when an event has been fired.
 			/// \returns An object that will remove the callback when destructed.
 			[[nodiscard]] virtual on_dtor operator() (std::function<TCallbackReturn(TCallbackArgs ...)> fn, std::function<void()> onUnbind = {}) {
-				std::lock_guard lock(*m_lock);
+				std::scoped_lock lock(*m_lock);
 				const auto callbackId = m_callbackId++;
 				if (m_onNewCallback)
 					m_onNewCallback(fn);
 				m_callbacks.emplace(callbackId, std::move(fn));
 				m_callbackUseCounters.emplace(callbackId, 0);
 
-				return { [this, destructed = m_destructed, onUnbind = std::move(onUnbind), mutex = m_lock, callbackId] () {
-					std::unique_lock lock(*mutex);
+				return { [this, destructed = m_destructed, onUnbind = std::move(onUnbind), mutex = m_lock, callbackId] {
+					std::unique_lock unbindLock(*mutex);
 
 					if (!*destructed)
 						m_callbacks.erase(callbackId);
@@ -69,7 +69,7 @@ namespace xivres::util {
 						onUnbind();
 
 					if (!*destructed) {
-						m_cv.wait(lock, [this, callbackId]() { return m_callbackUseCounters[callbackId] == 0; });
+						m_cv.wait(unbindLock, [this, callbackId] { return m_callbackUseCounters[callbackId] == 0; });
 						m_callbackUseCounters.erase(callbackId);
 					}
 				} };
@@ -94,7 +94,7 @@ namespace xivres::util {
 					++m_callbackUseCounters[cid];
 				lock.unlock();
 
-				const auto dtor = on_dtor([&]() {
+				const auto dtor = on_dtor([&] {
 					lock.lock();
 					for (const auto& cid : callbackIds)
 						--m_callbackUseCounters[cid];
@@ -114,7 +114,8 @@ namespace xivres::util {
 		};
 
 		template <typename TInvoker, typename TCallbackReturn, typename ... TCallbackArgs>
-		class ListenerManagerImpl_<TInvoker, TCallbackReturn, std::enable_if_t<!std::is_same_v<TCallbackReturn, void>>, TCallbackArgs...> :
+			requires (!std::is_same_v<TCallbackReturn, void>)
+		class ListenerManagerImpl_<TInvoker, TCallbackReturn, void, TCallbackArgs...> :
 			public ListenerManagerImplBase_<TCallbackReturn, TCallbackArgs...> {
 
 			friend TInvoker;
@@ -152,7 +153,7 @@ namespace xivres::util {
 				}
 				lock.unlock();
 
-				const auto dtor = on_dtor([&]() {
+				const auto dtor = on_dtor([&] {
 					lock.lock();
 					for (const auto& cid : callbackIds)
 						--this->m_callbackUseCounters[cid];
@@ -173,7 +174,8 @@ namespace xivres::util {
 		};
 
 		template <typename TInvoker, typename TCallbackReturn, typename...TCallbackArgs>
-		class ListenerManagerImpl_<TInvoker, TCallbackReturn, std::enable_if_t<std::is_same_v<TCallbackReturn, void>>, TCallbackArgs...> :
+			requires std::is_same_v<TCallbackReturn, void>
+		class ListenerManagerImpl_<TInvoker, TCallbackReturn, void, TCallbackArgs...> :
 			public ListenerManagerImplBase_<TCallbackReturn, TCallbackArgs...> {
 
 			friend TInvoker;

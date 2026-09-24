@@ -11,10 +11,6 @@ namespace xivres {
 			uint32_t RequestOffset;
 			uint32_t BlockOffset;
 			uint32_t BlockSize;
-			
-			friend bool operator<(uint32_t r, const block_info& info) {
-				return r < info.RequestOffset;
-			}
 		};
 		
 		const uint32_t m_headerSize;

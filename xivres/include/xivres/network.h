@@ -68,7 +68,7 @@ namespace xivres::network {
 			uint8_t EffectCount;
 			uint16_t Padding1;
 
-			int64_t AnimationLockDurationUs() const { return static_cast<int64_t>(static_cast<double>(AnimationLockDurationF) * 1000000.); }
+			[[nodiscard]] int64_t AnimationLockDurationUs() const { return static_cast<int64_t>(static_cast<double>(AnimationLockDurationF) * 1000000.); }
 			void AnimationLockDurationUs(int64_t v) { AnimationLockDurationF = static_cast<float>(static_cast<double>(v) / 1000000.); }
 		};
 
@@ -133,10 +133,10 @@ namespace xivres::network {
 					uint32_t Padding3;
 					uint32_t Padding4;
 
-					void DurationF(double v) { Duration10ms = static_cast<uint32_t>(100. * v); }
-					double DurationF() const { return static_cast<double>(Duration10ms) / 100.; }
-					void DurationUs(int64_t v) { Duration10ms = static_cast<int32_t>(v / 10000ULL); }
-					int64_t DurationUs() const { return Duration10ms * 10000ULL; };
+					void DurationF(double v) { Duration10ms = static_cast<int32_t>(100. * v); }
+					[[nodiscard]] double DurationF() const { return static_cast<double>(Duration10ms) / 100.; }
+					void DurationUs(int64_t v) { Duration10ms = static_cast<int32_t>(v / 10000); }
+					[[nodiscard]] int64_t DurationUs() const { return static_cast<int64_t>(Duration10ms) * 10000LL; }
 				} Cooldown;
 			};
 		};
@@ -158,7 +158,7 @@ namespace xivres::network {
 			uint16_t Unknown4;
 
 			void CastTimeUs(int64_t v) { CastTimeF = static_cast<float>(static_cast<double>(v) / 1000000.); }
-			int64_t CastTimeUs() const { return static_cast<int64_t>(static_cast<double>(CastTimeF) * 1000000.); };
+			[[nodiscard]] int64_t CastTimeUs() const { return static_cast<int64_t>(static_cast<double>(CastTimeF) * 1000000.); }
 		};
 
 		struct C2S_ActionRequest {
@@ -180,7 +180,7 @@ namespace xivres::network {
 			uint8_t Pad_0002[2];
 			float OriginalWaitTime;
 		};
-	};
+	}
 
 	struct ipc_header {
 		ipc_type Type;
@@ -218,7 +218,7 @@ namespace xivres::network {
 			ipc Ipc;
 		} Data;
 
-		std::string represent(bool dump = false) const;
+		[[nodiscard]] std::string represent(bool dump = false) const;
 	};
 
 	enum class compression_type : uint8_t {
@@ -246,7 +246,7 @@ namespace xivres::network {
 		static const uint8_t MagicConstant2[sizeof Magic];
 		[[nodiscard]] static std::span<const uint8_t> extract_front_trash(const std::span<const uint8_t>& buf);
 
-		std::string represent() const;
+		[[nodiscard]] std::string represent() const;
 
 		[[nodiscard]] static std::vector<std::vector<uint8_t>> split_messages(uint16_t expectedMessageCount, const std::span<const uint8_t>& buf);
 		[[nodiscard]] std::vector<std::vector<uint8_t>> get_messages(const inflate_fn& inflate, const oodle_decode_fn& oodleDecode) const;

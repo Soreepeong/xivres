@@ -324,7 +324,7 @@ namespace xivres {
 
 		[[nodiscard]] xivexpr_type type() const override { return m_type; }
 		void type(xivexpr_type v) { m_type = v; }
-		template<typename T, typename = std::enable_if_t<std::is_base_of_v<xivexpr, T>>>
+		template<typename T> requires std::is_base_of_v<xivexpr, T>
 		T* operand() const { return static_cast<T*>(m_operand.get()); }
 		void operand(std::unique_ptr<xivexpr> value) { m_operand = std::move(value); }
 
@@ -354,10 +354,10 @@ namespace xivres {
 
 		[[nodiscard]] xivexpr_type type() const override { return m_type; }
 		void type(xivexpr_type v) { m_type = v; }
-		template<typename T, typename = std::enable_if_t<std::is_base_of_v<xivexpr, T>>>
+		template<typename T> requires std::is_base_of_v<xivexpr, T>
 		T* operand1() const { return static_cast<T*>(m_operand1.get()); }
 		void operand1(std::unique_ptr<xivexpr> value) { m_operand1 = std::move(value); }
-		template<typename T, typename = std::enable_if_t<std::is_base_of_v<xivexpr, T>>>
+		template<typename T> requires std::is_base_of_v<xivexpr, T>
 		T* operand2() const { return static_cast<T*>(m_operand2.get()); }
 		void operand2(std::unique_ptr<xivexpr> value) { m_operand2 = std::move(value); }
 

@@ -2,7 +2,6 @@
 #include "../include/xivres/util.thread_pool.h"
 
 #ifdef _WIN32
-#define WIN32_MEAN_AND_LEAN
 #include <Windows.h>
 #endif
 
@@ -20,7 +19,7 @@ xivres::installation::installation(std::filesystem::path gamePath)
 
 		packFileName.resize(6);
 
-		const auto packFileId = std::strtol(&packFileName[0], nullptr, 16);
+		const auto packFileId = std::strtol(packFileName.data(), nullptr, 16);
 		m_readers.emplace(packFileId, std::optional<sqpack::reader>());
 		static_cast<void>(m_populateMtx[packFileId]);
 	}
@@ -55,7 +54,7 @@ const xivres::sqpack::reader& xivres::installation::get_sqpack(uint32_t packId) 
 	if (item)
 		return *item;
 
-	const auto lock = std::lock_guard(m_populateMtx.at(packId));
+	const auto lock = std::scoped_lock(m_populateMtx.at(packId));
 	if (item)
 		return *item;
 
@@ -75,33 +74,35 @@ void xivres::installation::preload_all_sqpacks() const {
 
 #ifdef _WIN32
 
-static std::wstring read_registry_as_wstring(const wchar_t* lpSubKey, const wchar_t* lpValueName, int mode = 0) {
-	if (mode == 0) {
-		auto res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_32KEY);
-		if (res1.empty())
-			res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_64KEY);
-		return res1;
-	}
-	HKEY hKey;
-	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-		lpSubKey,
-		0, KEY_READ | mode, &hKey))
+namespace {
+	std::wstring read_registry_as_wstring(const wchar_t* lpSubKey, const wchar_t* lpValueName, int mode = 0) {
+		if (mode == 0) {
+			auto res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_32KEY);
+			if (res1.empty())
+				res1 = read_registry_as_wstring(lpSubKey, lpValueName, KEY_WOW64_64KEY);
+			return res1;
+		}
+		HKEY hKey;
+		if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+			lpSubKey,
+			0, KEY_READ | mode, &hKey))
+				return {};
+
+		const auto hKeyFreer = std::unique_ptr<std::remove_pointer_t<HKEY>, decltype(&RegCloseKey)>(hKey, &RegCloseKey);
+
+		DWORD buflen = 0;
+		if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, nullptr, &buflen))
 			return {};
 
-	const auto hKeyFreer = std::unique_ptr<std::remove_pointer_t<HKEY>, decltype(&RegCloseKey)>(hKey, &RegCloseKey);
+		std::wstring buf;
+		buf.resize(buflen + 1);
+		if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, reinterpret_cast<LPBYTE>(buf.data()), &buflen))
+			return {};
 
-	DWORD buflen = 0;
-	if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, nullptr, &buflen))
-		return {};
+		buf.erase(std::ranges::find(buf, L'\0'), buf.end());
 
-	std::wstring buf;
-	buf.resize(buflen + 1);
-	if (RegQueryValueExW(hKey, lpValueName, nullptr, nullptr, reinterpret_cast<LPBYTE>(&buf[0]), &buflen))
-		return {};
-
-	buf.erase(std::ranges::find(buf, L'\0'), buf.end());
-
-	return buf;
+		return buf;
+	}
 }
 
 std::filesystem::path xivres::installation::find_installation_global() {

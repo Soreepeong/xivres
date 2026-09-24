@@ -30,9 +30,11 @@ std::span<const uint8_t> xivres::network::bundle::extract_front_trash(const std:
 	};
 }
 
-static std::string format_epoch(int64_t epochMilliseconds) {
-	const auto tp = std::chrono::sys_time<std::chrono::milliseconds>(std::chrono::milliseconds(epochMilliseconds));
-	return std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::current_zone()->to_local(tp));
+namespace {
+	std::string format_epoch(int64_t epochMilliseconds) {
+		const auto tp = std::chrono::sys_time(std::chrono::milliseconds(epochMilliseconds));
+		return std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::current_zone()->to_local(tp));
+	}
 }
 
 std::string xivres::network::bundle::represent() const {
@@ -51,7 +53,7 @@ std::vector<std::vector<uint8_t>> xivres::network::bundle::split_messages(uint16
 		if (i + msg.Length > buf.size() || !msg.Length)
 			throw std::runtime_error("Could not parse game message (sum(message.length for each message) > total message length)");
 
-		const auto sub = buf.subspan(i, static_cast<size_t>(msg.Length));
+		const auto sub = buf.subspan(i, msg.Length);
 		result.emplace_back(sub.begin(), sub.end());
 		i += msg.Length;
 	}
@@ -69,7 +71,7 @@ std::vector<std::vector<uint8_t>> xivres::network::bundle::get_messages(const in
 		case compression_type::Oodle:
 			return split_messages(MessageCount, oodleDecode(view, DecodedBodyLength));
 		default:
-			throw xivres::bad_data_error(std::format("Unsupported compression type {}", static_cast<int>(CompressionType)));
+			throw bad_data_error(std::format("Unsupported compression type {}", static_cast<int>(CompressionType)));
 	}
 }
 

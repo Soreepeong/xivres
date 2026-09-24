@@ -1,8 +1,6 @@
 #ifndef XIVRES_INTERNAL_DXT_H_
 #define XIVRES_INTERNAL_DXT_H_
 
-#include <cstdint>
-
 #include "util.pixel_formats.h"
 
 // From https://github.com/Benjamin-Dobell/s3tc-dxt-decompression/blob/master/s3tc.h

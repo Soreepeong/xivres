@@ -38,10 +38,10 @@ namespace xivres::util {
 	private:
 		static constexpr size_t BlockSize = 64;
 
-		digest32_t m_digest;
-		uint8_t m_block[BlockSize];
-		size_t m_blockByteIndex;
-		uint64_t m_byteCount;
+		digest32_t m_digest{};
+		uint8_t m_block[BlockSize]{};
+		size_t m_blockByteIndex = 0;
+		uint64_t m_byteCount = 0;
 
 	public:
 		hash_sha1() {
@@ -133,7 +133,7 @@ namespace xivres::util {
 				w[i] |= static_cast<uint32_t>(block[i * 4 + 3]);
 			}
 			for (size_t i = 16; i < 80; i++) {
-				w[i] = left_rotate((w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]), 1);
+				w[i] = left_rotate(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
 			}
 
 			uint32_t a = m_digest[0];
@@ -159,7 +159,7 @@ namespace xivres::util {
 					f = b ^ c ^ d;
 					k = 0xCA62C1D6;
 				}
-				uint32_t temp = left_rotate(a, 5) + f + e + k + w[i];
+				const uint32_t temp = left_rotate(a, 5) + f + e + k + w[i];
 				e = d;
 				d = c;
 				c = left_rotate(b, 30);

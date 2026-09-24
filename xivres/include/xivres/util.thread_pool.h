@@ -76,11 +76,11 @@ namespace xivres::util::thread_pool {
 
 	template<typename R>
 	class task : public base_task {
-		std::packaged_task<R(task<R>&)> m_task;
+		std::packaged_task<R(task&)> m_task;
 		std::future<R> m_future;
 
 	public:
-		task(pool& pool, std::function<R(task<R>&)> fn)
+		task(pool& pool, std::function<R(task&)> fn)
 			: base_task(pool)
 			, m_task(std::move(fn))
 			, m_future(m_task.get_future()) {
@@ -115,11 +115,11 @@ namespace xivres::util::thread_pool {
 
 	template<>
 	class task<void> : public base_task {
-		std::packaged_task<void(task<void>&)> m_task;
+		std::packaged_task<void(task&)> m_task;
 		std::future<void> m_future;
 
 	public:
-		task(pool& pool, std::function<void(task<void>&)> fn)
+		task(pool& pool, std::function<void(task&)> fn)
 			: base_task(pool)
 			, m_task(std::move(fn))
 			, m_future(m_task.get_future()) {
@@ -171,7 +171,7 @@ namespace xivres::util::thread_pool {
 				if (m_parent->m_objects.empty())
 					return;
 
-				const auto lock = std::lock_guard(m_parent->m_mutex);
+				const auto lock = std::scoped_lock(m_parent->m_mutex);
 				if (m_parent->m_objects.empty())
 					return;
 
@@ -183,8 +183,8 @@ namespace xivres::util::thread_pool {
 			scoped_pooled_object() : m_parent(nullptr) {}
 
 			scoped_pooled_object(scoped_pooled_object&& r) noexcept
-				: m_objects(std::move(r.m_object))
-				, m_parent(r.m_parent) {
+				: m_parent(r.m_parent)
+				, m_object(std::move(r.m_object)) {
 				r.m_parent = nullptr;
 				r.m_object.reset();
 			}
@@ -194,7 +194,7 @@ namespace xivres::util::thread_pool {
 					return *this;
 
 				if (m_object && m_parent) {
-					const auto lock = std::lock_guard(m_parent->m_mutex);
+					const auto lock = std::scoped_lock(m_parent->m_mutex);
 					if (!m_parent->m_fnKeepCheck || m_parent->m_fnKeepCheck(m_parent->m_objects.size(), *m_object))
 						m_parent->m_objects.emplace_back(std::move(m_object));
 				}
@@ -213,7 +213,7 @@ namespace xivres::util::thread_pool {
 
 			~scoped_pooled_object() {
 				if (m_object && m_parent) {
-					const auto lock = std::lock_guard(m_parent->m_mutex);
+					const auto lock = std::scoped_lock(m_parent->m_mutex);
 					if (!m_parent->m_fnKeepCheck || m_parent->m_fnKeepCheck(m_parent->m_objects.size(), *m_object))
 						m_parent->m_objects.emplace_back(std::move(m_object));
 				}
@@ -400,14 +400,14 @@ namespace xivres::util::thread_pool {
 				return;
 
 			std::unique_lock lock(m_mtx);
-			for (auto& task : m_mapPending | std::views::values)
+			for (const auto& task : m_mapPending | std::views::values)
 				task->cancel();
 
 			m_pool.release_working_status([&] { m_cvFinished.wait(lock, [this] { return m_mapPending.empty(); }); });
 		}
 
 		[[nodiscard]] size_t pending() {
-			std::lock_guard lock(m_mtx);
+			std::scoped_lock lock(m_mtx);
 			return m_mapPending.size();
 		}
 
@@ -416,12 +416,12 @@ namespace xivres::util::thread_pool {
 		}
 
 		void submit(std::function<TReturn(base_task&)> fn) {
-			std::lock_guard lock(m_mtx);
+			std::scoped_lock lock(m_mtx);
 			auto newTask = m_pool.submit<void>([this, fn = std::move(fn)](task<void>& currentTask) {
 				std::packaged_task<TReturn(base_task&)> task(fn);
 				task(currentTask);
 
-				std::lock_guard lock(m_mtx);
+				std::scoped_lock innerLock(m_mtx);
 				m_mapPending.erase(&currentTask);
 				m_dqFinished.emplace_back(task.get_future());
 				m_cvFinished.notify_one();
@@ -456,8 +456,8 @@ namespace xivres::util::thread_pool {
 				return std::optional<TReturn>(obj.get());
 		}
 
-		template<class Rep, class Period, typename = std::enable_if_t<!std::is_void_v<TReturn>>>
-		[[nodiscard]] auto get(const std::chrono::duration<Rep, Period>& waitDuration) {
+		template<class Rep, class Period>
+		[[nodiscard]] auto get(const std::chrono::duration<Rep, Period>& waitDuration) requires (!std::is_void_v<TReturn>) {
 			if (m_mapPending.empty() && m_dqFinished.empty()) {
 				if constexpr (std::is_void_v<TReturn>)
 					return false;
@@ -486,8 +486,8 @@ namespace xivres::util::thread_pool {
 				return std::optional<TReturn>(obj.get());
 		}
 
-		template <class Clock, class Duration, typename = std::enable_if_t<!std::is_void_v<TReturn>>>
-		[[nodiscard]] auto get(const std::chrono::time_point<Clock, Duration>& waitUntil) {
+		template <class Clock, class Duration>
+		[[nodiscard]] auto get(const std::chrono::time_point<Clock, Duration>& waitUntil) requires (!std::is_void_v<TReturn>) {
 			if (m_mapPending.empty() && m_dqFinished.empty()) {
 				if constexpr (std::is_void_v<TReturn>)
 					return false;

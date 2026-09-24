@@ -24,10 +24,10 @@ void xivres::compressing_packer::compress_block(uint32_t offset, uint32_t length
 
 	buffer.clear();
 	buffer.resize(length);
-	if (const auto read = static_cast<size_t>(unpacked().read(offset, &buffer[0], length)); read != length)
+	if (const auto read = static_cast<size_t>(unpacked().read(offset, buffer.data(), length)); read != length)
 		std::fill_n(&buffer[read], length - read, 0);
 
-	blockData.DecompressedSize = static_cast<uint32_t>(length);
+	blockData.DecompressedSize = length;
 	if (compression_level()) {
 		auto deflater = util::zlib_deflater::pooled();
 		if (!deflater || !deflater->is(compression_level(), Z_DEFLATED, -15))

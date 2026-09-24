@@ -26,7 +26,7 @@ namespace xivres::texture {
 		std::shared_ptr<const stream> m_underlying;
 
 	public:
-		wrapped_mipmap_stream(header header, size_t mipmapIndex, std::shared_ptr<const stream> underlying);
+		wrapped_mipmap_stream(const header& header, size_t mipmapIndex, std::shared_ptr<const stream> underlying);
 
 		wrapped_mipmap_stream(size_t width, size_t height, size_t depths, format_type type, std::shared_ptr<const stream> underlying);
 

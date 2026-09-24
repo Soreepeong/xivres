@@ -1,8 +1,18 @@
 #include "../include/xivres/path_spec.h"
 
-xivres::sqpack_spec::sqpack_spec(std::string_view part1, std::string_view part2, std::string_view part3) {
-	ExpacId = PartId = 0;
+#include <charconv>
 
+namespace {
+	uint8_t parse_uint8(std::string_view s) {
+		uint8_t value = 0;
+		if (std::from_chars(s.data(), s.data() + s.size(), value).ec != std::errc())
+			return 0;
+		return value;
+	}
+}
+
+xivres::sqpack_spec::sqpack_spec(std::string_view part1, std::string_view part2, std::string_view part3)
+	: FullId(0) {
 	if (part1 == "common") {
 		CategoryId = 0x00;
 
@@ -11,12 +21,12 @@ xivres::sqpack_spec::sqpack_spec(std::string_view part1, std::string_view part2,
 
 	} else if (part1 == "bg") {
 		CategoryId = 0x02;
-		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
-		PartId = ExpacId > 0U ? static_cast<uint8_t>(std::strtol(&part3[0], nullptr, 10)) : 0;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? parse_uint8(part2.substr(2)) : 0;
+		PartId = ExpacId > 0U ? parse_uint8(part3) : 0;
 
 	} else if (part1 == "cut") {
 		CategoryId = 0x03;
-		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? parse_uint8(part2.substr(2)) : 0;
 
 	} else if (part1 == "chara") {
 		CategoryId = 0x04;
@@ -41,10 +51,8 @@ xivres::sqpack_spec::sqpack_spec(std::string_view part1, std::string_view part2,
 
 	} else if (part1 == "music") {
 		CategoryId = 0x0c;
-		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? static_cast<uint8_t>(std::strtol(&part2[2], nullptr, 10)) : 0;
-
-	} else
-		CategoryId = 0x00;
+		ExpacId = part2.size() > 2 && part2.starts_with("ex") ? parse_uint8(part2.substr(2)) : 0;
+	}
 }
 
 std::string xivres::sqpack_spec::required_prefix() const {
@@ -95,7 +103,7 @@ xivres::path_spec& xivres::path_spec::operator/=(const path_spec& r) {
 	if (r.empty())
 		return *this;
 
-	const auto previousPointer = &m_text[0];
+	const auto previousPointer = m_text.data();
 	size_t previousOffset = m_text.size() + 1;
 	m_text.reserve(m_text.size() + 1 + r.m_text.size());
 	m_text.push_back('/');
@@ -104,7 +112,7 @@ xivres::path_spec& xivres::path_spec::operator/=(const path_spec& r) {
 	{
 		m_parts.reserve(m_parts.size() + r.parts().size());
 		for (auto& p : m_parts)
-			p = {p.data() - previousPointer + &m_text[0], p.size()};
+			p = {p.data() - previousPointer + m_text.data(), p.size()};
 		for (size_t offset; (offset = m_text.find('/', previousOffset)) != std::string::npos; previousOffset = offset + 1)
 			m_parts.emplace_back(std::string_view(m_text).substr(previousOffset, offset - previousOffset));
 		m_parts.emplace_back(std::string_view(m_text).substr(previousOffset));
@@ -140,15 +148,15 @@ xivres::path_spec& xivres::path_spec::operator+=(const path_spec& r) {
 	if (r.empty())
 		return *this;
 
-	const auto previousPointer = &m_text[0];
-	size_t previousOffset = &m_parts.back().front() - &m_text[0];
+	const auto previousPointer = m_text.data();
+	auto previousOffset = static_cast<size_t>(m_parts.back().data() - m_text.data());
 	m_text.reserve(m_text.size() + r.m_text.size());
 	m_text.insert(m_text.end(), r.m_text.begin(), r.m_text.end());
 	const auto recheckSqPack = m_parts.size() < 3;
 	{
 		m_parts.reserve(m_parts.size() + r.parts().size());
 		for (auto& p : m_parts)
-			p = {p.data() - previousPointer + &m_text[0], p.size()};
+			p = {p.data() - previousPointer + m_text.data(), p.size()};
 		for (size_t offset; (offset = m_text.find('/', previousOffset)) != std::string::npos; previousOffset = offset + 1)
 			m_parts.emplace_back(std::string_view(m_text).substr(previousOffset, offset - previousOffset));
 		m_parts.emplace_back(std::string_view(m_text).substr(previousOffset));
@@ -179,13 +187,19 @@ xivres::path_spec& xivres::path_spec::replace_stem(const std::string& newStem) {
 		m_fullPathHash = m_pathHash;
 
 		std::string s;
-		s.reserve(m_parts.back().data() - m_parts.front().data() - 1);
-		util::unicode::convert(s, std::string_view(m_parts.front().data(), m_parts.back().data() - m_parts.front().data() - 1), &util::unicode::lower);
-		m_pathHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+		if (m_parts.size() > 1) {
+			const auto dirPart = std::string_view(m_text).substr(
+				static_cast<size_t>(m_parts.front().data() - m_text.data()),
+				static_cast<size_t>(m_parts.back().data() - m_parts.front().data() - 1));
+			s.reserve(dirPart.size());
+			util::unicode::convert(s, dirPart, &util::unicode::lower);
+			m_pathHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
+		} else
+			m_pathHash = EmptyHashValue;
 
 		s.clear();
 		s.reserve(m_parts.back().size());
-		util::unicode::convert(s, std::string_view(m_parts.back().data(), m_parts.back().size()), &util::unicode::lower);
+		util::unicode::convert(s, m_parts.back(), &util::unicode::lower);
 		m_nameHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 
 		if (newStem.empty() && m_parts.size() < 3)
@@ -224,14 +238,17 @@ void xivres::path_spec::recalculate_hash_values(bool checkSqPack) {
 	} else {
 		m_empty = false;
 		
+		const auto dirPart = std::string_view(m_text).substr(
+			static_cast<size_t>(m_parts.front().data() - m_text.data()),
+			static_cast<size_t>(m_parts.back().data() - m_parts.front().data() - 1));
 		std::string s;
-		s.reserve(m_parts.back().data() - m_parts.front().data() - 1);
-		util::unicode::convert(s, std::string_view(m_parts.front().data(), m_parts.back().data() - m_parts.front().data() - 1), &util::unicode::lower);
+		s.reserve(dirPart.size());
+		util::unicode::convert(s, dirPart, &util::unicode::lower);
 		m_pathHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 
 		s.clear();
 		s.reserve(m_parts.back().size());
-		util::unicode::convert(s, std::string_view(m_parts.back().data(), m_parts.back().size()), &util::unicode::lower);
+		util::unicode::convert(s, m_parts.back(), &util::unicode::lower);
 		m_nameHash = ~crc32_z(0, reinterpret_cast<const uint8_t*>(s.data()), s.size());
 		
 		m_fullPathHash = ~crc32_combine(crc32_combine(~m_pathHash, ~SlashHashValue, 1), ~m_nameHash, static_cast<long>(m_parts.back().size()));

@@ -25,6 +25,7 @@ xivres::texture::stream::stream(format_type type, size_t width, size_t height, s
 		.Height = util::range_check_cast<uint16_t>(height),
 		.Depth = util::range_check_cast<uint16_t>(depth),
 		.MipmapCount = 0,
+		.LodOffsets = {},
 	})
 	, m_repeats(0)
 	, m_repeatedUnitSize(0) {
@@ -33,9 +34,9 @@ xivres::texture::stream::stream(format_type type, size_t width, size_t height, s
 
 void xivres::texture::stream::set_mipmap(size_t mipmapIndex, size_t repeatIndex, std::shared_ptr<mipmap_stream> mipmap) {
 	auto& mipmaps = m_repeats.at(repeatIndex);
-	const auto w = (std::max)(1, m_header.Width >> mipmapIndex);
-	const auto h = (std::max)(1, m_header.Height >> mipmapIndex);
-	const auto l = (std::max)(1, m_header.Depth >> mipmapIndex);
+	const auto w = std::max<size_t>(1, m_header.Width >> mipmapIndex);
+	const auto h = std::max<size_t>(1, m_header.Height >> mipmapIndex);
+	const auto l = std::max<size_t>(1, m_header.Depth >> mipmapIndex);
 
 	if (mipmap->Width != w)
 		throw std::invalid_argument("invalid mipmap width");
@@ -45,7 +46,7 @@ void xivres::texture::stream::set_mipmap(size_t mipmapIndex, size_t repeatIndex,
 		throw std::invalid_argument("invalid mipmap depths");
 	if (mipmap->Type != *m_header.Type)
 		throw std::invalid_argument("invalid mipmap type");
-	if (mipmap->size() != calc_raw_data_length(mipmap->Type, w, h, l))
+	if (mipmap->size() != static_cast<std::streamsize>(calc_raw_data_length(mipmap->Type, w, h, l)))
 		throw std::invalid_argument("invalid mipmap size");
 
 	mipmaps.at(mipmapIndex) = std::move(mipmap);
@@ -72,7 +73,7 @@ void xivres::texture::stream::resize(size_t mipmapCount, size_t repeatCount) {
 }
 
 std::streamsize xivres::texture::stream::size() const {
-	return m_header.header_and_mipmap_offsets_size() + m_repeats.size() * m_repeatedUnitSize;
+	return static_cast<std::streamsize>(m_header.header_and_mipmap_offsets_size() + m_repeats.size() * m_repeatedUnitSize);
 }
 
 std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
@@ -82,7 +83,7 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 	auto relativeOffset = offset;
 	auto out = std::span(static_cast<char*>(buf), static_cast<size_t>(length));
 
-	if (relativeOffset < sizeof m_header) {
+	if (std::cmp_less(relativeOffset, sizeof m_header)) {
 		const auto src = util::span_cast<uint8_t>(1, &m_header).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -92,10 +93,10 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 		if (out.empty())
 			return length;
 	} else
-		relativeOffset -= sizeof m_header;
+		relativeOffset -= static_cast<std::streamoff>(sizeof m_header);
 
 	if (const auto srcTyped = std::span(m_mipmapOffsets);
-		relativeOffset < static_cast<std::streamoff>(srcTyped.size_bytes())) {
+		std::cmp_less(relativeOffset, srcTyped.size_bytes())) {
 		const auto src = util::span_cast<uint8_t>(srcTyped).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -111,7 +112,7 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 		relativeOffset < padSize) {
 		const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(padSize - relativeOffset));
 		std::fill_n(out.begin(), available, 0);
-		out = out.subspan(static_cast<size_t>(available));
+		out = out.subspan(available);
 		relativeOffset = 0;
 
 		if (out.empty())
@@ -134,7 +135,7 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 			return l < r;
 		});
 
-	if (it == m_mipmapOffsets.end() || *it > relativeOffset)
+	if (it == m_mipmapOffsets.end() || std::cmp_greater(*it, relativeOffset))
 		--it;
 
 	relativeOffset -= *it;
@@ -159,13 +160,13 @@ std::streamsize xivres::texture::stream::read(std::streamoff offset, void* buf, 
 				}
 
 			} else {
-				padSize = align(calc_raw_data_length(m_header, mipmapIndex)).Alloc;
+				padSize = static_cast<std::streamoff>(align(calc_raw_data_length(m_header, mipmapIndex)).Alloc);
 			}
 
 			if (relativeOffset < padSize) {
 				const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(padSize - relativeOffset));
 				std::fill_n(out.begin(), available, 0);
-				out = out.subspan(static_cast<size_t>(available));
+				out = out.subspan(available);
 				relativeOffset = 0;
 
 				if (out.empty())

@@ -29,13 +29,13 @@ size_t xivres::texture::calc_raw_data_length(format_type type, size_t width, siz
 			return width * height * depth * 16;
 
 		case formats::BC1:
-			return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 8;
+			return depth * std::max<size_t>(1, (width + 3) / 4) * std::max<size_t>(1, (height + 3) / 4) * 8;
 
 		case formats::BC2:
 		case formats::BC3:
 		case formats::BC5:
 		case formats::BC7:
-			return depth * (std::max<size_t>)(1, ((width + 3) / 4)) * (std::max<size_t>)(1, ((height + 3) / 4)) * 16;
+			return depth * std::max<size_t>(1, (width + 3) / 4) * std::max<size_t>(1, (height + 3) / 4) * 16;
 
 		case formats::D16:
 		case formats::Unknown:

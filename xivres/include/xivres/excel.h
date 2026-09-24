@@ -82,7 +82,7 @@ namespace xivres::excel::exl {
 		std::map<int, std::string> m_idToNameMap;
 
 	public:
-		reader(const xivres::installation& installation);
+		reader(const installation& installation);
 		reader(const stream& strm);
 		const std::string& operator[](int id) const { return m_idToNameMap.at(id); }
 		int operator[](const std::string& s) const { return m_nameToIdMap.at(s); }
@@ -100,7 +100,7 @@ namespace xivres::excel::exh {
 		BE<cell_type> Type;
 		BE<uint16_t> Offset;
 		
-		bool is_integer() const {
+		[[nodiscard]] bool is_integer() const {
 			switch (*Type) {
 				case cell_type::Bool:
 				case cell_type::Int8:
@@ -112,11 +112,12 @@ namespace xivres::excel::exh {
 				case cell_type::Int64:
 				case cell_type::UInt64:
 					return true;
+				default:
+					return false;
 			}
-			return false;
 		}
 
-		bool is_string() const {
+		[[nodiscard]] bool is_string() const {
 			return *Type == cell_type::String;
 		}
 	};
@@ -164,7 +165,7 @@ namespace xivres::excel::exh {
 		std::vector<game_language> m_languages;
 
 	public:
-		reader(const xivres::installation& installation, std::string name, bool strict = false);
+		reader(const installation& installation, std::string name, bool strict = false);
 		reader(std::string name, const stream& strm, bool strict = false);
 		[[nodiscard]] const std::string& name() const { return m_name; }
 		[[nodiscard]] const header& header() const { return m_header; }
@@ -217,7 +218,7 @@ namespace xivres::excel::exd::row {
 		template<typename TParent, typename T, bool reversed>
 		class base_iterator {
 		public:
-			using iterator = base_iterator<TParent, T, reversed>;
+			using iterator = base_iterator;
 			using iterator_category = std::random_access_iterator_tag;
 			using value_type = T;
 			using difference_type = ptrdiff_t;
@@ -378,7 +379,7 @@ namespace xivres::excel::exd::row {
 
 	public:
 		buffer();
-		buffer(uint32_t rowId, const exh::reader& exh, const stream& strm, std::streamoff offset);
+		buffer(uint32_t rowId, const exh::reader& exhReader, const stream& strm, std::streamoff offset);
 		[[nodiscard]] reader& operator[](size_t index) { return m_rows.at(index); }
 		[[nodiscard]] const reader& operator[](size_t index) const { return m_rows.at(index); }
 		[[nodiscard]] uint32_t row_id() const { return m_rowId; }
@@ -388,7 +389,7 @@ namespace xivres::excel::exd::row {
 		template<typename TParent, typename T, bool reversed>
 		class base_iterator {
 		public:
-			using iterator = base_iterator<TParent, T, reversed>;
+			using iterator = base_iterator;
 			using iterator_category = std::random_access_iterator_tag;
 			using value_type = T;
 			using difference_type = ptrdiff_t;
@@ -566,7 +567,7 @@ namespace xivres::excel::exd {
 		mutable std::mutex m_populateMtx;
 
 	public:
-		reader(const exh::reader& exh, std::shared_ptr<const stream> strm);
+		reader(const exh::reader& exhReader, std::shared_ptr<const stream> strm);
 		[[nodiscard]] const row::buffer& operator[](uint32_t rowId) const;
 		[[nodiscard]] const std::vector<uint32_t>& get_row_ids() const { return m_rowIds; }
 		size_t size() const { return m_rowIds.size(); }
@@ -574,7 +575,7 @@ namespace xivres::excel::exd {
 		template<typename TParent, typename T, bool reversed>
 		class base_iterator {
 		public:
-			using iterator = base_iterator<TParent, T, reversed>;
+			using iterator = base_iterator;
 			using iterator_category = std::random_access_iterator_tag;
 			using value_type = T;
 			using difference_type = ptrdiff_t;

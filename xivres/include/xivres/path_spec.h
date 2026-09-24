@@ -92,7 +92,7 @@ namespace xivres {
 			, m_text(r.m_text) {
 			m_parts.reserve(r.m_parts.size());
 			for (const auto& part : r.m_parts)
-				m_parts.emplace_back(&m_text[&part[0] - &r.m_text[0]], part.size());
+				m_parts.emplace_back(m_text.data() + (part.data() - r.m_text.data()), part.size());
 		}
 		path_spec(path_spec&& r) noexcept { swap(*this, r); }
 
@@ -137,14 +137,14 @@ namespace xivres {
 			std::swap(l.m_nameHash, r.m_nameHash);
 			std::swap(l.m_fullPathHash, r.m_fullPathHash);
 
-			const auto rts = &l.m_text[0];
-			const auto lts = &r.m_text[0];
+			const auto rts = l.m_text.data();
+			const auto lts = r.m_text.data();
 			std::swap(l.m_text, r.m_text);
 			std::swap(l.m_parts, r.m_parts);
 			for (auto& part : l.m_parts)
-				part = {&l.m_text[&part[0] - lts], part.size()};
+				part = {l.m_text.data() + (part.data() - lts), part.size()};
 			for (auto& part : r.m_parts)
-				part = {&r.m_text[&part[0] - rts], part.size()};
+				part = {r.m_text.data() + (part.data() - rts), part.size()};
 		}
 
 		path_spec& operator/=(const path_spec& r);
@@ -352,33 +352,33 @@ namespace xivres {
 			}
 
 			bool operator()(const sqpack::sqindex::pair_hash_with_text_locator& l, const char* rt) const {
-				return util::unicode::strcmp(l.FullPath, rt, &util::unicode::lower, sizeof l.FullPath);
+				return util::unicode::strcmp(l.FullPath, rt, &util::unicode::lower, sizeof l.FullPath) < 0;
 			}
 
 			bool operator()(const char* lt, const sqpack::sqindex::pair_hash_with_text_locator& r) const {
-				return util::unicode::strcmp(lt, r.FullPath, &util::unicode::lower, sizeof r.FullPath);
+				return util::unicode::strcmp(lt, r.FullPath, &util::unicode::lower, sizeof r.FullPath) < 0;
 			}
 
 			bool operator()(const sqpack::sqindex::full_hash_with_text_locator& l, const char* rt) const {
-				return util::unicode::strcmp(l.FullPath, rt, &util::unicode::lower, sizeof l.FullPath);
+				return util::unicode::strcmp(l.FullPath, rt, &util::unicode::lower, sizeof l.FullPath) < 0;
 			}
 
 			bool operator()(const char* lt, const sqpack::sqindex::full_hash_with_text_locator& r) const {
-				return util::unicode::strcmp(lt, r.FullPath, &util::unicode::lower, sizeof r.FullPath);
+				return util::unicode::strcmp(lt, r.FullPath, &util::unicode::lower, sizeof r.FullPath) < 0;
 			}
 		};
 	};
 }
 
 template<>
-struct std::formatter<xivres::path_spec, char> : std::formatter<std::basic_string<char>, char> {
+struct std::formatter<xivres::path_spec, char> : std::formatter<std::string> {
 	template<class FormatContext>
 	auto format(const xivres::path_spec& t, FormatContext& fc) const {
 		if (t.has_original()) {
-			return std::formatter<std::basic_string<char>, char>::format(std::format(
+			return std::formatter<std::string>::format(std::format(
 																			"{}({:08x}/{:08x}, {:08x})", t.text(), t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
 		} else {
-			return std::formatter<std::basic_string<char>, char>::format(std::format(
+			return std::formatter<std::string>::format(std::format(
 																			R"(???({:08x}/{:08x}, {:08x}))", t.path_hash(), t.name_hash(), t.full_path_hash()), fc);
 		}
 	}

@@ -7,16 +7,16 @@ xivres::fontdata::stream::stream() {
 	memcpy(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature);
 	memcpy(m_fthd.Signature, glyph_table_header::Signature_Value, sizeof m_fthd.Signature);
 	memcpy(m_knhd.Signature, kerning_header::Signature_Value, sizeof m_knhd.Signature);
-	m_fcsv.FontTableHeaderOffset = static_cast<uint32_t>(sizeof m_fcsv);
-	m_fcsv.KerningHeaderOffset = static_cast<uint32_t>(sizeof m_fcsv + sizeof m_fthd);
+	m_fcsv.FontTableHeaderOffset = sizeof m_fcsv;
+	m_fcsv.KerningHeaderOffset = sizeof m_fcsv + sizeof m_fthd;
 }
 
 xivres::fontdata::stream::stream(const xivres::stream& strm, bool strict)
 	: m_fcsv(strm.read_fully<header>(0))
 	, m_fthd(strm.read_fully<glyph_table_header>(m_fcsv.FontTableHeaderOffset))
-	, m_fontTableEntries(strm.read_vector<glyph_entry>(m_fcsv.FontTableHeaderOffset + sizeof m_fthd, m_fthd.FontTableEntryCount, 0x1000000))
+	, m_fontTableEntries(strm.read_vector<glyph_entry>(static_cast<std::streamoff>(m_fcsv.FontTableHeaderOffset + sizeof m_fthd), m_fthd.FontTableEntryCount, 0x1000000))
 	, m_knhd(strm.read_fully<kerning_header>(m_fcsv.KerningHeaderOffset))
-	, m_kerningEntries(strm.read_vector<kerning_entry>(m_fcsv.KerningHeaderOffset + sizeof m_knhd, (std::min)(m_knhd.EntryCount, m_fthd.KerningEntryCount), 0x1000000)) {
+	, m_kerningEntries(strm.read_vector<kerning_entry>(static_cast<std::streamoff>(m_fcsv.KerningHeaderOffset + sizeof m_knhd),(std::min)(m_knhd.EntryCount, m_fthd.KerningEntryCount), 0x1000000)) {
 	if (strict) {
 		if (0 != memcmp(m_fcsv.Signature, header::Signature_Value, sizeof m_fcsv.Signature))
 			throw bad_data_error("fcsv.Signature != \"fcsv0100\"");
@@ -58,11 +58,11 @@ xivres::fontdata::stream::stream(const xivres::stream& strm, bool strict)
 }
 
 std::streamsize xivres::fontdata::stream::size() const {
-	return sizeof m_fcsv
+	return static_cast<std::streamsize>(sizeof m_fcsv
 		+ sizeof m_fthd
 		+ std::span(m_fontTableEntries).size_bytes()
 		+ sizeof m_knhd
-		+ std::span(m_kerningEntries).size_bytes();
+		+ std::span(m_kerningEntries).size_bytes());
 }
 
 std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
@@ -72,7 +72,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 	auto relativeOffset = offset;
 	auto out = std::span(static_cast<char*>(buf), static_cast<size_t>(length));
 
-	if (relativeOffset < sizeof m_fcsv) {
+	if (std::cmp_less(relativeOffset, sizeof m_fcsv)) {
 		const auto src = util::span_cast<char>(1, &m_fcsv).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -84,7 +84,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 	} else
 		relativeOffset -= sizeof m_fcsv;
 
-	if (relativeOffset < sizeof m_fthd) {
+	if (std::cmp_less(relativeOffset, sizeof m_fthd)) {
 		const auto src = util::span_cast<char>(1, &m_fthd).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -97,7 +97,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 		relativeOffset -= sizeof m_fthd;
 
 	if (const auto srcTyped = std::span(m_fontTableEntries);
-		relativeOffset < static_cast<std::streamoff>(srcTyped.size_bytes())) {
+		std::cmp_less(relativeOffset, srcTyped.size_bytes())) {
 		const auto src = util::span_cast<char>(srcTyped).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -109,7 +109,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 	} else
 		relativeOffset -= static_cast<std::streamoff>(srcTyped.size_bytes());
 
-	if (relativeOffset < sizeof m_knhd) {
+	if (std::cmp_less(relativeOffset, sizeof m_knhd)) {
 		const auto src = util::span_cast<char>(1, &m_knhd).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -122,7 +122,7 @@ std::streamsize xivres::fontdata::stream::read(std::streamoff offset, void* buf,
 		relativeOffset -= sizeof m_knhd;
 
 	if (const auto srcTyped = std::span(m_kerningEntries);
-		relativeOffset < static_cast<std::streamoff>(srcTyped.size_bytes())) {
+		std::cmp_less(relativeOffset, srcTyped.size_bytes())) {
 		const auto src = util::span_cast<char>(srcTyped).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -143,7 +143,9 @@ void xivres::fontdata::stream::add_kerning(const kerning_entry& entry, bool cumu
 	else if (entry < m_kerningEntries.front())
 		it = m_kerningEntries.begin();
 	else
-		it = std::lower_bound(m_kerningEntries.begin(), m_kerningEntries.end(), entry);
+		it = std::ranges::lower_bound(m_kerningEntries, std::make_pair(*entry.LeftUtf8Value, *entry.RightUtf8Value), {}, [](const kerning_entry& e) {
+			return std::make_pair(*e.LeftUtf8Value, *e.RightUtf8Value);
+		});
 
 	if (it != m_kerningEntries.end() && it->LeftUtf8Value == entry.LeftUtf8Value && it->RightUtf8Value == entry.RightUtf8Value) {
 		if (entry.RightOffset)
@@ -181,7 +183,7 @@ void xivres::fontdata::stream::add_glyph(const glyph_entry& entry) {
 	else if (entry < m_fontTableEntries.front())
 		it = m_fontTableEntries.begin();
 	else
-		it = std::lower_bound(m_fontTableEntries.begin(), m_fontTableEntries.end(), entry);
+		it = std::ranges::lower_bound(m_fontTableEntries, *entry.Utf8Value, {}, [](const glyph_entry& e) { return *e.Utf8Value; });
 
 	if (it == m_fontTableEntries.end() || it->Utf8Value != entry.Utf8Value) {
 		if (m_fontTableEntries.size() >= 65535 || (entry.Utf8Value == 0x20 && m_fontTableEntries.size() >= 65534))
@@ -213,9 +215,7 @@ void xivres::fontdata::stream::add_glyph(char32_t c, uint16_t textureIndex, uint
 
 	const auto val = util::unicode::u32_to_u8uint32(c);
 
-	auto it = std::lower_bound(m_fontTableEntries.begin(), m_fontTableEntries.end(), val, [](const glyph_entry& l, uint32_t r) {
-		return l.Utf8Value < r;
-	});
+	auto it = std::ranges::lower_bound(m_fontTableEntries, val, {}, [](const glyph_entry& e) { return *e.Utf8Value; });
 
 	if (it == m_fontTableEntries.end() || it->Utf8Value != val) {
 		if (m_fontTableEntries.size() >= 65535 || (c == 0x20 && m_fontTableEntries.size() >= 65534))
@@ -268,11 +268,8 @@ void xivres::fontdata::stream::reserve_kernings(size_t count) {
 
 int xivres::fontdata::stream::get_kerning(char32_t l, char32_t r) const {
 	const auto pair = std::make_pair(util::unicode::u32_to_u8uint32(l), util::unicode::u32_to_u8uint32(r));
-	const auto it = std::lower_bound(m_kerningEntries.begin(), m_kerningEntries.end(), pair,
-		[](const kerning_entry& l, const std::pair<uint32_t, uint32_t>& r) {
-		if (l.LeftUtf8Value == r.first)
-			return l.RightUtf8Value < r.second;
-		return l.LeftUtf8Value < r.first;
+	const auto it = std::ranges::lower_bound(m_kerningEntries, pair, {}, [](const kerning_entry& e) {
+		return std::make_pair(*e.LeftUtf8Value, *e.RightUtf8Value);
 	});
 	if (it == m_kerningEntries.end() || it->LeftUtf8Value != pair.first || it->RightUtf8Value != pair.second)
 		return 0;
@@ -281,10 +278,7 @@ int xivres::fontdata::stream::get_kerning(char32_t l, char32_t r) const {
 
 const xivres::fontdata::glyph_entry* xivres::fontdata::stream::get_glyph(char32_t c) const {
 	const auto val = util::unicode::u32_to_u8uint32(c);
-	const auto it = std::lower_bound(m_fontTableEntries.begin(), m_fontTableEntries.end(), val,
-		[](const glyph_entry& l, uint32_t r) {
-		return l.Utf8Value < r;
-	});
+	const auto it = std::ranges::lower_bound(m_fontTableEntries, val, {}, [](const glyph_entry& e) { return *e.Utf8Value; });
 	if (it == m_fontTableEntries.end() || it->Utf8Value != val)
 		return nullptr;
 	return &*it;

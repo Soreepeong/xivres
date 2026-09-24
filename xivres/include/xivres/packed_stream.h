@@ -110,15 +110,15 @@ namespace xivres {
 		passthrough_packer(std::shared_ptr<const stream> strm) : m_stream(std::move(strm)) {
 		}
 
-		[[nodiscard]] packed::type get_packed_type() override final { return TPackedFileType; }
+		[[nodiscard]] packed::type get_packed_type() final { return TPackedFileType; }
 
-		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) override final {
+		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) final {
 			ensure_initialized();
 			return translate_read(offset, buf, length);
 		}
 	};
 
-	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<untyped_passthrough_packer, TPacker>>>
+	template<typename TPacker> requires std::is_base_of_v<untyped_passthrough_packer, TPacker>
 	class passthrough_packed_stream : public packed_stream {
 		const std::shared_ptr<const stream> m_stream;
 		mutable TPacker m_packer;
@@ -196,7 +196,7 @@ namespace xivres {
 		void compress_block(uint32_t offset, uint32_t length, block_data& blockData) const;
 	};
 
-	template<typename TPacker, typename = std::enable_if_t<std::is_base_of_v<compressing_packer, TPacker>>>
+	template<typename TPacker> requires std::is_base_of_v<compressing_packer, TPacker>
 	class compressing_packed_stream : public packed_stream {
 		constexpr static int CompressionLevel_AlreadyPacked = Z_BEST_COMPRESSION + 1;
 
@@ -232,7 +232,7 @@ namespace xivres {
 			if (m_compressionLevel == CompressionLevel_AlreadyPacked)
 				return;
 
-			const auto lock = std::lock_guard(m_mtx);
+			const auto lock = std::scoped_lock(m_mtx);
 			if (m_compressionLevel == CompressionLevel_AlreadyPacked)
 				return;
 

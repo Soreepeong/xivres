@@ -119,7 +119,7 @@ namespace xivres::fontdata {
 		}
 
 		auto operator<=>(const kerning_entry& r) const {
-			if (const auto v = (*LeftUtf8Value <=> *r.LeftUtf8Value); v != std::strong_ordering::equal)
+			if (const auto v = *LeftUtf8Value <=> *r.LeftUtf8Value; v != std::strong_ordering::equal)
 				return v;
 			return *RightUtf8Value <=> *r.RightUtf8Value;
 		}

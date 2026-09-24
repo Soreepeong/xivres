@@ -1,7 +1,21 @@
 #include "../include/xivres/util.unicode.h"
 
+#include <algorithm>
 #include <array>
+#include <functional>
 #include <stdexcept>
+
+namespace {
+	bool has_continuation_bytes(const char8_t* in, size_t nRemainingBytes, size_t length) {
+		if (nRemainingBytes < length)
+			return false;
+		for (size_t i = 1; i < length; ++i) {
+			if (0x80 != (in[i] & 0xC0))
+				return false;
+		}
+		return true;
+	}
+}
 
 char32_t xivres::util::unicode::u8uint32_to_u32(uint32_t n) {
 	if ((n & 0xFFFFFF80) == 0)
@@ -32,14 +46,14 @@ uint32_t xivres::util::unicode::u32_to_u8uint32(char32_t codepoint) {
 	if (codepoint <= 0x7F) {
 		return codepoint;
 	} else if (codepoint <= 0x7FF) {
-		return ((0xC0 | ((codepoint >> 6))) << 8)
+		return ((0xC0 | (codepoint >> 6)) << 8)
 			| ((0x80 | ((codepoint >> 0) & 0x3F)) << 0);
 	} else if (codepoint <= 0xFFFF) {
-		return ((0xE0 | ((codepoint >> 12))) << 16)
+		return ((0xE0 | (codepoint >> 12)) << 16)
 			| ((0x80 | ((codepoint >> 6) & 0x3F)) << 8)
 			| ((0x80 | ((codepoint >> 0) & 0x3F)) << 0);
 	} else if (codepoint <= 0x10FFFF) {
-		return ((0xF0 | ((codepoint >> 18))) << 24)
+		return ((0xF0 | (codepoint >> 18)) << 24)
 			| ((0x80 | ((codepoint >> 12) & 0x3F)) << 16)
 			| ((0x80 | ((codepoint >> 6) & 0x3F)) << 8)
 			| ((0x80 | ((codepoint >> 0) & 0x3F)) << 0);
@@ -54,78 +68,52 @@ size_t xivres::util::unicode::decode(EncodingTag<char8_t>, char32_t& out, const 
 	}
 
 	if (0 == (*in & 0x80)) {
-		out = *in;
+		out = static_cast<char32_t>(*in);
 		return 1;
 	}
 
-	if (0xC0 == (*in & 0xE0)) {
-		if (nRemainingBytes < 2) goto invalid;
-		if (0x80 != (in[1] & 0xC0)) goto invalid;
-		out = (
-			((static_cast<char32_t>(in[0]) & 0x1F) << 6) |
-			((static_cast<char32_t>(in[1]) & 0x3F) << 0));
+	if (0xC0 == (*in & 0xE0) && has_continuation_bytes(in, nRemainingBytes, 2)) {
+		out = ((static_cast<char32_t>(in[0]) & 0x1F) << 6) |
+			((static_cast<char32_t>(in[1]) & 0x3F) << 0);
 		return 2;
 	}
 
-	if (0xE0 == (*in & 0xF0)) {
-		if (nRemainingBytes < 3) goto invalid;
-		if (0x80 != (in[1] & 0xC0)) goto invalid;
-		if (0x80 != (in[2] & 0xC0)) goto invalid;
-		out = static_cast<char32_t>(
-			((static_cast<char32_t>(in[0]) & 0x0F) << 12) |
+	if (0xE0 == (*in & 0xF0) && has_continuation_bytes(in, nRemainingBytes, 3)) {
+		out = ((static_cast<char32_t>(in[0]) & 0x0F) << 12) |
 			((static_cast<char32_t>(in[1]) & 0x3F) << 6) |
-			((static_cast<char32_t>(in[2]) & 0x3F) << 0));
+			((static_cast<char32_t>(in[2]) & 0x3F) << 0);
 		return 3;
 	}
 
-	if (0xF0 == (*in & 0xF8)) {
-		if (nRemainingBytes < 4) goto invalid;
-		if (0x80 != (in[1] & 0xC0)) goto invalid;
-		if (0x80 != (in[2] & 0xC0)) goto invalid;
-		if (0x80 != (in[3] & 0xC0)) goto invalid;
-		out = (
-			((static_cast<char32_t>(in[0]) & 0x07) << 18) |
+	if (0xF0 == (*in & 0xF8) && has_continuation_bytes(in, nRemainingBytes, 4)) {
+		out = ((static_cast<char32_t>(in[0]) & 0x07) << 18) |
 			((static_cast<char32_t>(in[1]) & 0x3F) << 12) |
 			((static_cast<char32_t>(in[2]) & 0x3F) << 6) |
-			((static_cast<char32_t>(in[3]) & 0x3F) << 0));
+			((static_cast<char32_t>(in[3]) & 0x3F) << 0);
 		return 4;
 	}
 
 	if (!strict) {
-		if (0xF8 == (*in & 0xFC)) {
-			if (nRemainingBytes < 5) goto invalid;
-			if (0x80 != (in[1] & 0xC0)) goto invalid;
-			if (0x80 != (in[2] & 0xC0)) goto invalid;
-			if (0x80 != (in[3] & 0xC0)) goto invalid;
-			if (0x80 != (in[4] & 0xC0)) goto invalid;
-			out = (
-				((static_cast<char32_t>(in[0]) & 0x03) << 24) |
+		if (0xF8 == (*in & 0xFC) && has_continuation_bytes(in, nRemainingBytes, 5)) {
+			out = ((static_cast<char32_t>(in[0]) & 0x03) << 24) |
 				((static_cast<char32_t>(in[1]) & 0x3F) << 18) |
 				((static_cast<char32_t>(in[2]) & 0x3F) << 12) |
 				((static_cast<char32_t>(in[3]) & 0x3F) << 6) |
-				((static_cast<char32_t>(in[4]) & 0x3F) << 0));
+				((static_cast<char32_t>(in[4]) & 0x3F) << 0);
 			return 5;
 		}
 
-		if (0xFC == (*in & 0xFE)) {
-			if (nRemainingBytes < 6) goto invalid;
-			if (0x80 != (in[1] & 0xC0)) goto invalid;
-			if (0x80 != (in[2] & 0xC0)) goto invalid;
-			if (0x80 != (in[3] & 0xC0)) goto invalid;
-			if (0x80 != (in[4] & 0xC0)) goto invalid;
-			if (0x80 != (in[5] & 0xC0)) goto invalid;
-			out = (
-				((static_cast<char32_t>(in[0]) & 0x01) << 30) |
+		if (0xFC == (*in & 0xFE) && has_continuation_bytes(in, nRemainingBytes, 6)) {
+			out = ((static_cast<char32_t>(in[0]) & 0x01) << 30) |
 				((static_cast<char32_t>(in[1]) & 0x3F) << 24) |
 				((static_cast<char32_t>(in[2]) & 0x3F) << 18) |
 				((static_cast<char32_t>(in[3]) & 0x3F) << 12) |
 				((static_cast<char32_t>(in[4]) & 0x3F) << 6) |
-				((static_cast<char32_t>(in[5]) & 0x3F) << 0));
+				((static_cast<char32_t>(in[5]) & 0x3F) << 0);
 			return 6;
 		}
 	}
 
-invalid:
 	out = UReplacement;
 	return 1;
 }
@@ -137,8 +125,10 @@ size_t xivres::util::unicode::decode(EncodingTag<char16_t>, char32_t& out, const
 	}
 
 	if ((*in & 0xFC00) == 0xD800) {
-		if (nRemainingBytes < 2 || (in[1] & 0xFC00) != 0xDC00)
-			goto invalid;
+		if (nRemainingBytes < 2 || (in[1] & 0xFC00) != 0xDC00) {
+			out = UReplacement;
+			return 1;
+		}
 		out = 0x10000 + (
 			((static_cast<char32_t>(in[0]) & 0x03FF) << 10) |
 			((static_cast<char32_t>(in[1]) & 0x03FF) << 0)
@@ -151,13 +141,9 @@ size_t xivres::util::unicode::decode(EncodingTag<char16_t>, char32_t& out, const
 	else
 		out = *in;
 	return 1;
-
-invalid:
-	out = UReplacement;
-	return 1;
 }
 
-size_t xivres::util::unicode::decode(EncodingTag<char32_t>, char32_t& out, const char32_t* in, size_t nRemainingBytes, bool strict) {
+size_t xivres::util::unicode::decode(EncodingTag<char32_t>, char32_t& out, const char32_t* in, size_t nRemainingBytes, bool /*strict*/) {
 	if (nRemainingBytes == 0) {
 		out = 0;
 		return 0;
@@ -176,65 +162,65 @@ size_t xivres::util::unicode::decode(EncodingTag<wchar_t>, char32_t& out, const 
 }
 
 size_t xivres::util::unicode::encode(EncodingTag<char8_t>, char8_t* ptr, char32_t c, bool strict) {
-	if (c < (1 << 7)) {
+	if (c < 0x80) {
 		if (ptr)
-			*(ptr++) = static_cast<char8_t>(c);
+			*ptr = static_cast<char8_t>(c);
 		return 1;
 	}
 
-	if (c < (1 << (5 + 6))) {
+	if (c < 0x800) {
 		if (ptr) {
-			*(ptr++) = 0xC0 | static_cast<char8_t>(c >> 6);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
+			*ptr++ = 0xC0 | static_cast<char8_t>(c >> 6);
+			*ptr = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
 		}
 		return 2;
 	}
-	if (c < (1 << (4 + 6 + 6))) {
+	if (c < 0x10000) {
 		if (ptr) {
-			*(ptr++) = 0xE0 | static_cast<char8_t>(c >> 12);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
+			*ptr++ = 0xE0 | static_cast<char8_t>(c >> 12);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
+			*ptr = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
 		}
 		return 3;
 	}
 
-	if (c < (1 << (3 + 6 + 6 + 6))) {
+	if (c < 0x200000) {
 		if (ptr) {
-			*(ptr++) = 0xF0 | static_cast<char8_t>(c >> 18);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
+			*ptr++ = 0xF0 | static_cast<char8_t>(c >> 18);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
+			*ptr = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
 		}
 		return 4;
 	}
 
 	if (strict) {
 		if (ptr) { // Replacement character U+FFFD
-			*(ptr++) = 0xEF;
-			*(ptr++) = 0xBF;
-			*(ptr++) = 0xBD;
+			*ptr++ = 0xEF;
+			*ptr++ = 0xBF;
+			*ptr = 0xBD;
 		}
 		return 3;
 	}
 
-	if (c < (1 << (3 + 6 + 6 + 6 + 6))) {
+	if (c < 0x4000000) {
 		if (ptr) {
-			*(ptr++) = 0xF8 | static_cast<char8_t>(c >> 24);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 18) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
-			*(ptr++) = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
+			*ptr++ = 0xF8 | static_cast<char8_t>(c >> 24);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 18) & 0x3F);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
+			*ptr++ = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
+			*ptr = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
 		}
 		return 5;
 	}
 
 	if (ptr) {
-		*(ptr++) = 0xFC | static_cast<char8_t>(c >> 30);
-		*(ptr++) = 0x80 | static_cast<char8_t>((c >> 24) & 0x3F);
-		*(ptr++) = 0x80 | static_cast<char8_t>((c >> 18) & 0x3F);
-		*(ptr++) = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
-		*(ptr++) = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
-		*(ptr++) = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
+		*ptr++ = 0xFC | static_cast<char8_t>(c >> 30);
+		*ptr++ = 0x80 | static_cast<char8_t>((c >> 24) & 0x3F);
+		*ptr++ = 0x80 | static_cast<char8_t>((c >> 18) & 0x3F);
+		*ptr++ = 0x80 | static_cast<char8_t>((c >> 12) & 0x3F);
+		*ptr++ = 0x80 | static_cast<char8_t>((c >> 6) & 0x3F);
+		*ptr = 0x80 | static_cast<char8_t>((c >> 0) & 0x3F);
 	}
 	return 6;
 }
@@ -243,29 +229,29 @@ size_t xivres::util::unicode::encode(EncodingTag<char16_t>, char16_t* ptr, char3
 	if (c < 0x10000) {
 		if (ptr) {
 			if (0xD800 <= c && c <= 0xDFFF && strict)
-				*(ptr++) = 0xFFFD;
+				*ptr = 0xFFFD;
 			else
-				*(ptr++) = static_cast<char16_t>(c);
+				*ptr = static_cast<char16_t>(c);
 		}
 		return 1;
 	}
 
 	c -= 0x10000;
 
-	if (c < (1 << 20)) {
+	if (c < 0x100000) {
 		if (ptr) {
-			*(ptr++) = 0xD800 | static_cast<char16_t>((c >> 10) & 0x3FF);
-			*(ptr++) = 0xDC00 | static_cast<char16_t>((c >> 0) & 0x3FF);
+			*ptr++ = 0xD800 | static_cast<char16_t>((c >> 10) & 0x3FF);
+			*ptr = 0xDC00 | static_cast<char16_t>((c >> 0) & 0x3FF);
 		}
 		return 2;
 	}
 
 	if (ptr)
-		*(ptr++) = 0xFFFD;
+		*ptr = 0xFFFD;
 	return 1;
 }
 
-size_t xivres::util::unicode::encode(EncodingTag<char32_t>, char32_t* ptr, char32_t c, bool strict) {
+size_t xivres::util::unicode::encode(EncodingTag<char32_t>, char32_t* ptr, char32_t c, bool /*strict*/) {
 	if (ptr)
 		*ptr = c;
 	return 1;
@@ -7464,337 +7450,337 @@ std::span<const xivres::util::unicode::blocks::block_definition> xivres::util::u
 	 * http://www.util.unicode.org/charts/
 	 * Source: https://util.unicode.org/Public/UNIDATA/Blocks.txt
 	 * Replace from: `^([0-9a-f]+)\.\.([0-9a-f]+); (.*?)$`
-	 * Replace to: `{ 0x$1, 0x$2, "$3", LTR },`
+	 * Replace to: `{ .First = 0x$1, .Last = 0x$2, .Name = "$3", .Purpose = LTR },`
 	 */
-	static const std::array<block_definition, 321> Blocks{ {
-		{ 0x0000, 0x007F, "Basic Latin", LTR | UsedWithCombining },
-		{ 0x0080, 0x00FF, "Latin-1 Supplement", LTR | UsedWithCombining },
-		{ 0x0100, 0x017F, "Latin Extended-A", LTR | UsedWithCombining },
-		{ 0x0180, 0x024F, "Latin Extended-B", LTR | UsedWithCombining },
-		{ 0x0250, 0x02AF, "IPA Extensions", LTR | UsedWithCombining },
-		{ 0x02B0, 0x02FF, "Spacing Modifier Letters", LTR },
-		{ 0x0300, 0x036F, "Combining Diacritical Marks", LTR, Combining },
-		{ 0x0370, 0x03FF, "Greek and Coptic", LTR | UsedWithCombining },
-		{ 0x0400, 0x04FF, "Cyrillic", LTR, Cyrillic },
-		{ 0x0500, 0x052F, "Cyrillic Supplement", LTR, Cyrillic },
-		{ 0x0530, 0x058F, "Armenian", LTR },
-		{ 0x0590, 0x05FF, "Hebrew", RTL },
-		{ 0x0600, 0x06FF, "Arabic", RTL },
-		{ 0x0700, 0x074F, "Syriac", LTR },
-		{ 0x0750, 0x077F, "Arabic Supplement", RTL },
-		{ 0x0780, 0x07BF, "Thaana", LTR },
-		{ 0x07C0, 0x07FF, "NKo", LTR },
-		{ 0x0800, 0x083F, "Samaritan", LTR },
-		{ 0x0840, 0x085F, "Mandaic", LTR },
-		{ 0x0860, 0x086F, "Syriac Supplement", LTR },
-		{ 0x0870, 0x089F, "Arabic Extended-B", RTL },
-		{ 0x08A0, 0x08FF, "Arabic Extended-A", RTL },
-		{ 0x0900, 0x097F, "Devanagari", LTR },
-		{ 0x0980, 0x09FF, "Bengali", LTR },
-		{ 0x0A00, 0x0A7F, "Gurmukhi", LTR },
-		{ 0x0A80, 0x0AFF, "Gujarati", LTR },
-		{ 0x0B00, 0x0B7F, "Oriya", LTR },
-		{ 0x0B80, 0x0BFF, "Tamil", LTR },
-		{ 0x0C00, 0x0C7F, "Telugu", LTR },
-		{ 0x0C80, 0x0CFF, "Kannada", LTR },
-		{ 0x0D00, 0x0D7F, "Malayalam", LTR },
-		{ 0x0D80, 0x0DFF, "Sinhala", LTR },
-		{ 0x0E00, 0x0E7F, "Thai", LTR, Thai },
-		{ 0x0E80, 0x0EFF, "Lao", LTR },
-		{ 0x0F00, 0x0FFF, "Tibetan", LTR },
-		{ 0x1000, 0x109F, "Myanmar", LTR },
-		{ 0x10A0, 0x10FF, "Georgian", LTR },
-		{ 0x1100, 0x11FF, "Hangul Jamo", LTR },
-		{ 0x1200, 0x137F, "Ethiopic", LTR },
-		{ 0x1380, 0x139F, "Ethiopic Supplement", LTR },
-		{ 0x13A0, 0x13FF, "Cherokee", LTR },
-		{ 0x1400, 0x167F, "Unified Canadian Aboriginal Syllabics", LTR },
-		{ 0x1680, 0x169F, "Ogham", LTR },
-		{ 0x16A0, 0x16FF, "Runic", LTR },
-		{ 0x1700, 0x171F, "Tagalog", LTR },
-		{ 0x1720, 0x173F, "Hanunoo", LTR },
-		{ 0x1740, 0x175F, "Buhid", LTR },
-		{ 0x1760, 0x177F, "Tagbanwa", LTR },
-		{ 0x1780, 0x17FF, "Khmer", LTR },
-		{ 0x1800, 0x18AF, "Mongolian", LTR },
-		{ 0x18B0, 0x18FF, "Unified Canadian Aboriginal Syllabics Extended", LTR },
-		{ 0x1900, 0x194F, "Limbu", LTR },
-		{ 0x1950, 0x197F, "Tai Le", LTR },
-		{ 0x1980, 0x19DF, "New Tai Lue", LTR },
-		{ 0x19E0, 0x19FF, "Khmer Symbols", LTR },
-		{ 0x1A00, 0x1A1F, "Buginese", LTR },
-		{ 0x1A20, 0x1AAF, "Tai Tham", LTR },
-		{ 0x1AB0, 0x1AFF, "Combining Diacritical Marks Extended", LTR, Combining },
-		{ 0x1B00, 0x1B7F, "Balinese", LTR },
-		{ 0x1B80, 0x1BBF, "Sundanese", LTR },
-		{ 0x1BC0, 0x1BFF, "Batak", LTR },
-		{ 0x1C00, 0x1C4F, "Lepcha", LTR },
-		{ 0x1C50, 0x1C7F, "Ol Chiki", LTR },
-		{ 0x1C80, 0x1C8F, "Cyrillic Extended-C", LTR, Cyrillic },
-		{ 0x1C90, 0x1CBF, "Georgian Extended", LTR },
-		{ 0x1CC0, 0x1CCF, "Sundanese Supplement", LTR },
-		{ 0x1CD0, 0x1CFF, "Vedic Extensions", LTR },
-		{ 0x1D00, 0x1D7F, "Phonetic Extensions", LTR },
-		{ 0x1D80, 0x1DBF, "Phonetic Extensions Supplement", LTR },
-		{ 0x1DC0, 0x1DFF, "Combining Diacritical Marks Supplement", LTR, Combining },
-		{ 0x1E00, 0x1EFF, "Latin Extended Additional", LTR | UsedWithCombining },
-		{ 0x1F00, 0x1FFF, "Greek Extended", LTR },
-		{ 0x2000, 0x206F, "General Punctuation", LTR },
-		{ 0x2070, 0x209F, "Superscripts and Subscripts", LTR },
-		{ 0x20A0, 0x20CF, "Currency Symbols", LTR },
-		{ 0x20D0, 0x20FF, "Combining Diacritical Marks for Symbols", LTR, Combining },
-		{ 0x2100, 0x214F, "Letterlike Symbols", LTR },
-		{ 0x2150, 0x218F, "Number Forms", LTR },
-		{ 0x2190, 0x21FF, "Arrows", LTR },
-		{ 0x2200, 0x22FF, "Mathematical Operators", LTR },
-		{ 0x2300, 0x23FF, "Miscellaneous Technical", LTR },
-		{ 0x2400, 0x243F, "Control Pictures", LTR },
-		{ 0x2440, 0x245F, "Optical Character Recognition", LTR },
-		{ 0x2460, 0x24FF, "Enclosed Alphanumerics", LTR },
-		{ 0x2500, 0x257F, "Box Drawing", LTR },
-		{ 0x2580, 0x259F, "Block Elements", LTR },
-		{ 0x25A0, 0x25FF, "Geometric Shapes", LTR },
-		{ 0x2600, 0x26FF, "Miscellaneous Symbols", LTR },
-		{ 0x2700, 0x27BF, "Dingbats", LTR },
-		{ 0x27C0, 0x27EF, "Miscellaneous Mathematical Symbols-A", LTR },
-		{ 0x27F0, 0x27FF, "Supplemental Arrows-A", LTR },
-		{ 0x2800, 0x28FF, "Braille Patterns", LTR },
-		{ 0x2900, 0x297F, "Supplemental Arrows-B", LTR },
-		{ 0x2980, 0x29FF, "Miscellaneous Mathematical Symbols-B", LTR },
-		{ 0x2A00, 0x2AFF, "Supplemental Mathematical Operators", LTR },
-		{ 0x2B00, 0x2BFF, "Miscellaneous Symbols and Arrows", LTR },
-		{ 0x2C00, 0x2C5F, "Glagolitic", LTR },
-		{ 0x2C60, 0x2C7F, "Latin Extended-C", LTR | UsedWithCombining },
-		{ 0x2C80, 0x2CFF, "Coptic", LTR },
-		{ 0x2D00, 0x2D2F, "Georgian Supplement", LTR },
-		{ 0x2D30, 0x2D7F, "Tifinagh", LTR },
-		{ 0x2D80, 0x2DDF, "Ethiopic Extended", LTR },
-		{ 0x2DE0, 0x2DFF, "Cyrillic Extended-A", LTR, Cyrillic },
-		{ 0x2E00, 0x2E7F, "Supplemental Punctuation", LTR },
-		{ 0x2E80, 0x2EFF, "CJK Radicals Supplement", LTR },
-		{ 0x2F00, 0x2FDF, "Kangxi Radicals", LTR },
-		{ 0x2FF0, 0x2FFF, "Ideographic Description Characters", LTR },
-		{ 0x3000, 0x303F, "CJK Symbols and Punctuation", LTR },
-		{ 0x3040, 0x309F, "Hiragana", LTR },
-		{ 0x30A0, 0x30FF, "Katakana", LTR },
-		{ 0x3100, 0x312F, "Bopomofo", LTR },
-		{ 0x3130, 0x318F, "Hangul Compatibility Jamo", LTR },
-		{ 0x3190, 0x319F, "Kanbun", LTR },
-		{ 0x31A0, 0x31BF, "Bopomofo Extended", LTR },
-		{ 0x31C0, 0x31EF, "CJK Strokes", LTR },
-		{ 0x31F0, 0x31FF, "Katakana Phonetic Extensions", LTR },
-		{ 0x3200, 0x32FF, "Enclosed CJK Letters and Months", LTR },
-		{ 0x3300, 0x33FF, "CJK Compatibility", LTR },
-		{ 0x3400, 0x4DBF, "CJK Unified Ideographs Extension A", LTR },
-		{ 0x4DC0, 0x4DFF, "Yijing Hexagram Symbols", LTR },
-		{ 0x4E00, 0x9FFF, "CJK Unified Ideographs", LTR },
-		{ 0xA000, 0xA48F, "Yi Syllables", LTR },
-		{ 0xA490, 0xA4CF, "Yi Radicals", LTR },
-		{ 0xA4D0, 0xA4FF, "Lisu", LTR },
-		{ 0xA500, 0xA63F, "Vai", LTR },
-		{ 0xA640, 0xA69F, "Cyrillic Extended-B", LTR, Cyrillic },
-		{ 0xA6A0, 0xA6FF, "Bamum", LTR },
-		{ 0xA700, 0xA71F, "Modifier Tone Letters", LTR },
-		{ 0xA720, 0xA7FF, "Latin Extended-D", LTR | UsedWithCombining },
-		{ 0xA800, 0xA82F, "Syloti Nagri", LTR },
-		{ 0xA830, 0xA83F, "Common Indic Number Forms", LTR },
-		{ 0xA840, 0xA87F, "Phags-pa", LTR },
-		{ 0xA880, 0xA8DF, "Saurashtra", LTR },
-		{ 0xA8E0, 0xA8FF, "Devanagari Extended", LTR },
-		{ 0xA900, 0xA92F, "Kayah Li", LTR },
-		{ 0xA930, 0xA95F, "Rejang", LTR },
-		{ 0xA960, 0xA97F, "Hangul Jamo Extended-A", LTR },
-		{ 0xA980, 0xA9DF, "Javanese", LTR },
-		{ 0xA9E0, 0xA9FF, "Myanmar Extended-B", LTR },
-		{ 0xAA00, 0xAA5F, "Cham", LTR },
-		{ 0xAA60, 0xAA7F, "Myanmar Extended-A", LTR },
-		{ 0xAA80, 0xAADF, "Tai Viet", LTR },
-		{ 0xAAE0, 0xAAFF, "Meetei Mayek Extensions", LTR },
-		{ 0xAB00, 0xAB2F, "Ethiopic Extended-A", LTR },
-		{ 0xAB30, 0xAB6F, "Latin Extended-E", LTR | UsedWithCombining },
-		{ 0xAB70, 0xABBF, "Cherokee Supplement", LTR },
-		{ 0xABC0, 0xABFF, "Meetei Mayek", LTR },
-		{ 0xAC00, 0xD7AF, "Hangul Syllables", LTR },
-		{ 0xD7B0, 0xD7FF, "Hangul Jamo Extended-B", LTR },
-		{ 0xD800, 0xDB7F, "High Surrogates", Invalid },
-		{ 0xDB80, 0xDBFF, "High Private Use Surrogates", Invalid },
-		{ 0xDC00, 0xDFFF, "Low Surrogates", LTR },
-		{ 0xE000, 0xF8FF, "Private Use Area", LTR },
-		{ 0xF900, 0xFAFF, "CJK Compatibility Ideographs", LTR },
-		{ 0xFB00, 0xFB4F, "Alphabetic Presentation Forms", LTR },
-		{ 0xFB50, 0xFDFF, "Arabic Presentation Forms-A", RTL },
-		{ 0xFE00, 0xFE0F, "Variation Selectors", LTR },
-		{ 0xFE10, 0xFE1F, "Vertical Forms", LTR },
-		{ 0xFE20, 0xFE2F, "Combining Half Marks", LTR, Combining },
-		{ 0xFE30, 0xFE4F, "CJK Compatibility Forms", LTR },
-		{ 0xFE50, 0xFE6F, "Small Form Variants", LTR },
-		{ 0xFE70, 0xFEFF, "Arabic Presentation Forms-B", RTL },
-		{ 0xFF00, 0xFFEF, "Halfwidth and Fullwidth Forms", LTR },
-		{ 0xFFF0, 0xFFFF, "Specials", LTR },
-		{ 0x10000, 0x1007F, "Linear B Syllabary", LTR },
-		{ 0x10080, 0x100FF, "Linear B Ideograms", LTR },
-		{ 0x10100, 0x1013F, "Aegean Numbers", LTR },
-		{ 0x10140, 0x1018F, "Ancient Greek Numbers", LTR },
-		{ 0x10190, 0x101CF, "Ancient Symbols", LTR },
-		{ 0x101D0, 0x101FF, "Phaistos Disc", LTR },
-		{ 0x10280, 0x1029F, "Lycian", LTR },
-		{ 0x102A0, 0x102DF, "Carian", LTR },
-		{ 0x102E0, 0x102FF, "Coptic Epact Numbers", LTR },
-		{ 0x10300, 0x1032F, "Old Italic", LTR },
-		{ 0x10330, 0x1034F, "Gothic", LTR },
-		{ 0x10350, 0x1037F, "Old Permic", LTR },
-		{ 0x10380, 0x1039F, "Ugaritic", LTR },
-		{ 0x103A0, 0x103DF, "Old Persian", RTL },
-		{ 0x10400, 0x1044F, "Deseret", LTR },
-		{ 0x10450, 0x1047F, "Shavian", LTR },
-		{ 0x10480, 0x104AF, "Osmanya", LTR },
-		{ 0x104B0, 0x104FF, "Osage", LTR },
-		{ 0x10500, 0x1052F, "Elbasan", LTR },
-		{ 0x10530, 0x1056F, "Caucasian Albanian", LTR },
-		{ 0x10570, 0x105BF, "Vithkuqi", LTR },
-		{ 0x10600, 0x1077F, "Linear A", LTR },
-		{ 0x10780, 0x107BF, "Latin Extended-F", LTR | UsedWithCombining },
-		{ 0x10800, 0x1083F, "Cypriot Syllabary", LTR },
-		{ 0x10840, 0x1085F, "Imperial Aramaic", RTL },
-		{ 0x10860, 0x1087F, "Palmyrene", LTR },
-		{ 0x10880, 0x108AF, "Nabataean", LTR },
-		{ 0x108E0, 0x108FF, "Hatran", LTR },
-		{ 0x10900, 0x1091F, "Phoenician", LTR },
-		{ 0x10920, 0x1093F, "Lydian", LTR },
-		{ 0x10980, 0x1099F, "Meroitic Hieroglyphs", LTR },
-		{ 0x109A0, 0x109FF, "Meroitic Cursive", LTR },
-		{ 0x10A00, 0x10A5F, "Kharoshthi", LTR },
-		{ 0x10A60, 0x10A7F, "Old South Arabian", RTL },
-		{ 0x10A80, 0x10A9F, "Old North Arabian", RTL },
-		{ 0x10AC0, 0x10AFF, "Manichaean", LTR },
-		{ 0x10B00, 0x10B3F, "Avestan", LTR },
-		{ 0x10B40, 0x10B5F, "Inscriptional Parthian", LTR },
-		{ 0x10B60, 0x10B7F, "Inscriptional Pahlavi", LTR },
-		{ 0x10B80, 0x10BAF, "Psalter Pahlavi", LTR },
-		{ 0x10C00, 0x10C4F, "Old Turkic", LTR },
-		{ 0x10C80, 0x10CFF, "Old Hungarian", LTR },
-		{ 0x10D00, 0x10D3F, "Hanifi Rohingya", LTR },
-		{ 0x10E60, 0x10E7F, "Rumi Numeral Symbols", LTR },
-		{ 0x10E80, 0x10EBF, "Yezidi", LTR },
-		{ 0x10F00, 0x10F2F, "Old Sogdian", LTR },
-		{ 0x10F30, 0x10F6F, "Sogdian", LTR },
-		{ 0x10F70, 0x10FAF, "Old Uyghur", LTR },
-		{ 0x10FB0, 0x10FDF, "Chorasmian", LTR },
-		{ 0x10FE0, 0x10FFF, "Elymaic", LTR },
-		{ 0x11000, 0x1107F, "Brahmi", LTR },
-		{ 0x11080, 0x110CF, "Kaithi", LTR },
-		{ 0x110D0, 0x110FF, "Sora Sompeng", LTR },
-		{ 0x11100, 0x1114F, "Chakma", LTR },
-		{ 0x11150, 0x1117F, "Mahajani", LTR },
-		{ 0x11180, 0x111DF, "Sharada", LTR },
-		{ 0x111E0, 0x111FF, "Sinhala Archaic Numbers", LTR },
-		{ 0x11200, 0x1124F, "Khojki", LTR },
-		{ 0x11280, 0x112AF, "Multani", LTR },
-		{ 0x112B0, 0x112FF, "Khudawadi", LTR },
-		{ 0x11300, 0x1137F, "Grantha", LTR },
-		{ 0x11400, 0x1147F, "Newa", LTR },
-		{ 0x11480, 0x114DF, "Tirhuta", LTR },
-		{ 0x11580, 0x115FF, "Siddham", LTR },
-		{ 0x11600, 0x1165F, "Modi", LTR },
-		{ 0x11660, 0x1167F, "Mongolian Supplement", LTR },
-		{ 0x11680, 0x116CF, "Takri", LTR },
-		{ 0x11700, 0x1174F, "Ahom", LTR },
-		{ 0x11800, 0x1184F, "Dogra", LTR },
-		{ 0x118A0, 0x118FF, "Warang Citi", LTR },
-		{ 0x11900, 0x1195F, "Dives Akuru", LTR },
-		{ 0x119A0, 0x119FF, "Nandinagari", LTR },
-		{ 0x11A00, 0x11A4F, "Zanabazar Square", LTR },
-		{ 0x11A50, 0x11AAF, "Soyombo", LTR },
-		{ 0x11AB0, 0x11ABF, "Unified Canadian Aboriginal Syllabics Extended-A", LTR },
-		{ 0x11AC0, 0x11AFF, "Pau Cin Hau", LTR },
-		{ 0x11C00, 0x11C6F, "Bhaiksuki", LTR },
-		{ 0x11C70, 0x11CBF, "Marchen", LTR },
-		{ 0x11D00, 0x11D5F, "Masaram Gondi", LTR },
-		{ 0x11D60, 0x11DAF, "Gunjala Gondi", LTR },
-		{ 0x11EE0, 0x11EFF, "Makasar", LTR },
-		{ 0x11FB0, 0x11FBF, "Lisu Supplement", LTR },
-		{ 0x11FC0, 0x11FFF, "Tamil Supplement", LTR },
-		{ 0x12000, 0x123FF, "Cuneiform", LTR },
-		{ 0x12400, 0x1247F, "Cuneiform Numbers and Punctuation", LTR },
-		{ 0x12480, 0x1254F, "Early Dynastic Cuneiform", LTR },
-		{ 0x12F90, 0x12FFF, "Cypro-Minoan", LTR },
-		{ 0x13000, 0x1342F, "Egyptian Hieroglyphs", LTR },
-		{ 0x13430, 0x1343F, "Egyptian Hieroglyph Format Controls", LTR },
-		{ 0x14400, 0x1467F, "Anatolian Hieroglyphs", LTR },
-		{ 0x16800, 0x16A3F, "Bamum Supplement", LTR },
-		{ 0x16A40, 0x16A6F, "Mro", LTR },
-		{ 0x16A70, 0x16ACF, "Tangsa", LTR },
-		{ 0x16AD0, 0x16AFF, "Bassa Vah", LTR },
-		{ 0x16B00, 0x16B8F, "Pahawh Hmong", LTR },
-		{ 0x16E40, 0x16E9F, "Medefaidrin", LTR },
-		{ 0x16F00, 0x16F9F, "Miao", LTR },
-		{ 0x16FE0, 0x16FFF, "Ideographic Symbols and Punctuation", LTR },
-		{ 0x17000, 0x187FF, "Tangut", LTR },
-		{ 0x18800, 0x18AFF, "Tangut Components", LTR },
-		{ 0x18B00, 0x18CFF, "Khitan Small Script", LTR },
-		{ 0x18D00, 0x18D7F, "Tangut Supplement", LTR },
-		{ 0x1AFF0, 0x1AFFF, "Kana Extended-B", LTR },
-		{ 0x1B000, 0x1B0FF, "Kana Supplement", LTR },
-		{ 0x1B100, 0x1B12F, "Kana Extended-A", LTR },
-		{ 0x1B130, 0x1B16F, "Small Kana Extension", LTR },
-		{ 0x1B170, 0x1B2FF, "Nushu", LTR },
-		{ 0x1BC00, 0x1BC9F, "Duployan", LTR },
-		{ 0x1BCA0, 0x1BCAF, "Shorthand Format Controls", LTR },
-		{ 0x1CF00, 0x1CFCF, "Znamenny Musical Notation", LTR },
-		{ 0x1D000, 0x1D0FF, "Byzantine Musical Symbols", LTR },
-		{ 0x1D100, 0x1D1FF, "Musical Symbols", LTR },
-		{ 0x1D200, 0x1D24F, "Ancient Greek Musical Notation", LTR },
-		{ 0x1D2E0, 0x1D2FF, "Mayan Numerals", LTR },
-		{ 0x1D300, 0x1D35F, "Tai Xuan Jing Symbols", LTR },
-		{ 0x1D360, 0x1D37F, "Counting Rod Numerals", LTR },
-		{ 0x1D400, 0x1D7FF, "Mathematical Alphanumeric Symbols", LTR },
-		{ 0x1D800, 0x1DAAF, "Sutton SignWriting", LTR },
-		{ 0x1DF00, 0x1DFFF, "Latin Extended-G", LTR | UsedWithCombining },
-		{ 0x1E000, 0x1E02F, "Glagolitic Supplement", LTR },
-		{ 0x1E100, 0x1E14F, "Nyiakeng Puachue Hmong", LTR },
-		{ 0x1E290, 0x1E2BF, "Toto", LTR },
-		{ 0x1E2C0, 0x1E2FF, "Wancho", LTR },
-		{ 0x1E7E0, 0x1E7FF, "Ethiopic Extended-B", LTR },
-		{ 0x1E800, 0x1E8DF, "Mende Kikakui", LTR },
-		{ 0x1E900, 0x1E95F, "Adlam", LTR },
-		{ 0x1EC70, 0x1ECBF, "Indic Siyaq Numbers", LTR },
-		{ 0x1ED00, 0x1ED4F, "Ottoman Siyaq Numbers", LTR },
-		{ 0x1EE00, 0x1EEFF, "Arabic Mathematical Alphabetic Symbols", RTL },
-		{ 0x1F000, 0x1F02F, "Mahjong Tiles", LTR },
-		{ 0x1F030, 0x1F09F, "Domino Tiles", LTR },
-		{ 0x1F0A0, 0x1F0FF, "Playing Cards", LTR },
-		{ 0x1F100, 0x1F1FF, "Enclosed Alphanumeric Supplement", LTR },
-		{ 0x1F200, 0x1F2FF, "Enclosed Ideographic Supplement", LTR },
-		{ 0x1F300, 0x1F5FF, "Miscellaneous Symbols and Pictographs", LTR },
-		{ 0x1F600, 0x1F64F, "Emoticons", LTR },
-		{ 0x1F650, 0x1F67F, "Ornamental Dingbats", LTR },
-		{ 0x1F680, 0x1F6FF, "Transport and Map Symbols", LTR },
-		{ 0x1F700, 0x1F77F, "Alchemical Symbols", LTR },
-		{ 0x1F780, 0x1F7FF, "Geometric Shapes Extended", LTR },
-		{ 0x1F800, 0x1F8FF, "Supplemental Arrows-C", LTR },
-		{ 0x1F900, 0x1F9FF, "Supplemental Symbols and Pictographs", LTR },
-		{ 0x1FA00, 0x1FA6F, "Chess Symbols", LTR },
-		{ 0x1FA70, 0x1FAFF, "Symbols and Pictographs Extended-A", LTR },
-		{ 0x1FB00, 0x1FBFF, "Symbols for Legacy Computing", LTR },
-		{ 0x20000, 0x2A6DF, "CJK Unified Ideographs Extension B", LTR },
-		{ 0x2A700, 0x2B73F, "CJK Unified Ideographs Extension C", LTR },
-		{ 0x2B740, 0x2B81F, "CJK Unified Ideographs Extension D", LTR },
-		{ 0x2B820, 0x2CEAF, "CJK Unified Ideographs Extension E", LTR },
-		{ 0x2CEB0, 0x2EBEF, "CJK Unified Ideographs Extension F", LTR },
-		{ 0x2F800, 0x2FA1F, "CJK Compatibility Ideographs Supplement", LTR },
-		{ 0x30000, 0x3134F, "CJK Unified Ideographs Extension G", LTR },
-		{ 0xE0000, 0xE007F, "Tags", LTR },
-		{ 0xE0100, 0xE01EF, "Variation Selectors Supplement", LTR },
-		{ 0xF0000, 0xFFFFF, "Supplementary Private Use Area-A", LTR },
-		{ 0x100000, 0x10FFFF, "Supplementary Private Use Area-B", LTR },
-		{ 0x110000, 0xFFFFFFFF, "Unallocated", Invalid },
+	static constexpr std::array<block_definition, 321> Blocks{ {
+		{ .First = 0x0000, .Last = 0x007F, .Name = "Basic Latin", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x0080, .Last = 0x00FF, .Name = "Latin-1 Supplement", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x0100, .Last = 0x017F, .Name = "Latin Extended-A", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x0180, .Last = 0x024F, .Name = "Latin Extended-B", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x0250, .Last = 0x02AF, .Name = "IPA Extensions", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x02B0, .Last = 0x02FF, .Name = "Spacing Modifier Letters", .Purpose = LTR },
+		{ .First = 0x0300, .Last = 0x036F, .Name = "Combining Diacritical Marks", .Purpose = LTR, .NegativeLsbGroup = Combining },
+		{ .First = 0x0370, .Last = 0x03FF, .Name = "Greek and Coptic", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x0400, .Last = 0x04FF, .Name = "Cyrillic", .Purpose = LTR, .NegativeLsbGroup = Cyrillic },
+		{ .First = 0x0500, .Last = 0x052F, .Name = "Cyrillic Supplement", .Purpose = LTR, .NegativeLsbGroup = Cyrillic },
+		{ .First = 0x0530, .Last = 0x058F, .Name = "Armenian", .Purpose = LTR },
+		{ .First = 0x0590, .Last = 0x05FF, .Name = "Hebrew", .Purpose = RTL },
+		{ .First = 0x0600, .Last = 0x06FF, .Name = "Arabic", .Purpose = RTL },
+		{ .First = 0x0700, .Last = 0x074F, .Name = "Syriac", .Purpose = LTR },
+		{ .First = 0x0750, .Last = 0x077F, .Name = "Arabic Supplement", .Purpose = RTL },
+		{ .First = 0x0780, .Last = 0x07BF, .Name = "Thaana", .Purpose = LTR },
+		{ .First = 0x07C0, .Last = 0x07FF, .Name = "NKo", .Purpose = LTR },
+		{ .First = 0x0800, .Last = 0x083F, .Name = "Samaritan", .Purpose = LTR },
+		{ .First = 0x0840, .Last = 0x085F, .Name = "Mandaic", .Purpose = LTR },
+		{ .First = 0x0860, .Last = 0x086F, .Name = "Syriac Supplement", .Purpose = LTR },
+		{ .First = 0x0870, .Last = 0x089F, .Name = "Arabic Extended-B", .Purpose = RTL },
+		{ .First = 0x08A0, .Last = 0x08FF, .Name = "Arabic Extended-A", .Purpose = RTL },
+		{ .First = 0x0900, .Last = 0x097F, .Name = "Devanagari", .Purpose = LTR },
+		{ .First = 0x0980, .Last = 0x09FF, .Name = "Bengali", .Purpose = LTR },
+		{ .First = 0x0A00, .Last = 0x0A7F, .Name = "Gurmukhi", .Purpose = LTR },
+		{ .First = 0x0A80, .Last = 0x0AFF, .Name = "Gujarati", .Purpose = LTR },
+		{ .First = 0x0B00, .Last = 0x0B7F, .Name = "Oriya", .Purpose = LTR },
+		{ .First = 0x0B80, .Last = 0x0BFF, .Name = "Tamil", .Purpose = LTR },
+		{ .First = 0x0C00, .Last = 0x0C7F, .Name = "Telugu", .Purpose = LTR },
+		{ .First = 0x0C80, .Last = 0x0CFF, .Name = "Kannada", .Purpose = LTR },
+		{ .First = 0x0D00, .Last = 0x0D7F, .Name = "Malayalam", .Purpose = LTR },
+		{ .First = 0x0D80, .Last = 0x0DFF, .Name = "Sinhala", .Purpose = LTR },
+		{ .First = 0x0E00, .Last = 0x0E7F, .Name = "Thai", .Purpose = LTR, .NegativeLsbGroup = Thai },
+		{ .First = 0x0E80, .Last = 0x0EFF, .Name = "Lao", .Purpose = LTR },
+		{ .First = 0x0F00, .Last = 0x0FFF, .Name = "Tibetan", .Purpose = LTR },
+		{ .First = 0x1000, .Last = 0x109F, .Name = "Myanmar", .Purpose = LTR },
+		{ .First = 0x10A0, .Last = 0x10FF, .Name = "Georgian", .Purpose = LTR },
+		{ .First = 0x1100, .Last = 0x11FF, .Name = "Hangul Jamo", .Purpose = LTR },
+		{ .First = 0x1200, .Last = 0x137F, .Name = "Ethiopic", .Purpose = LTR },
+		{ .First = 0x1380, .Last = 0x139F, .Name = "Ethiopic Supplement", .Purpose = LTR },
+		{ .First = 0x13A0, .Last = 0x13FF, .Name = "Cherokee", .Purpose = LTR },
+		{ .First = 0x1400, .Last = 0x167F, .Name = "Unified Canadian Aboriginal Syllabics", .Purpose = LTR },
+		{ .First = 0x1680, .Last = 0x169F, .Name = "Ogham", .Purpose = LTR },
+		{ .First = 0x16A0, .Last = 0x16FF, .Name = "Runic", .Purpose = LTR },
+		{ .First = 0x1700, .Last = 0x171F, .Name = "Tagalog", .Purpose = LTR },
+		{ .First = 0x1720, .Last = 0x173F, .Name = "Hanunoo", .Purpose = LTR },
+		{ .First = 0x1740, .Last = 0x175F, .Name = "Buhid", .Purpose = LTR },
+		{ .First = 0x1760, .Last = 0x177F, .Name = "Tagbanwa", .Purpose = LTR },
+		{ .First = 0x1780, .Last = 0x17FF, .Name = "Khmer", .Purpose = LTR },
+		{ .First = 0x1800, .Last = 0x18AF, .Name = "Mongolian", .Purpose = LTR },
+		{ .First = 0x18B0, .Last = 0x18FF, .Name = "Unified Canadian Aboriginal Syllabics Extended", .Purpose = LTR },
+		{ .First = 0x1900, .Last = 0x194F, .Name = "Limbu", .Purpose = LTR },
+		{ .First = 0x1950, .Last = 0x197F, .Name = "Tai Le", .Purpose = LTR },
+		{ .First = 0x1980, .Last = 0x19DF, .Name = "New Tai Lue", .Purpose = LTR },
+		{ .First = 0x19E0, .Last = 0x19FF, .Name = "Khmer Symbols", .Purpose = LTR },
+		{ .First = 0x1A00, .Last = 0x1A1F, .Name = "Buginese", .Purpose = LTR },
+		{ .First = 0x1A20, .Last = 0x1AAF, .Name = "Tai Tham", .Purpose = LTR },
+		{ .First = 0x1AB0, .Last = 0x1AFF, .Name = "Combining Diacritical Marks Extended", .Purpose = LTR, .NegativeLsbGroup = Combining },
+		{ .First = 0x1B00, .Last = 0x1B7F, .Name = "Balinese", .Purpose = LTR },
+		{ .First = 0x1B80, .Last = 0x1BBF, .Name = "Sundanese", .Purpose = LTR },
+		{ .First = 0x1BC0, .Last = 0x1BFF, .Name = "Batak", .Purpose = LTR },
+		{ .First = 0x1C00, .Last = 0x1C4F, .Name = "Lepcha", .Purpose = LTR },
+		{ .First = 0x1C50, .Last = 0x1C7F, .Name = "Ol Chiki", .Purpose = LTR },
+		{ .First = 0x1C80, .Last = 0x1C8F, .Name = "Cyrillic Extended-C", .Purpose = LTR, .NegativeLsbGroup = Cyrillic },
+		{ .First = 0x1C90, .Last = 0x1CBF, .Name = "Georgian Extended", .Purpose = LTR },
+		{ .First = 0x1CC0, .Last = 0x1CCF, .Name = "Sundanese Supplement", .Purpose = LTR },
+		{ .First = 0x1CD0, .Last = 0x1CFF, .Name = "Vedic Extensions", .Purpose = LTR },
+		{ .First = 0x1D00, .Last = 0x1D7F, .Name = "Phonetic Extensions", .Purpose = LTR },
+		{ .First = 0x1D80, .Last = 0x1DBF, .Name = "Phonetic Extensions Supplement", .Purpose = LTR },
+		{ .First = 0x1DC0, .Last = 0x1DFF, .Name = "Combining Diacritical Marks Supplement", .Purpose = LTR, .NegativeLsbGroup = Combining },
+		{ .First = 0x1E00, .Last = 0x1EFF, .Name = "Latin Extended Additional", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x1F00, .Last = 0x1FFF, .Name = "Greek Extended", .Purpose = LTR },
+		{ .First = 0x2000, .Last = 0x206F, .Name = "General Punctuation", .Purpose = LTR },
+		{ .First = 0x2070, .Last = 0x209F, .Name = "Superscripts and Subscripts", .Purpose = LTR },
+		{ .First = 0x20A0, .Last = 0x20CF, .Name = "Currency Symbols", .Purpose = LTR },
+		{ .First = 0x20D0, .Last = 0x20FF, .Name = "Combining Diacritical Marks for Symbols", .Purpose = LTR, .NegativeLsbGroup = Combining },
+		{ .First = 0x2100, .Last = 0x214F, .Name = "Letterlike Symbols", .Purpose = LTR },
+		{ .First = 0x2150, .Last = 0x218F, .Name = "Number Forms", .Purpose = LTR },
+		{ .First = 0x2190, .Last = 0x21FF, .Name = "Arrows", .Purpose = LTR },
+		{ .First = 0x2200, .Last = 0x22FF, .Name = "Mathematical Operators", .Purpose = LTR },
+		{ .First = 0x2300, .Last = 0x23FF, .Name = "Miscellaneous Technical", .Purpose = LTR },
+		{ .First = 0x2400, .Last = 0x243F, .Name = "Control Pictures", .Purpose = LTR },
+		{ .First = 0x2440, .Last = 0x245F, .Name = "Optical Character Recognition", .Purpose = LTR },
+		{ .First = 0x2460, .Last = 0x24FF, .Name = "Enclosed Alphanumerics", .Purpose = LTR },
+		{ .First = 0x2500, .Last = 0x257F, .Name = "Box Drawing", .Purpose = LTR },
+		{ .First = 0x2580, .Last = 0x259F, .Name = "Block Elements", .Purpose = LTR },
+		{ .First = 0x25A0, .Last = 0x25FF, .Name = "Geometric Shapes", .Purpose = LTR },
+		{ .First = 0x2600, .Last = 0x26FF, .Name = "Miscellaneous Symbols", .Purpose = LTR },
+		{ .First = 0x2700, .Last = 0x27BF, .Name = "Dingbats", .Purpose = LTR },
+		{ .First = 0x27C0, .Last = 0x27EF, .Name = "Miscellaneous Mathematical Symbols-A", .Purpose = LTR },
+		{ .First = 0x27F0, .Last = 0x27FF, .Name = "Supplemental Arrows-A", .Purpose = LTR },
+		{ .First = 0x2800, .Last = 0x28FF, .Name = "Braille Patterns", .Purpose = LTR },
+		{ .First = 0x2900, .Last = 0x297F, .Name = "Supplemental Arrows-B", .Purpose = LTR },
+		{ .First = 0x2980, .Last = 0x29FF, .Name = "Miscellaneous Mathematical Symbols-B", .Purpose = LTR },
+		{ .First = 0x2A00, .Last = 0x2AFF, .Name = "Supplemental Mathematical Operators", .Purpose = LTR },
+		{ .First = 0x2B00, .Last = 0x2BFF, .Name = "Miscellaneous Symbols and Arrows", .Purpose = LTR },
+		{ .First = 0x2C00, .Last = 0x2C5F, .Name = "Glagolitic", .Purpose = LTR },
+		{ .First = 0x2C60, .Last = 0x2C7F, .Name = "Latin Extended-C", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x2C80, .Last = 0x2CFF, .Name = "Coptic", .Purpose = LTR },
+		{ .First = 0x2D00, .Last = 0x2D2F, .Name = "Georgian Supplement", .Purpose = LTR },
+		{ .First = 0x2D30, .Last = 0x2D7F, .Name = "Tifinagh", .Purpose = LTR },
+		{ .First = 0x2D80, .Last = 0x2DDF, .Name = "Ethiopic Extended", .Purpose = LTR },
+		{ .First = 0x2DE0, .Last = 0x2DFF, .Name = "Cyrillic Extended-A", .Purpose = LTR, .NegativeLsbGroup = Cyrillic },
+		{ .First = 0x2E00, .Last = 0x2E7F, .Name = "Supplemental Punctuation", .Purpose = LTR },
+		{ .First = 0x2E80, .Last = 0x2EFF, .Name = "CJK Radicals Supplement", .Purpose = LTR },
+		{ .First = 0x2F00, .Last = 0x2FDF, .Name = "Kangxi Radicals", .Purpose = LTR },
+		{ .First = 0x2FF0, .Last = 0x2FFF, .Name = "Ideographic Description Characters", .Purpose = LTR },
+		{ .First = 0x3000, .Last = 0x303F, .Name = "CJK Symbols and Punctuation", .Purpose = LTR },
+		{ .First = 0x3040, .Last = 0x309F, .Name = "Hiragana", .Purpose = LTR },
+		{ .First = 0x30A0, .Last = 0x30FF, .Name = "Katakana", .Purpose = LTR },
+		{ .First = 0x3100, .Last = 0x312F, .Name = "Bopomofo", .Purpose = LTR },
+		{ .First = 0x3130, .Last = 0x318F, .Name = "Hangul Compatibility Jamo", .Purpose = LTR },
+		{ .First = 0x3190, .Last = 0x319F, .Name = "Kanbun", .Purpose = LTR },
+		{ .First = 0x31A0, .Last = 0x31BF, .Name = "Bopomofo Extended", .Purpose = LTR },
+		{ .First = 0x31C0, .Last = 0x31EF, .Name = "CJK Strokes", .Purpose = LTR },
+		{ .First = 0x31F0, .Last = 0x31FF, .Name = "Katakana Phonetic Extensions", .Purpose = LTR },
+		{ .First = 0x3200, .Last = 0x32FF, .Name = "Enclosed CJK Letters and Months", .Purpose = LTR },
+		{ .First = 0x3300, .Last = 0x33FF, .Name = "CJK Compatibility", .Purpose = LTR },
+		{ .First = 0x3400, .Last = 0x4DBF, .Name = "CJK Unified Ideographs Extension A", .Purpose = LTR },
+		{ .First = 0x4DC0, .Last = 0x4DFF, .Name = "Yijing Hexagram Symbols", .Purpose = LTR },
+		{ .First = 0x4E00, .Last = 0x9FFF, .Name = "CJK Unified Ideographs", .Purpose = LTR },
+		{ .First = 0xA000, .Last = 0xA48F, .Name = "Yi Syllables", .Purpose = LTR },
+		{ .First = 0xA490, .Last = 0xA4CF, .Name = "Yi Radicals", .Purpose = LTR },
+		{ .First = 0xA4D0, .Last = 0xA4FF, .Name = "Lisu", .Purpose = LTR },
+		{ .First = 0xA500, .Last = 0xA63F, .Name = "Vai", .Purpose = LTR },
+		{ .First = 0xA640, .Last = 0xA69F, .Name = "Cyrillic Extended-B", .Purpose = LTR, .NegativeLsbGroup = Cyrillic },
+		{ .First = 0xA6A0, .Last = 0xA6FF, .Name = "Bamum", .Purpose = LTR },
+		{ .First = 0xA700, .Last = 0xA71F, .Name = "Modifier Tone Letters", .Purpose = LTR },
+		{ .First = 0xA720, .Last = 0xA7FF, .Name = "Latin Extended-D", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0xA800, .Last = 0xA82F, .Name = "Syloti Nagri", .Purpose = LTR },
+		{ .First = 0xA830, .Last = 0xA83F, .Name = "Common Indic Number Forms", .Purpose = LTR },
+		{ .First = 0xA840, .Last = 0xA87F, .Name = "Phags-pa", .Purpose = LTR },
+		{ .First = 0xA880, .Last = 0xA8DF, .Name = "Saurashtra", .Purpose = LTR },
+		{ .First = 0xA8E0, .Last = 0xA8FF, .Name = "Devanagari Extended", .Purpose = LTR },
+		{ .First = 0xA900, .Last = 0xA92F, .Name = "Kayah Li", .Purpose = LTR },
+		{ .First = 0xA930, .Last = 0xA95F, .Name = "Rejang", .Purpose = LTR },
+		{ .First = 0xA960, .Last = 0xA97F, .Name = "Hangul Jamo Extended-A", .Purpose = LTR },
+		{ .First = 0xA980, .Last = 0xA9DF, .Name = "Javanese", .Purpose = LTR },
+		{ .First = 0xA9E0, .Last = 0xA9FF, .Name = "Myanmar Extended-B", .Purpose = LTR },
+		{ .First = 0xAA00, .Last = 0xAA5F, .Name = "Cham", .Purpose = LTR },
+		{ .First = 0xAA60, .Last = 0xAA7F, .Name = "Myanmar Extended-A", .Purpose = LTR },
+		{ .First = 0xAA80, .Last = 0xAADF, .Name = "Tai Viet", .Purpose = LTR },
+		{ .First = 0xAAE0, .Last = 0xAAFF, .Name = "Meetei Mayek Extensions", .Purpose = LTR },
+		{ .First = 0xAB00, .Last = 0xAB2F, .Name = "Ethiopic Extended-A", .Purpose = LTR },
+		{ .First = 0xAB30, .Last = 0xAB6F, .Name = "Latin Extended-E", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0xAB70, .Last = 0xABBF, .Name = "Cherokee Supplement", .Purpose = LTR },
+		{ .First = 0xABC0, .Last = 0xABFF, .Name = "Meetei Mayek", .Purpose = LTR },
+		{ .First = 0xAC00, .Last = 0xD7AF, .Name = "Hangul Syllables", .Purpose = LTR },
+		{ .First = 0xD7B0, .Last = 0xD7FF, .Name = "Hangul Jamo Extended-B", .Purpose = LTR },
+		{ .First = 0xD800, .Last = 0xDB7F, .Name = "High Surrogates", .Purpose = Invalid },
+		{ .First = 0xDB80, .Last = 0xDBFF, .Name = "High Private Use Surrogates", .Purpose = Invalid },
+		{ .First = 0xDC00, .Last = 0xDFFF, .Name = "Low Surrogates", .Purpose = LTR },
+		{ .First = 0xE000, .Last = 0xF8FF, .Name = "Private Use Area", .Purpose = LTR },
+		{ .First = 0xF900, .Last = 0xFAFF, .Name = "CJK Compatibility Ideographs", .Purpose = LTR },
+		{ .First = 0xFB00, .Last = 0xFB4F, .Name = "Alphabetic Presentation Forms", .Purpose = LTR },
+		{ .First = 0xFB50, .Last = 0xFDFF, .Name = "Arabic Presentation Forms-A", .Purpose = RTL },
+		{ .First = 0xFE00, .Last = 0xFE0F, .Name = "Variation Selectors", .Purpose = LTR },
+		{ .First = 0xFE10, .Last = 0xFE1F, .Name = "Vertical Forms", .Purpose = LTR },
+		{ .First = 0xFE20, .Last = 0xFE2F, .Name = "Combining Half Marks", .Purpose = LTR, .NegativeLsbGroup = Combining },
+		{ .First = 0xFE30, .Last = 0xFE4F, .Name = "CJK Compatibility Forms", .Purpose = LTR },
+		{ .First = 0xFE50, .Last = 0xFE6F, .Name = "Small Form Variants", .Purpose = LTR },
+		{ .First = 0xFE70, .Last = 0xFEFF, .Name = "Arabic Presentation Forms-B", .Purpose = RTL },
+		{ .First = 0xFF00, .Last = 0xFFEF, .Name = "Halfwidth and Fullwidth Forms", .Purpose = LTR },
+		{ .First = 0xFFF0, .Last = 0xFFFF, .Name = "Specials", .Purpose = LTR },
+		{ .First = 0x10000, .Last = 0x1007F, .Name = "Linear B Syllabary", .Purpose = LTR },
+		{ .First = 0x10080, .Last = 0x100FF, .Name = "Linear B Ideograms", .Purpose = LTR },
+		{ .First = 0x10100, .Last = 0x1013F, .Name = "Aegean Numbers", .Purpose = LTR },
+		{ .First = 0x10140, .Last = 0x1018F, .Name = "Ancient Greek Numbers", .Purpose = LTR },
+		{ .First = 0x10190, .Last = 0x101CF, .Name = "Ancient Symbols", .Purpose = LTR },
+		{ .First = 0x101D0, .Last = 0x101FF, .Name = "Phaistos Disc", .Purpose = LTR },
+		{ .First = 0x10280, .Last = 0x1029F, .Name = "Lycian", .Purpose = LTR },
+		{ .First = 0x102A0, .Last = 0x102DF, .Name = "Carian", .Purpose = LTR },
+		{ .First = 0x102E0, .Last = 0x102FF, .Name = "Coptic Epact Numbers", .Purpose = LTR },
+		{ .First = 0x10300, .Last = 0x1032F, .Name = "Old Italic", .Purpose = LTR },
+		{ .First = 0x10330, .Last = 0x1034F, .Name = "Gothic", .Purpose = LTR },
+		{ .First = 0x10350, .Last = 0x1037F, .Name = "Old Permic", .Purpose = LTR },
+		{ .First = 0x10380, .Last = 0x1039F, .Name = "Ugaritic", .Purpose = LTR },
+		{ .First = 0x103A0, .Last = 0x103DF, .Name = "Old Persian", .Purpose = RTL },
+		{ .First = 0x10400, .Last = 0x1044F, .Name = "Deseret", .Purpose = LTR },
+		{ .First = 0x10450, .Last = 0x1047F, .Name = "Shavian", .Purpose = LTR },
+		{ .First = 0x10480, .Last = 0x104AF, .Name = "Osmanya", .Purpose = LTR },
+		{ .First = 0x104B0, .Last = 0x104FF, .Name = "Osage", .Purpose = LTR },
+		{ .First = 0x10500, .Last = 0x1052F, .Name = "Elbasan", .Purpose = LTR },
+		{ .First = 0x10530, .Last = 0x1056F, .Name = "Caucasian Albanian", .Purpose = LTR },
+		{ .First = 0x10570, .Last = 0x105BF, .Name = "Vithkuqi", .Purpose = LTR },
+		{ .First = 0x10600, .Last = 0x1077F, .Name = "Linear A", .Purpose = LTR },
+		{ .First = 0x10780, .Last = 0x107BF, .Name = "Latin Extended-F", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x10800, .Last = 0x1083F, .Name = "Cypriot Syllabary", .Purpose = LTR },
+		{ .First = 0x10840, .Last = 0x1085F, .Name = "Imperial Aramaic", .Purpose = RTL },
+		{ .First = 0x10860, .Last = 0x1087F, .Name = "Palmyrene", .Purpose = LTR },
+		{ .First = 0x10880, .Last = 0x108AF, .Name = "Nabataean", .Purpose = LTR },
+		{ .First = 0x108E0, .Last = 0x108FF, .Name = "Hatran", .Purpose = LTR },
+		{ .First = 0x10900, .Last = 0x1091F, .Name = "Phoenician", .Purpose = LTR },
+		{ .First = 0x10920, .Last = 0x1093F, .Name = "Lydian", .Purpose = LTR },
+		{ .First = 0x10980, .Last = 0x1099F, .Name = "Meroitic Hieroglyphs", .Purpose = LTR },
+		{ .First = 0x109A0, .Last = 0x109FF, .Name = "Meroitic Cursive", .Purpose = LTR },
+		{ .First = 0x10A00, .Last = 0x10A5F, .Name = "Kharoshthi", .Purpose = LTR },
+		{ .First = 0x10A60, .Last = 0x10A7F, .Name = "Old South Arabian", .Purpose = RTL },
+		{ .First = 0x10A80, .Last = 0x10A9F, .Name = "Old North Arabian", .Purpose = RTL },
+		{ .First = 0x10AC0, .Last = 0x10AFF, .Name = "Manichaean", .Purpose = LTR },
+		{ .First = 0x10B00, .Last = 0x10B3F, .Name = "Avestan", .Purpose = LTR },
+		{ .First = 0x10B40, .Last = 0x10B5F, .Name = "Inscriptional Parthian", .Purpose = LTR },
+		{ .First = 0x10B60, .Last = 0x10B7F, .Name = "Inscriptional Pahlavi", .Purpose = LTR },
+		{ .First = 0x10B80, .Last = 0x10BAF, .Name = "Psalter Pahlavi", .Purpose = LTR },
+		{ .First = 0x10C00, .Last = 0x10C4F, .Name = "Old Turkic", .Purpose = LTR },
+		{ .First = 0x10C80, .Last = 0x10CFF, .Name = "Old Hungarian", .Purpose = LTR },
+		{ .First = 0x10D00, .Last = 0x10D3F, .Name = "Hanifi Rohingya", .Purpose = LTR },
+		{ .First = 0x10E60, .Last = 0x10E7F, .Name = "Rumi Numeral Symbols", .Purpose = LTR },
+		{ .First = 0x10E80, .Last = 0x10EBF, .Name = "Yezidi", .Purpose = LTR },
+		{ .First = 0x10F00, .Last = 0x10F2F, .Name = "Old Sogdian", .Purpose = LTR },
+		{ .First = 0x10F30, .Last = 0x10F6F, .Name = "Sogdian", .Purpose = LTR },
+		{ .First = 0x10F70, .Last = 0x10FAF, .Name = "Old Uyghur", .Purpose = LTR },
+		{ .First = 0x10FB0, .Last = 0x10FDF, .Name = "Chorasmian", .Purpose = LTR },
+		{ .First = 0x10FE0, .Last = 0x10FFF, .Name = "Elymaic", .Purpose = LTR },
+		{ .First = 0x11000, .Last = 0x1107F, .Name = "Brahmi", .Purpose = LTR },
+		{ .First = 0x11080, .Last = 0x110CF, .Name = "Kaithi", .Purpose = LTR },
+		{ .First = 0x110D0, .Last = 0x110FF, .Name = "Sora Sompeng", .Purpose = LTR },
+		{ .First = 0x11100, .Last = 0x1114F, .Name = "Chakma", .Purpose = LTR },
+		{ .First = 0x11150, .Last = 0x1117F, .Name = "Mahajani", .Purpose = LTR },
+		{ .First = 0x11180, .Last = 0x111DF, .Name = "Sharada", .Purpose = LTR },
+		{ .First = 0x111E0, .Last = 0x111FF, .Name = "Sinhala Archaic Numbers", .Purpose = LTR },
+		{ .First = 0x11200, .Last = 0x1124F, .Name = "Khojki", .Purpose = LTR },
+		{ .First = 0x11280, .Last = 0x112AF, .Name = "Multani", .Purpose = LTR },
+		{ .First = 0x112B0, .Last = 0x112FF, .Name = "Khudawadi", .Purpose = LTR },
+		{ .First = 0x11300, .Last = 0x1137F, .Name = "Grantha", .Purpose = LTR },
+		{ .First = 0x11400, .Last = 0x1147F, .Name = "Newa", .Purpose = LTR },
+		{ .First = 0x11480, .Last = 0x114DF, .Name = "Tirhuta", .Purpose = LTR },
+		{ .First = 0x11580, .Last = 0x115FF, .Name = "Siddham", .Purpose = LTR },
+		{ .First = 0x11600, .Last = 0x1165F, .Name = "Modi", .Purpose = LTR },
+		{ .First = 0x11660, .Last = 0x1167F, .Name = "Mongolian Supplement", .Purpose = LTR },
+		{ .First = 0x11680, .Last = 0x116CF, .Name = "Takri", .Purpose = LTR },
+		{ .First = 0x11700, .Last = 0x1174F, .Name = "Ahom", .Purpose = LTR },
+		{ .First = 0x11800, .Last = 0x1184F, .Name = "Dogra", .Purpose = LTR },
+		{ .First = 0x118A0, .Last = 0x118FF, .Name = "Warang Citi", .Purpose = LTR },
+		{ .First = 0x11900, .Last = 0x1195F, .Name = "Dives Akuru", .Purpose = LTR },
+		{ .First = 0x119A0, .Last = 0x119FF, .Name = "Nandinagari", .Purpose = LTR },
+		{ .First = 0x11A00, .Last = 0x11A4F, .Name = "Zanabazar Square", .Purpose = LTR },
+		{ .First = 0x11A50, .Last = 0x11AAF, .Name = "Soyombo", .Purpose = LTR },
+		{ .First = 0x11AB0, .Last = 0x11ABF, .Name = "Unified Canadian Aboriginal Syllabics Extended-A", .Purpose = LTR },
+		{ .First = 0x11AC0, .Last = 0x11AFF, .Name = "Pau Cin Hau", .Purpose = LTR },
+		{ .First = 0x11C00, .Last = 0x11C6F, .Name = "Bhaiksuki", .Purpose = LTR },
+		{ .First = 0x11C70, .Last = 0x11CBF, .Name = "Marchen", .Purpose = LTR },
+		{ .First = 0x11D00, .Last = 0x11D5F, .Name = "Masaram Gondi", .Purpose = LTR },
+		{ .First = 0x11D60, .Last = 0x11DAF, .Name = "Gunjala Gondi", .Purpose = LTR },
+		{ .First = 0x11EE0, .Last = 0x11EFF, .Name = "Makasar", .Purpose = LTR },
+		{ .First = 0x11FB0, .Last = 0x11FBF, .Name = "Lisu Supplement", .Purpose = LTR },
+		{ .First = 0x11FC0, .Last = 0x11FFF, .Name = "Tamil Supplement", .Purpose = LTR },
+		{ .First = 0x12000, .Last = 0x123FF, .Name = "Cuneiform", .Purpose = LTR },
+		{ .First = 0x12400, .Last = 0x1247F, .Name = "Cuneiform Numbers and Punctuation", .Purpose = LTR },
+		{ .First = 0x12480, .Last = 0x1254F, .Name = "Early Dynastic Cuneiform", .Purpose = LTR },
+		{ .First = 0x12F90, .Last = 0x12FFF, .Name = "Cypro-Minoan", .Purpose = LTR },
+		{ .First = 0x13000, .Last = 0x1342F, .Name = "Egyptian Hieroglyphs", .Purpose = LTR },
+		{ .First = 0x13430, .Last = 0x1343F, .Name = "Egyptian Hieroglyph Format Controls", .Purpose = LTR },
+		{ .First = 0x14400, .Last = 0x1467F, .Name = "Anatolian Hieroglyphs", .Purpose = LTR },
+		{ .First = 0x16800, .Last = 0x16A3F, .Name = "Bamum Supplement", .Purpose = LTR },
+		{ .First = 0x16A40, .Last = 0x16A6F, .Name = "Mro", .Purpose = LTR },
+		{ .First = 0x16A70, .Last = 0x16ACF, .Name = "Tangsa", .Purpose = LTR },
+		{ .First = 0x16AD0, .Last = 0x16AFF, .Name = "Bassa Vah", .Purpose = LTR },
+		{ .First = 0x16B00, .Last = 0x16B8F, .Name = "Pahawh Hmong", .Purpose = LTR },
+		{ .First = 0x16E40, .Last = 0x16E9F, .Name = "Medefaidrin", .Purpose = LTR },
+		{ .First = 0x16F00, .Last = 0x16F9F, .Name = "Miao", .Purpose = LTR },
+		{ .First = 0x16FE0, .Last = 0x16FFF, .Name = "Ideographic Symbols and Punctuation", .Purpose = LTR },
+		{ .First = 0x17000, .Last = 0x187FF, .Name = "Tangut", .Purpose = LTR },
+		{ .First = 0x18800, .Last = 0x18AFF, .Name = "Tangut Components", .Purpose = LTR },
+		{ .First = 0x18B00, .Last = 0x18CFF, .Name = "Khitan Small Script", .Purpose = LTR },
+		{ .First = 0x18D00, .Last = 0x18D7F, .Name = "Tangut Supplement", .Purpose = LTR },
+		{ .First = 0x1AFF0, .Last = 0x1AFFF, .Name = "Kana Extended-B", .Purpose = LTR },
+		{ .First = 0x1B000, .Last = 0x1B0FF, .Name = "Kana Supplement", .Purpose = LTR },
+		{ .First = 0x1B100, .Last = 0x1B12F, .Name = "Kana Extended-A", .Purpose = LTR },
+		{ .First = 0x1B130, .Last = 0x1B16F, .Name = "Small Kana Extension", .Purpose = LTR },
+		{ .First = 0x1B170, .Last = 0x1B2FF, .Name = "Nushu", .Purpose = LTR },
+		{ .First = 0x1BC00, .Last = 0x1BC9F, .Name = "Duployan", .Purpose = LTR },
+		{ .First = 0x1BCA0, .Last = 0x1BCAF, .Name = "Shorthand Format Controls", .Purpose = LTR },
+		{ .First = 0x1CF00, .Last = 0x1CFCF, .Name = "Znamenny Musical Notation", .Purpose = LTR },
+		{ .First = 0x1D000, .Last = 0x1D0FF, .Name = "Byzantine Musical Symbols", .Purpose = LTR },
+		{ .First = 0x1D100, .Last = 0x1D1FF, .Name = "Musical Symbols", .Purpose = LTR },
+		{ .First = 0x1D200, .Last = 0x1D24F, .Name = "Ancient Greek Musical Notation", .Purpose = LTR },
+		{ .First = 0x1D2E0, .Last = 0x1D2FF, .Name = "Mayan Numerals", .Purpose = LTR },
+		{ .First = 0x1D300, .Last = 0x1D35F, .Name = "Tai Xuan Jing Symbols", .Purpose = LTR },
+		{ .First = 0x1D360, .Last = 0x1D37F, .Name = "Counting Rod Numerals", .Purpose = LTR },
+		{ .First = 0x1D400, .Last = 0x1D7FF, .Name = "Mathematical Alphanumeric Symbols", .Purpose = LTR },
+		{ .First = 0x1D800, .Last = 0x1DAAF, .Name = "Sutton SignWriting", .Purpose = LTR },
+		{ .First = 0x1DF00, .Last = 0x1DFFF, .Name = "Latin Extended-G", .Purpose = LTR | UsedWithCombining },
+		{ .First = 0x1E000, .Last = 0x1E02F, .Name = "Glagolitic Supplement", .Purpose = LTR },
+		{ .First = 0x1E100, .Last = 0x1E14F, .Name = "Nyiakeng Puachue Hmong", .Purpose = LTR },
+		{ .First = 0x1E290, .Last = 0x1E2BF, .Name = "Toto", .Purpose = LTR },
+		{ .First = 0x1E2C0, .Last = 0x1E2FF, .Name = "Wancho", .Purpose = LTR },
+		{ .First = 0x1E7E0, .Last = 0x1E7FF, .Name = "Ethiopic Extended-B", .Purpose = LTR },
+		{ .First = 0x1E800, .Last = 0x1E8DF, .Name = "Mende Kikakui", .Purpose = LTR },
+		{ .First = 0x1E900, .Last = 0x1E95F, .Name = "Adlam", .Purpose = LTR },
+		{ .First = 0x1EC70, .Last = 0x1ECBF, .Name = "Indic Siyaq Numbers", .Purpose = LTR },
+		{ .First = 0x1ED00, .Last = 0x1ED4F, .Name = "Ottoman Siyaq Numbers", .Purpose = LTR },
+		{ .First = 0x1EE00, .Last = 0x1EEFF, .Name = "Arabic Mathematical Alphabetic Symbols", .Purpose = RTL },
+		{ .First = 0x1F000, .Last = 0x1F02F, .Name = "Mahjong Tiles", .Purpose = LTR },
+		{ .First = 0x1F030, .Last = 0x1F09F, .Name = "Domino Tiles", .Purpose = LTR },
+		{ .First = 0x1F0A0, .Last = 0x1F0FF, .Name = "Playing Cards", .Purpose = LTR },
+		{ .First = 0x1F100, .Last = 0x1F1FF, .Name = "Enclosed Alphanumeric Supplement", .Purpose = LTR },
+		{ .First = 0x1F200, .Last = 0x1F2FF, .Name = "Enclosed Ideographic Supplement", .Purpose = LTR },
+		{ .First = 0x1F300, .Last = 0x1F5FF, .Name = "Miscellaneous Symbols and Pictographs", .Purpose = LTR },
+		{ .First = 0x1F600, .Last = 0x1F64F, .Name = "Emoticons", .Purpose = LTR },
+		{ .First = 0x1F650, .Last = 0x1F67F, .Name = "Ornamental Dingbats", .Purpose = LTR },
+		{ .First = 0x1F680, .Last = 0x1F6FF, .Name = "Transport and Map Symbols", .Purpose = LTR },
+		{ .First = 0x1F700, .Last = 0x1F77F, .Name = "Alchemical Symbols", .Purpose = LTR },
+		{ .First = 0x1F780, .Last = 0x1F7FF, .Name = "Geometric Shapes Extended", .Purpose = LTR },
+		{ .First = 0x1F800, .Last = 0x1F8FF, .Name = "Supplemental Arrows-C", .Purpose = LTR },
+		{ .First = 0x1F900, .Last = 0x1F9FF, .Name = "Supplemental Symbols and Pictographs", .Purpose = LTR },
+		{ .First = 0x1FA00, .Last = 0x1FA6F, .Name = "Chess Symbols", .Purpose = LTR },
+		{ .First = 0x1FA70, .Last = 0x1FAFF, .Name = "Symbols and Pictographs Extended-A", .Purpose = LTR },
+		{ .First = 0x1FB00, .Last = 0x1FBFF, .Name = "Symbols for Legacy Computing", .Purpose = LTR },
+		{ .First = 0x20000, .Last = 0x2A6DF, .Name = "CJK Unified Ideographs Extension B", .Purpose = LTR },
+		{ .First = 0x2A700, .Last = 0x2B73F, .Name = "CJK Unified Ideographs Extension C", .Purpose = LTR },
+		{ .First = 0x2B740, .Last = 0x2B81F, .Name = "CJK Unified Ideographs Extension D", .Purpose = LTR },
+		{ .First = 0x2B820, .Last = 0x2CEAF, .Name = "CJK Unified Ideographs Extension E", .Purpose = LTR },
+		{ .First = 0x2CEB0, .Last = 0x2EBEF, .Name = "CJK Unified Ideographs Extension F", .Purpose = LTR },
+		{ .First = 0x2F800, .Last = 0x2FA1F, .Name = "CJK Compatibility Ideographs Supplement", .Purpose = LTR },
+		{ .First = 0x30000, .Last = 0x3134F, .Name = "CJK Unified Ideographs Extension G", .Purpose = LTR },
+		{ .First = 0xE0000, .Last = 0xE007F, .Name = "Tags", .Purpose = LTR },
+		{ .First = 0xE0100, .Last = 0xE01EF, .Name = "Variation Selectors Supplement", .Purpose = LTR },
+		{ .First = 0xF0000, .Last = 0xFFFFF, .Name = "Supplementary Private Use Area-A", .Purpose = LTR },
+		{ .First = 0x100000, .Last = 0x10FFFF, .Name = "Supplementary Private Use Area-B", .Purpose = LTR },
+		{ .First = 0x110000, .Last = 0xFFFFFFFF, .Name = "Unallocated", .Purpose = Invalid },
 	} };
 
 	return { Blocks };
 }
 
 const xivres::util::unicode::blocks::block_definition& xivres::util::unicode::blocks::block_for(char32_t codepoint) {
-	auto p = std::lower_bound(all_blocks().begin(), all_blocks().end(), codepoint, [](const block_definition& l, char32_t r) { return l.Last < r; });
+	const auto p = std::ranges::lower_bound(all_blocks(), codepoint, std::ranges::less{}, &block_definition::Last);
 	if (p->First <= codepoint && codepoint <= p->Last)
 		return *p;
 

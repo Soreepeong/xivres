@@ -94,10 +94,10 @@ std::pair<xivres::path_spec, std::vector<char>> xivres::excel::type2gen::flush(u
 
 	std::vector<char> exdFile;
 	exdFile.reserve(offsetAccumulator);
-	std::copy_n(&exdHeaderSpan[0], exdHeaderSpan.size_bytes(), std::back_inserter(exdFile));
-	std::copy_n(&locatorSpan[0], locatorSpan.size_bytes(), std::back_inserter(exdFile));
+	std::copy_n(exdHeaderSpan.data(), exdHeaderSpan.size_bytes(), std::back_inserter(exdFile));
+	std::copy_n(locatorSpan.data(), locatorSpan.size_bytes(), std::back_inserter(exdFile));
 	for (const auto& row : rows | std::views::values)
-		std::copy_n(&row[0], row.size(), std::back_inserter(exdFile));
+		std::copy_n(row.data(), row.size(), std::back_inserter(exdFile));
 
 	if (auto pcszLangCode = game_language_code(language))
 		return std::make_pair(path_spec(std::format("exd/{}_{}_{}.exd", Name, startId, pcszLangCode)), std::move(exdFile));
@@ -122,7 +122,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 		pages.back().second.push_back(id);
 	}
 	if (pages.empty())
-		return {};
+		return result;
 
 	pages.back().first.RowCountWithSkip = pages.back().second.back() - pages.back().second.front() + 1;
 
@@ -132,7 +132,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 			for (const auto id : page.second) {
 				std::vector<char> row(sizeof(exd::row::header) + FixedDataSize);
 
-				const auto fixedDataOffset = sizeof(exd::row::header);
+				constexpr auto fixedDataOffset = sizeof(exd::row::header);
 				const auto variableDataOffset = fixedDataOffset + FixedDataSize;
 
 				auto sourceLanguage = language;
@@ -140,7 +140,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 				if (!rowSet.contains(sourceLanguage)) {
 					sourceLanguage = game_language::Unspecified;
 					for (auto lang : FillMissingLanguageFrom) {
-						if (!rowSet.contains(lang)) {
+						if (rowSet.contains(lang)) {
 							sourceLanguage = lang;
 							break;
 						}
@@ -197,23 +197,26 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 						case cell_type::PackedBool5:
 						case cell_type::PackedBool6:
 						case cell_type::PackedBool7:
+						{
 							column.ValidSize = 0;
-							if (column.boolean)
-								row[fixedDataOffset + columnDefinition.Offset] |= (1 << (static_cast<int>(column.Type) - static_cast<int>(cell_type::PackedBool0)));
-							else
-								row[fixedDataOffset + columnDefinition.Offset] &= ~((1 << (static_cast<int>(column.Type) - static_cast<int>(cell_type::PackedBool0))));
+							auto& packed = row[fixedDataOffset + columnDefinition.Offset];
+							const auto mask = 1 << (static_cast<int>(column.Type) - static_cast<int>(cell_type::PackedBool0));
+							packed = static_cast<char>(column.boolean ? packed | mask : packed & ~mask);
+							break;
+						}
+
+						default:
 							break;
 					}
 					if (column.ValidSize) {
 						const auto target = std::span(row).subspan(fixedDataOffset + columnDefinition.Offset, column.ValidSize);
-						std::copy_n(&column.Buffer[0], column.ValidSize, &target[0]);
-						// ReSharper disable once CppUseRangeAlgorithm
-						std::reverse(target.begin(), target.end());
+						std::copy_n(&column.Buffer[0], column.ValidSize, target.data());
+						std::ranges::reverse(target);
 					}
 				}
 				row.resize(xivres::align<size_t>(row.size(), 4));
 
-				auto& rowHeader = *reinterpret_cast<exd::row::header*>(&row[0]);
+				auto& rowHeader = *reinterpret_cast<exd::row::header*>(row.data());
 				rowHeader.DataSize = static_cast<uint32_t>(row.size() - sizeof rowHeader);
 				rowHeader.SubRowCount = 1;
 
@@ -247,10 +250,10 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 
 		std::vector<char> exhFile;
 		exhFile.reserve(exhHeaderSpan.size_bytes() + columnSpan.size_bytes() + paginationSpan.size_bytes() + languageSpan.size_bytes());
-		std::copy_n(&exhHeaderSpan[0], exhHeaderSpan.size_bytes(), std::back_inserter(exhFile));
-		std::copy_n(&columnSpan[0], columnSpan.size_bytes(), std::back_inserter(exhFile));
-		std::copy_n(&paginationSpan[0], paginationSpan.size_bytes(), std::back_inserter(exhFile));
-		std::copy_n(&languageSpan[0], languageSpan.size_bytes(), std::back_inserter(exhFile));
+		std::copy_n(exhHeaderSpan.data(), exhHeaderSpan.size_bytes(), std::back_inserter(exhFile));
+		std::copy_n(columnSpan.data(), columnSpan.size_bytes(), std::back_inserter(exhFile));
+		std::copy_n(paginationSpan.data(), paginationSpan.size_bytes(), std::back_inserter(exhFile));
+		std::copy_n(languageSpan.data(), languageSpan.size_bytes(), std::back_inserter(exhFile));
 		result.emplace(std::format("exd/{}.exh", Name), std::move(exhFile));
 	}
 

@@ -116,7 +116,8 @@ namespace xivres::util {
 			set_components(r, g, b, a);
 		}
 
-		template<typename TR, typename TG, typename TB, typename TA, typename = std::enable_if_t<std::is_integral_v<TR> && std::is_integral_v<TG> && std::is_integral_v<TB> && std::is_integral_v<TA>>>
+		template<typename TR, typename TG, typename TB, typename TA>
+			requires std::is_integral_v<TR> && std::is_integral_v<TG> && std::is_integral_v<TB> && std::is_integral_v<TA>
 		void set_components(TR r, TG g, TB b, TA a = MaxA) {
 			reinterpret_cast<TSelf*>(this)->R = static_cast<TElem>(r);
 			reinterpret_cast<TSelf*>(this)->G = static_cast<TElem>(g);
@@ -124,7 +125,8 @@ namespace xivres::util {
 			reinterpret_cast<TSelf*>(this)->A = static_cast<TElem>(a);
 		}
 
-		template<typename TR, typename TG, typename TB, typename TA, typename = std::enable_if_t<std::is_floating_point_v<TR> && std::is_floating_point_v<TG> && std::is_floating_point_v<TB> && std::is_floating_point_v<TA>>>
+		template<typename TR, typename TG, typename TB, typename TA>
+			requires std::is_floating_point_v<TR> && std::is_floating_point_v<TG> && std::is_floating_point_v<TB> && std::is_floating_point_v<TA>
 		void set_components_normalized(TR r, TG g, TB b, TA a = 1.) {
 			set_components(
 				static_cast<TElem>(std::round(static_cast<TR>(MaxR) * util::clamp<TR>(r, 0, 1))),
@@ -181,7 +183,7 @@ namespace xivres::util {
 			(1 << BB) - 1,
 			(1 << AB) - 1
 		> {
-		using self_type = bgra_bitfields_base<TElem, RB, GB, BB, AB>;
+		using self_type = bgra_bitfields_base;
 		using base_type = four_channel_pixel_format<self_type, TElem, (1 << RB) - 1, (1 << GB) - 1, (1 << BB) - 1, (1 << AB) - 1>;
 
 		TElem B : BB;
@@ -212,7 +214,7 @@ namespace xivres::util {
 			TElemMax,
 			TElemMax
 		> {
-		using self_type = rgba_floating_point_base<TElem, TElemMax>;
+		using self_type = rgba_floating_point_base;
 		using base_type = four_channel_pixel_format<self_type, TElem, TElemMax, TElemMax, TElemMax, TElemMax>;
 
 		TElem R;

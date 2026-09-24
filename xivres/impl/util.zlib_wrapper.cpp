@@ -22,9 +22,9 @@ std::string xivres::util::zlib_error::zlib_error_to_string(int code) {
 std::span<uint8_t> xivres::util::zlib_inflater::operator()(std::span<const uint8_t> source, std::span<uint8_t> target) {
 	initialize_inflation();
 
-	m_zstream.next_in = const_cast<Bytef*>(&source[0]);
+	m_zstream.next_in = const_cast<Bytef*>(source.data());
 	m_zstream.avail_in = static_cast<uint32_t>(source.size());
-	m_zstream.next_out = &target[0];
+	m_zstream.next_out = target.data();
 	m_zstream.avail_out = static_cast<uint32_t>(target.size());
 
 	if (const auto res = inflate(&m_zstream, Z_FINISH);
@@ -45,7 +45,7 @@ std::span<uint8_t> xivres::util::zlib_inflater::operator()(std::span<const uint8
 std::span<uint8_t> xivres::util::zlib_inflater::operator()(std::span<const uint8_t> source) {
 	initialize_inflation();
 
-	m_zstream.next_in = const_cast<Bytef*>(&source[0]);
+	m_zstream.next_in = const_cast<Bytef*>(source.data());
 	m_zstream.avail_in = static_cast<uint32_t>(source.size());
 
 	if (m_buffer.size() < m_defaultBufferSize)
@@ -90,7 +90,7 @@ void xivres::util::zlib_inflater::initialize_inflation() {
 }
 
 xivres::util::thread_pool::object_pool<xivres::util::zlib_inflater>::scoped_pooled_object xivres::util::zlib_inflater::pooled() {
-	static thread_pool::object_pool<util::zlib_inflater> s_pool;
+	static thread_pool::object_pool<zlib_inflater> s_pool;
 	return *s_pool;
 }
 
@@ -110,7 +110,7 @@ std::span<uint8_t> xivres::util::zlib_deflater::operator()(std::span<const uint8
 std::span<uint8_t> xivres::util::zlib_deflater::deflate(std::span<const uint8_t> source) {
 	initialize_deflation();
 
-	m_zstream.next_in = const_cast<Bytef*>(&source[0]);
+	m_zstream.next_in = const_cast<Bytef*>(source.data());
 	m_zstream.avail_in = static_cast<uint32_t>(source.size());
 
 	if (m_buffer.size() < m_defaultBufferSize)
@@ -157,6 +157,6 @@ void xivres::util::zlib_deflater::initialize_deflation() {
 }
 
 xivres::util::thread_pool::object_pool<xivres::util::zlib_deflater>::scoped_pooled_object xivres::util::zlib_deflater::pooled() {
-	static thread_pool::object_pool<util::zlib_deflater> s_pool;
+	static thread_pool::object_pool<zlib_deflater> s_pool;
 	return *s_pool;
 }

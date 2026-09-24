@@ -11,8 +11,8 @@ namespace {
 	constexpr int OpenRetries = 20;
 	constexpr DWORD OpenRetryIntervalMs = 50;
 
-	std::system_error last_error() {
-		return {std::error_code(static_cast<int>(GetLastError()), std::system_category())};
+	std::system_error last_error(DWORD error = GetLastError()) {
+		return {std::error_code(static_cast<int>(error), std::system_category())};
 	}
 }
 
@@ -51,9 +51,9 @@ struct xivres::oplocking_file_stream::data {
 		IdleTimer = CreateThreadpoolTimer(&on_idle_callback, this, nullptr);
 		BreakWait = CreateThreadpoolWait(&on_break_callback, this, nullptr);
 		if (!IdleTimer || !BreakWait) {
-			const auto error = last_error();
+			const auto error = GetLastError();
 			destroy_threadpool_objects();
-			throw error;
+			throw last_error(error);
 		}
 	}
 
@@ -65,7 +65,7 @@ struct xivres::oplocking_file_stream::data {
 		WaitForThreadpoolWaitCallbacks(BreakWait, TRUE);
 
 		{
-			const auto lock = std::lock_guard(Mtx);
+			const auto lock = std::scoped_lock(Mtx);
 			close_locked();
 		}
 
@@ -96,9 +96,11 @@ struct xivres::oplocking_file_stream::data {
 
 	void schedule_idle_locked() {
 		const auto wait = std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(idle_at() - std::chrono::steady_clock::now());
-		ULARGE_INTEGER due{};
-		due.QuadPart = static_cast<ULONGLONG>(-(std::max<int64_t>)(1, wait.count()));
-		FILETIME dueTime{due.LowPart, due.HighPart};
+		const auto due = static_cast<ULONGLONG>(-(std::max<int64_t>)(1, wait.count()));
+		FILETIME dueTime{
+			.dwLowDateTime = static_cast<DWORD>(due),
+			.dwHighDateTime = static_cast<DWORD>(due >> 32),
+		};
 		SetThreadpoolTimer(IdleTimer, &dueTime, 0, 0);
 	}
 
@@ -108,7 +110,7 @@ struct xivres::oplocking_file_stream::data {
 	}
 
 	void on_idle() {
-		const auto lock = std::lock_guard(Mtx);
+		const auto lock = std::scoped_lock(Mtx);
 		if (File == INVALID_HANDLE_VALUE || OplockPending)
 			return;
 
@@ -130,6 +132,11 @@ struct xivres::oplocking_file_stream::data {
 		OplockOut = {
 			.StructureVersion = REQUEST_OPLOCK_CURRENT_VERSION,
 			.StructureLength = sizeof OplockOut,
+			.OriginalOplockLevel = 0,
+			.NewOplockLevel = 0,
+			.Flags = 0,
+			.AccessMode = 0,
+			.ShareMode = 0,
 		};
 		if (!DeviceIoControl(File, FSCTL_REQUEST_OPLOCK, &OplockIn, sizeof OplockIn, &OplockOut, sizeof OplockOut, nullptr, &OplockOv)
 			&& GetLastError() == ERROR_IO_PENDING) {
@@ -142,7 +149,7 @@ struct xivres::oplocking_file_stream::data {
 	}
 
 	void on_break() {
-		const auto lock = std::lock_guard(Mtx);
+		const auto lock = std::scoped_lock(Mtx);
 
 		if (!OplockPending || !HasOverlappedIoCompleted(&OplockOv))
 			return;
@@ -252,7 +259,7 @@ struct xivres::oplocking_file_stream::data {
 
 xivres::oplocking_file_stream::oplocking_file_stream(std::filesystem::path path, bool acceptChanges)
 	: m_data(std::make_unique<data>(std::move(path), acceptChanges)) {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	if (m_data->open_locked())
 		m_data->touch_locked();
 }
@@ -264,7 +271,7 @@ const std::filesystem::path& xivres::oplocking_file_stream::path() const {
 }
 
 bool xivres::oplocking_file_stream::done() const {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	if (m_data->File != INVALID_HANDLE_VALUE)
 		return false;
 	if (!m_data->open_locked())
@@ -274,12 +281,12 @@ bool xivres::oplocking_file_stream::done() const {
 }
 
 uint64_t xivres::oplocking_file_stream::generation() const {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	return m_data->Generation;
 }
 
 void xivres::oplocking_file_stream::hold_until(std::chrono::steady_clock::time_point until) const {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	if (until <= m_data->HoldUntil)
 		return;
 
@@ -293,14 +300,14 @@ void xivres::oplocking_file_stream::hold_until(std::chrono::steady_clock::time_p
 }
 
 std::streamsize xivres::oplocking_file_stream::size() const {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	if (!m_data->Known && m_data->open_locked())
 		m_data->touch_locked();
 	return m_data->Size;
 }
 
 std::streamsize xivres::oplocking_file_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	const auto lock = std::lock_guard(m_data->Mtx);
+	const auto lock = std::scoped_lock(m_data->Mtx);
 	m_data->cancel_oplock_locked();
 
 	if (!m_data->open_locked()) {

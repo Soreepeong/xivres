@@ -26,13 +26,13 @@ void xivres::util::bitmap_copy::to_b8g8r8a8::draw_line_to_rgb(b8g8r8a8* pTarget,
 			(m_colorBackground.R * m_colorBackground.A + pTarget->R * (255 - m_colorBackground.A)) / 255,
 			(m_colorBackground.G * m_colorBackground.A + pTarget->G * (255 - m_colorBackground.A)) / 255,
 			(m_colorBackground.B * m_colorBackground.A + pTarget->B * (255 - m_colorBackground.A)) / 255,
-			255 - ((255 - m_colorBackground.A) * (255 - pTarget->A)) / 255,
+			255 - (255 - m_colorBackground.A) * (255 - pTarget->A) / 255,
 		};
 		const auto blendedFgColor = b8g8r8a8{
 			(m_colorForeground.R * m_colorForeground.A + pTarget->R * (255 - m_colorForeground.A)) / 255,
 			(m_colorForeground.G * m_colorForeground.A + pTarget->G * (255 - m_colorForeground.A)) / 255,
 			(m_colorForeground.B * m_colorForeground.A + pTarget->B * (255 - m_colorForeground.A)) / 255,
-			255 - ((255 - m_colorForeground.A) * (255 - pTarget->A)) / 255,
+			255 - (255 - m_colorForeground.A) * (255 - pTarget->A) / 255,
 		};
 		const auto currentColor = b8g8r8a8{
 			(blendedBgColor.R * (255 - opacityScaled) + blendedFgColor.R * opacityScaled) / 255,
@@ -44,7 +44,7 @@ void xivres::util::bitmap_copy::to_b8g8r8a8::draw_line_to_rgb(b8g8r8a8* pTarget,
 			(pTarget->R * pTarget->A + currentColor.R * (255 - pTarget->A)) / 255,
 			(pTarget->G * pTarget->A + currentColor.G * (255 - pTarget->A)) / 255,
 			(pTarget->B * pTarget->A + currentColor.B * (255 - pTarget->A)) / 255,
-			255 - ((255 - pTarget->A) * (255 - currentColor.A)) / 255,
+			255 - (255 - pTarget->A) * (255 - currentColor.A) / 255,
 		};
 		pTarget->R = (blendedDestColor.R * (255 - currentColor.A) + currentColor.R * currentColor.A) / 255;
 		pTarget->G = (blendedDestColor.G * (255 - currentColor.A) + currentColor.G * currentColor.A) / 255;
@@ -86,10 +86,7 @@ void xivres::util::bitmap_copy::to_b8g8r8a8::copy(int srcX1, int srcY1, int srcX
 			srcPtrBegin += srcPtrDelta;
 		}
 
-	} else if (m_colorForeground.A == 0 && m_colorBackground.A == 0) {
-		return;
-
-	} else {
+	} else if (m_colorForeground.A != 0 || m_colorBackground.A != 0) {
 		while (nRemainingRows--) {
 			draw_line_to_rgb(destPtrBegin, srcPtrBegin, nCols);
 			destPtrBegin += destPtrDelta;
@@ -180,10 +177,7 @@ void xivres::util::bitmap_copy::to_l8::copy(int srcX1, int srcY1, int srcX2, int
 			srcPtrBegin += srcPtrDelta;
 		}
 
-	} else if (m_opacityForeground == 0 && m_opacityBackground == 0) {
-		return;
-
-	} else {
+	} else if (m_opacityForeground != 0 || m_opacityBackground != 0) {
 		while (nRemainingRows--) {
 			draw_line_to_l8(destPtrBegin, srcPtrBegin, nCols);
 			destPtrBegin += destPtrDelta;

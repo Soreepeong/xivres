@@ -1,7 +1,7 @@
 #ifndef XIVRES_TEXTUREPACKEDFILESTREAMDECODER_H_
 #define XIVRES_TEXTUREPACKEDFILESTREAMDECODER_H_
 
-#include <mutex>
+#include <limits>
 
 #include "unpacked_stream.h"
 
@@ -20,14 +20,10 @@ namespace xivres {
 			operator bool() const {
 				return RequestOffset != (std::numeric_limits<uint32_t>::max)();
 			}
-			
-			friend bool operator<(uint32_t r, const subblock_info& info) {
-				return r < info.RequestOffset;
-			}
 		};
-		
+
 		struct block_info {
-			uint32_t DecompressedSize;
+			uint32_t DecompressedSize{};
 			std::vector<subblock_info> Subblocks;
 
 			[[nodiscard]] uint32_t request_offset_begin() const {
@@ -36,10 +32,6 @@ namespace xivres {
 
 			[[nodiscard]] uint32_t request_offset_end() const {
 				return Subblocks.front().RequestOffset + DecompressedSize;
-			}
-			
-			friend bool operator<(uint32_t r, const block_info& info) {
-				return r < info.Subblocks.front().RequestOffset;
 			}
 		};
 

@@ -278,7 +278,7 @@ namespace xivres::sound {
 			const auto entry = read_entry(m_offsetsTable1, m_endOfTable1, index);
 			if (entry.size() < sizeof(sound_descriptor_header))
 				return std::nullopt;
-			sound_descriptor_header header{};
+			sound_descriptor_header header;
 			std::memcpy(&header, entry.data(), sizeof header);
 			return header;
 		}
@@ -315,7 +315,7 @@ namespace xivres::sound {
 			[[nodiscard]] size_t calculate_entry_size() const;
 			void export_to(std::vector<uint8_t>& res) const;
 
-			void set_mark_chunks(uint32_t loopStartSampleBlockIndex, uint32_t loopEndSampleBlockIndex, std::span<const uint32_t> chunks);
+			void set_mark_chunks(uint32_t loopStartSampleBlockIndex, uint32_t loopEndSampleBlockIndex, std::span<const uint32_t> marks);
 
 			static sound_item make_from_reader_sound_item(const reader::sound_item& item); 
 

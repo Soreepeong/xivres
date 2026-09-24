@@ -6,6 +6,7 @@
 #include <functional>
 #include <mutex>
 #include <span>
+#include <utility>
 
 #include "util.span_cast.h"
 
@@ -61,7 +62,7 @@ namespace xivres {
 		template<typename T>
 		[[nodiscard]] linear_reader<T> as_linear_reader() const {
 			return [this, buf = std::vector<T>(), ptr = uint64_t(), to = size()](size_t len, bool throwOnIncompleteRead) mutable {
-				if (ptr == to)
+				if (std::cmp_equal(ptr, to))
 					return std::span<T>();
 				buf.resize(static_cast<size_t>(std::min<uint64_t>(len, to - ptr)));
 				const auto r = read(ptr, buf.data(), buf.size());

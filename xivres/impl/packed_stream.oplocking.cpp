@@ -33,19 +33,19 @@ std::streamsize xivres::oplocking_packed_stream::read(std::streamoff offset, voi
 }
 
 void xivres::oplocking_packed_stream::hold_until(std::chrono::steady_clock::time_point until) const {
-	const auto lock = std::lock_guard(m_mtx);
+	const auto lock = std::scoped_lock(m_mtx);
 	if (m_file)
 		m_file->hold_until(until);
 }
 
 void xivres::oplocking_packed_stream::close() {
-	const auto lock = std::lock_guard(m_mtx);
+	const auto lock = std::scoped_lock(m_mtx);
 	m_packedStream.reset();
 	m_file.reset();
 }
 
 std::shared_ptr<xivres::packed_stream> xivres::oplocking_packed_stream::packed() const {
-	const auto lock = std::lock_guard(m_mtx);
+	const auto lock = std::scoped_lock(m_mtx);
 
 	if (!m_file) {
 		if (!exists(m_path))

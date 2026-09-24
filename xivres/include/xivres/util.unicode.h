@@ -21,7 +21,7 @@ namespace xivres::util::unicode {
 
 	uint16_t u32_to_sjisuint16(char32_t codepoint);
 
-	template<typename T> struct EncodingTag {};
+	template<typename> struct EncodingTag {};
 
 	size_t decode(EncodingTag<char8_t>, char32_t& out, const char8_t* in, size_t nRemainingBytes, bool strict);
 	size_t decode(EncodingTag<char16_t>, char32_t& out, const char16_t* in, size_t nRemainingBytes, bool strict);

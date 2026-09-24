@@ -2,6 +2,7 @@
 #include <Windows.h>
 
 #include <filesystem>
+#include <utility>
 
 #include "../include/xivres/util.module_relative.h"
 
@@ -40,7 +41,7 @@ std::string xivres::util::module_relative::to_string() const {
 	const auto sections = IMAGE_FIRST_SECTION(&ntHeader);
 	for (size_t i = 0; i < ntHeader.FileHeader.NumberOfSections; ++i) {
 		const auto& section = sections[i];
-		if (offset < section.VirtualAddress || offset >= section.VirtualAddress + section.Misc.VirtualSize)
+		if (std::cmp_less(offset, section.VirtualAddress) || std::cmp_greater_equal(offset, section.VirtualAddress + section.Misc.VirtualSize))
 			continue;
 
 		const auto raw = reinterpret_cast<const char*>(section.Name);

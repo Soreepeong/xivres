@@ -26,7 +26,8 @@ namespace xivres::util {
 		return { reinterpret_cast<TTarget*>(&source[sourceIndex]), targetCount * targetCountUnitSize / sizeof(TTarget) };
 	}
 
-	template<typename TTarget, typename TSource, typename = std::enable_if_t<!std::is_const_v<TSource>>>
+	template<typename TTarget, typename TSource>
+		requires (!std::is_const_v<TSource>)
 	std::span<const TTarget> span_cast(size_t sourceCount, const TSource* source, size_t sourceIndex = 0, size_t targetCount = SIZE_MAX, size_t targetCountUnitSize = sizeof(TTarget)) {
 		return span_cast<const TTarget, const TSource>(sourceCount, source, sourceIndex, targetCount, targetCountUnitSize);
 	}

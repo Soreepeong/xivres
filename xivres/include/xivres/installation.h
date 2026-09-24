@@ -3,6 +3,8 @@
 
 #include <filesystem>
 #include <map>
+#include <mutex>
+#include <optional>
 
 #include "sqpack.reader.h"
 

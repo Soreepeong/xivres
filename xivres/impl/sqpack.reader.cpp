@@ -1,5 +1,9 @@
 #include "../include/xivres/sqpack.reader.h"
 
+#include <algorithm>
+#include <functional>
+#include <utility>
+
 std::span<const xivres::sqpack::sqindex::path_hash_locator> xivres::sqpack::reader::sqindex_1_type::pair_hash_locators() const {
 	return util::span_cast<sqindex::path_hash_locator>(Data, index_header().PathHashLocatorSegment.Offset, index_header().PathHashLocatorSegment.Size, 1);
 }
@@ -24,7 +28,7 @@ const xivres::sqpack::sqindex::data_locator* xivres::sqpack::reader::sqindex_1_t
 	if (locators.empty())
 		return nullptr;
 	
-	const auto it = std::lower_bound(locators.begin(), locators.end(), nameHash, path_spec::LocatorComparator());
+	const auto it = std::ranges::lower_bound(locators, nameHash, {}, [](const sqindex::pair_hash_locator& l) -> uint32_t { return l.NameHash; });
 	if (it == locators.end() || it->NameHash != nameHash)
 		return nullptr;
 
@@ -39,7 +43,7 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::sqindex_1_t
 }
 
 xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(std::vector<uint8_t> data, bool strictVerify)
-	: sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(std::move(data), strictVerify) {
+	: sqindex_type(std::move(data), strictVerify) {
 	if (strictVerify) {
 		if (index_header().PathHashLocatorSegment.Size % sizeof(sqindex::path_hash_locator))
 			throw bad_data_error("PathHashLocators has an invalid size alignment");
@@ -48,7 +52,7 @@ xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(std::vector<uint8_t> data
 }
 
 xivres::sqpack::reader::sqindex_1_type::sqindex_1_type(const stream& strm, bool strictVerify)
-	: sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>(strm, strictVerify) {
+	: sqindex_type(strm, strictVerify) {
 	if (strictVerify) {
 		if (index_header().PathHashLocatorSegment.Size % sizeof(sqindex::path_hash_locator))
 			throw bad_data_error("PathHashLocators has an invalid size alignment");
@@ -84,7 +88,7 @@ xivres::sqpack::reader::sqdata_type::sqdata_type(std::shared_ptr<stream> strm, c
 	if (strictVerify) {
 		const auto dataFileLength = Stream->size();
 		if (datIndex == 0) {
-			if (dataFileLength != 0ULL + Header.HeaderSize + DataHeader.HeaderSize + DataHeader.DataSize)
+			if (std::cmp_not_equal(dataFileLength, 0ULL + Header.HeaderSize + DataHeader.HeaderSize + DataHeader.DataSize))
 				throw bad_data_error("Invalid file size");
 		}
 	}
@@ -161,8 +165,8 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 		}
 	};
 
-	std::sort(offsets1.begin(), offsets1.end(), Comparator());
-	std::sort(offsets2.begin(), offsets2.end(), Comparator());
+	std::ranges::sort(offsets1, Comparator());
+	std::ranges::sort(offsets2, Comparator());
 	Entries.reserve(offsets1.size());
 
 	if (strictVerify && !offsets1.empty() && !offsets2.empty()) {
@@ -174,7 +178,6 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 		}
 	}
 
-	path_spec pathSpec;
 	if (!offsets1.empty() && !offsets2.empty()) {
 		for (size_t curr = 1, prev = 0; curr < offsets1.size(); ++curr, ++prev) {
 
@@ -182,7 +185,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 			if (offsets1[prev].first.DatFileIndex != offsets1[curr].first.DatFileIndex)
 				continue;
 
-			Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
+			Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .PathSpec = {}, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
 			if (std::get<2>(offsets1[prev].second))
 				Entries.back().PathSpec = path_spec(std::get<2>(offsets1[prev].second));
 			else if (std::get<1>(offsets2[prev].second))
@@ -203,7 +206,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 			if (offsets1[prev].first.DatFileIndex != offsets1[curr].first.DatFileIndex)
 				continue;
 
-			Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
+			Entries.emplace_back(entry_info{.Locator = offsets1[prev].first, .PathSpec = {}, .Allocation = offsets1[curr].first.offset() - offsets1[prev].first.offset()});
 			if (std::get<2>(offsets1[prev].second))
 				Entries.back().PathSpec = path_spec(std::get<2>(offsets1[prev].second));
 			else
@@ -222,7 +225,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 			if (offsets2[prev].first.DatFileIndex != offsets2[curr].first.DatFileIndex)
 				continue;
 
-			Entries.emplace_back(entry_info{.Locator = offsets2[prev].first, .Allocation = offsets2[curr].first.offset() - offsets2[prev].first.offset()});
+			Entries.emplace_back(entry_info{.Locator = offsets2[prev].first, .PathSpec = {}, .Allocation = offsets2[curr].first.offset() - offsets2[prev].first.offset()});
 			if (std::get<1>(offsets2[prev].second))
 				Entries.back().PathSpec = path_spec(std::get<1>(offsets2[prev].second));
 			else
@@ -236,7 +239,7 @@ xivres::sqpack::reader::reader(const std::string& fileName, const stream& indexS
 		}
 	}
 
-	std::sort(Entries.begin(), Entries.end(), Comparator());
+	std::ranges::sort(Entries, Comparator());
 }
 
 xivres::sqpack::reader xivres::sqpack::reader::from_path(const std::filesystem::path& indexFile, bool strictVerify) {
@@ -289,21 +292,11 @@ const xivres::sqpack::sqindex::data_locator& xivres::sqpack::reader::data_locato
 }
 
 size_t xivres::sqpack::reader::find_entry_index(const path_spec& pathSpec) const {
-	struct Comparator {
-		bool operator()(const entry_info& l, const sqindex::data_locator& r) const {
-			return l.Locator < r;
-		}
-
-		bool operator()(const sqindex::data_locator& l, const entry_info& r) const {
-			return l < r.Locator;
-		}
-	};
-
 	const auto locator = find_data_locator_from_index1(pathSpec);
 	if (!locator)
 		return (std::numeric_limits<size_t>::max)();
 
-	const auto entryInfo = std::lower_bound(Entries.begin(), Entries.end(), *locator, Comparator());
+	const auto entryInfo = std::ranges::lower_bound(Entries, *locator, std::less(), &entry_info::Locator);
 	return static_cast<size_t>(std::distance(Entries.begin(), entryInfo));
 }
 

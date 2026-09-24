@@ -1,8 +1,6 @@
 #ifndef XIVRES_SQPACKREADER_H_
 #define XIVRES_SQPACKREADER_H_
 
-#include <mutex>
-
 #include "unpacked_stream.h"
 #include "sqpack.h"
 
@@ -11,7 +9,6 @@ namespace xivres::sqpack {
 	public:
 		template<typename HashLocatorT, typename TextLocatorT> 
 		struct sqindex_type {
-		public:
 			const std::vector<uint8_t> Data;
 
 			sqindex_type(std::vector<uint8_t> data, bool strictVerify)
@@ -37,7 +34,7 @@ namespace xivres::sqpack {
 			}
 
 			[[nodiscard]] const header& header() const {
-				return *reinterpret_cast<const sqpack::header*>(&Data[0]);
+				return *reinterpret_cast<const sqpack::header*>(Data.data());
 			}
 
 			[[nodiscard]] const sqindex::header& index_header() const {
@@ -57,8 +54,8 @@ namespace xivres::sqpack {
 			}
 
 			const sqindex::data_locator* find_data_locator(const char* fullPath) const {
-				const auto it = std::lower_bound(text_locators().begin(), text_locators().end(), fullPath, path_spec::LocatorComparator());
-				if (it == text_locators().end() || _strcmpi(it->FullPath, fullPath) != 0)
+				const auto it = std::ranges::find_if(text_locators(), [fullPath](const auto& l) { return _strcmpi(l.FullPath, fullPath) == 0; });
+				if (it == text_locators().end())
 					return nullptr;
 				return &it->Locator;
 			}
@@ -80,18 +77,18 @@ namespace xivres::sqpack {
 
 			[[nodiscard]] std::span<const sqindex::pair_hash_locator> pair_hash_locators_for_path(uint32_t pathHash) const;
 
-			using sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>::find_data_locator;
-			using sqindex_type<sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator>::data_locator;
+			using sqindex_type::find_data_locator;
+			using sqindex_type::data_locator;
 			
 			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t pathHash, uint32_t nameHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t pathHash, uint32_t nameHash) const;
 		};
 
 		struct sqindex_2_type : sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator> {
-			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::sqindex_type;
+			using sqindex_type::sqindex_type;
 
-			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::find_data_locator;
-			using sqindex_type<sqindex::full_hash_locator, sqindex::full_hash_with_text_locator>::data_locator;
+			using sqindex_type::find_data_locator;
+			using sqindex_type::data_locator;
 			
 			[[nodiscard]] const sqindex::data_locator* find_data_locator(uint32_t fullPathHash) const;
 			[[nodiscard]] const sqindex::data_locator& data_locator(uint32_t fullPathHash) const;
@@ -102,7 +99,7 @@ namespace xivres::sqpack {
 			sqdata::header DataHeader{};
 			std::shared_ptr<stream> Stream;
 
-			sqdata_type(std::shared_ptr<stream> strm, const uint32_t datIndex, bool strictVerify);
+			sqdata_type(std::shared_ptr<stream> strm, uint32_t datIndex, bool strictVerify);
 		};
 
 		struct entry_info {

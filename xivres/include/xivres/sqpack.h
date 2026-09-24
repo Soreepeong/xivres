@@ -2,7 +2,7 @@
 #define XIVRES_SQPACK_H_
 
 #include <format>
-#include <numeric>
+#include <limits>
 #include <zlib.h>
 
 #include "common.h"
@@ -290,6 +290,8 @@ namespace xivres::packed {
 				.HeaderSize = static_cast<uint32_t>(align(sizeof file_header)),
 				.Type = type::placeholder,
 				.DecompressedSize = static_cast<uint32_t>(decompressedSize),
+				.AllocatedSpaceUnitCount = 0,
+				.OccupiedSpaceUnitCount = 0,
 				.BlockCountOrVersion = static_cast<uint32_t>(compressedSize),
 			};
 			res.set_space_units(compressedSize);

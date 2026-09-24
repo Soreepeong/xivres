@@ -45,7 +45,7 @@ namespace xivres::textools {
 			std::vector<mods_json> ModsJsons;
 			std::string GroupName;
 			std::string SelectionType;
-			bool IsChecked;
+			bool IsChecked{};
 		};
 		void to_json(nlohmann::json&, const mod_option_json&);
 		void from_json(const nlohmann::json&, mod_option_json&);
@@ -82,8 +82,8 @@ namespace xivres::textools {
 
 		void for_each(std::function<void(mods_json&)> cb, const nlohmann::json& choices = {});
 		void for_each(std::function<void(const mods_json&)> cb, const nlohmann::json& choices = {}) const;
-		bool for_each_breakable(std::function<bool(mods_json&)> cb, const nlohmann::json& choices = {});
-		bool for_each_breakable(std::function<bool(const mods_json&)> cb, const nlohmann::json& choices = {}) const;
+		bool for_each_breakable(const std::function<bool(mods_json&)>& cb, const nlohmann::json& choices = {});
+		bool for_each_breakable(const std::function<bool(const mods_json&)>& cb, const nlohmann::json& choices = {}) const;
 	};
 	void to_json(nlohmann::json&, const mod_pack_json&);
 	void from_json(const nlohmann::json&, mod_pack_json&);
@@ -217,8 +217,8 @@ namespace xivres::textools {
 			}
 		}
 
-		void apply_image_change_data_edits(std::function<image_change_data::file& ()> reader) const;
-		void apply_equipment_deformer_parameter_edits(std::function<equipment_deformer_parameter_file& (item_types, uint32_t)> reader) const;
+		void apply_image_change_data_edits(const std::function<image_change_data::file& ()>& reader) const;
+		void apply_equipment_deformer_parameter_edits(const std::function<equipment_deformer_parameter_file& (item_types, uint32_t)>& reader) const;
 		[[nodiscard]] bool has_equipment_parameter_edits() const;
 		void apply_equipment_parameter_edits(equipment_parameter_file& eqp) const;
 		[[nodiscard]] bool has_gimmick_parameter_edits() const;
@@ -228,16 +228,16 @@ namespace xivres::textools {
 	
 	class simple_ttmp2_writer {
 		struct ttmpd_data {
-			std::unique_ptr<std::mutex> WriteMtx;
+			std::unique_ptr<std::mutex> WriteMtx{};
 			std::optional<z_stream> Z;
-			bool Complete;
-			uint32_t Crc32;
-			uint64_t Size;
+			bool Complete{};
+			uint32_t Crc32{};
+			uint64_t Size{};
 		};
-		
+
 		std::filesystem::path m_path;
 		std::filesystem::path m_pathTemp;
-		zlib_filefunc64_def m_zffunc;
+		zlib_filefunc64_def m_zffunc{};
 		zipFile m_zf = nullptr;
 		std::optional<mod_pack_json> m_ttmpl;
 		std::optional<z_stream> m_zstream;

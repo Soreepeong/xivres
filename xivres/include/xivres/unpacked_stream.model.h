@@ -13,10 +13,6 @@ namespace xivres {
 			uint16_t DecompressedSize;
 			uint16_t GroupIndex;
 			uint16_t GroupBlockIndex;
-			
-			friend bool operator<(uint32_t r, const block_info& info) {
-				return r < info.RequestOffsetPastHeader;
-			}
 		};
 
 		model::header m_header;

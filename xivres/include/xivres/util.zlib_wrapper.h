@@ -5,6 +5,7 @@
 #include <format>
 #include <stdexcept>
 #include <span>
+#include <utility>
 #include <vector>
 #include <zlib.h>
 
@@ -36,7 +37,7 @@ namespace xivres::util {
 		~zlib_inflater();
 
 		[[nodiscard]] bool is(int windowBits = 15, int defaultBufferSize = 16384) const {
-			return m_windowBits == windowBits && m_defaultBufferSize == defaultBufferSize;
+			return m_windowBits == windowBits && std::cmp_equal(m_defaultBufferSize, defaultBufferSize);
 		}
 
 		std::span<uint8_t> operator()(std::span<const uint8_t> source);

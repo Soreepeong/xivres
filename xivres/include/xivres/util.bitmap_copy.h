@@ -57,13 +57,12 @@ namespace xivres::util {
 				const auto color = ColorIsForeground ? m_colorForeground : m_colorBackground;
 				while (nPixelCount--) {
 					const auto opacityScaled = m_gammaTable[*pSource];
-					const auto opacity = 255 * (ColorIsForeground ? opacityScaled : 255 - opacityScaled) / 255;
-					if (opacity) {
+					if (const auto opacity = 255 * (ColorIsForeground ? opacityScaled : 255 - opacityScaled) / 255) {
 						const auto blendedDestColor = b8g8r8a8{
 							(pTarget->R * pTarget->A + color.R * (255 - pTarget->A)) / 255,
 							(pTarget->G * pTarget->A + color.G * (255 - pTarget->A)) / 255,
 							(pTarget->B * pTarget->A + color.B * (255 - pTarget->A)) / 255,
-							255 - ((255 - pTarget->A) * (255 - opacity)) / 255,
+							255 - (255 - pTarget->A) * (255 - opacity) / 255,
 						};
 						pTarget->R = (blendedDestColor.R * (255 - opacity) + color.R * opacity) / 255;
 						pTarget->G = (blendedDestColor.G * (255 - opacity) + color.G * opacity) / 255;
@@ -130,7 +129,7 @@ namespace xivres::util {
 				}
 			}
 		};
-	};
+	}
 }
 
 #endif

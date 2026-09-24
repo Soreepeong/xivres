@@ -14,6 +14,7 @@ namespace xivres {
 
 		[[nodiscard]] std::streamsize size() override;
 
+	protected:
 		void ensure_initialized() override;
 
 		std::streamsize translate_read(std::streamoff offset, void* buf, std::streamsize length) override;

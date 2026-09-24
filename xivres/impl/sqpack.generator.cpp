@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <ranges>
+#include <utility>
 
 #include "../include/xivres/packed_stream.model.h"
 #include "../include/xivres/packed_stream.placeholder.h"
@@ -60,7 +61,7 @@ bool xivres::sqpack::generator::entry_info::try_keep_original_place() {
 		return false;
 
 	const auto& [locator, allocation] = *m_originalPlace;
-	if (allocation > UINT32_MAX || m_entrySize > allocation || static_cast<uint64_t>(m_baseStream->size()) > static_cast<uint64_t>(allocation))
+	if (allocation > UINT32_MAX || m_entrySize > allocation || std::cmp_greater(m_baseStream->size(), allocation))
 		return false;
 
 	m_entrySize = static_cast<uint32_t>(allocation);
@@ -70,7 +71,7 @@ bool xivres::sqpack::generator::entry_info::try_keep_original_place() {
 }
 
 std::streamsize xivres::sqpack::generator::entry_info::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (offset >= static_cast<std::streamoff>(m_entrySize))
+	if (std::cmp_greater_equal(offset, m_entrySize))
 		return 0;
 	if (offset + length > m_entrySize)
 		length = m_entrySize - offset;
@@ -82,7 +83,7 @@ std::streamsize xivres::sqpack::generator::entry_info::read(std::streamoff offse
 
 	if (offset < underlyingStreamLength) {
 		const auto dataTarget = target.subspan(0, static_cast<size_t>(dataLength));
-		const auto readLength = static_cast<size_t>(underlyingStream.read(offset, dataTarget.data(), dataTarget.size_bytes()));
+		const auto readLength = static_cast<size_t>(underlyingStream.read(offset, dataTarget.data(), static_cast<std::streamsize>(dataTarget.size_bytes())));
 		if (readLength != dataTarget.size_bytes())
 			throw std::logic_error("entry_info underlying data read fail");
 		target = target.subspan(readLength);
@@ -102,7 +103,7 @@ void xivres::sqpack::generator::entry_info::hold_until(std::chrono::steady_clock
 }
 
 xivres::packed::type xivres::sqpack::generator::entry_info::get_packed_type() const {
-	return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type());
+	return m_stream ? m_stream->get_packed_type() : m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }
 
 xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::operator+=(add_result& r) {
@@ -138,7 +139,7 @@ bool xivres::sqpack::generator::sqpack_view_entry_cache::read(const entry_info& 
 	const auto thread = std::this_thread::get_id();
 	std::shared_ptr<buffer> buf;
 	{
-		const auto lock = std::lock_guard(m_mtx);
+		const auto lock = std::scoped_lock(m_mtx);
 		expire_locked(now);
 
 		auto& current = m_readers[thread];
@@ -162,7 +163,7 @@ bool xivres::sqpack::generator::sqpack_view_entry_cache::read(const entry_info& 
 	}
 
 	{
-		const auto lock = std::lock_guard(buf->FillMtx);
+		const auto lock = std::scoped_lock(buf->FillMtx);
 		if (!buf->Filled) {
 			buf->Filled = true;
 			try {
@@ -223,7 +224,7 @@ void xivres::sqpack::generator::sqpack_view_entry_cache::expire_locked(clock::ti
 }
 
 void xivres::sqpack::generator::sqpack_view_entry_cache::flush() {
-	const auto lock = std::lock_guard(m_mtx);
+	const auto lock = std::scoped_lock(m_mtx);
 	m_readers.clear();
 	m_buffers.clear();
 }
@@ -250,8 +251,8 @@ void xivres::sqpack::generator::add(add_result& result, std::shared_ptr<packed_s
 				node.key() = pEntry->path_spec();
 				pEntry = &m_fullEntries.insert(std::move(node)).position->second;
 			}
-		} else if (const auto it = m_fullEntries.find(provider->path_spec()); it != m_fullEntries.end()) {
-			pEntry = &it->second;
+		} else if (const auto itFull = m_fullEntries.find(provider->path_spec()); itFull != m_fullEntries.end()) {
+			pEntry = &itFull->second;
 		}
 
 		if (pEntry) {
@@ -286,7 +287,7 @@ xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(cons
 	return add_sqpack(reader::from_path(indexPath), overwriteExisting, overwriteUnknownSegments, keepOriginalLayout);
 }
 
-xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(const xivres::sqpack::reader& reader, bool overwriteExisting, bool overwriteUnknownSegments, bool keepOriginalLayout) {
+xivres::sqpack::generator::add_result xivres::sqpack::generator::add_sqpack(const reader& reader, bool overwriteExisting, bool overwriteUnknownSegments, bool keepOriginalLayout) {
 	if (keepOriginalLayout) {
 		if (!m_originalData.empty())
 			throw std::logic_error("The layout of another sqpack is already kept.");
@@ -355,8 +356,8 @@ void xivres::sqpack::generator::reserve_space(path_spec pathSpec, uint32_t size)
 			node.key() = pathSpec;
 			m_fullEntries.insert(std::move(node));
 		}
-	} else if (const auto it = m_fullEntries.find(pathSpec); it != m_fullEntries.end()) {
-		it->second.reserve_entry_size(size);
+	} else if (const auto itFull = m_fullEntries.find(pathSpec); itFull != m_fullEntries.end()) {
+		itFull->second.reserve_entry_size(size);
 	} else {
 		const auto key = pathSpec;
 		auto baseStream = std::make_shared<placeholder_packed_stream>(key);
@@ -491,7 +492,7 @@ std::span<xivres::sqpack::generator::entry_info*>::iterator xivres::sqpack::gene
 }
 
 std::streamsize xivres::sqpack::generator::data_view_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (offset < 0 || length <= 0 || static_cast<uint64_t>(offset) >= m_size)
+	if (offset < 0 || length <= 0 || std::cmp_greater_equal(offset, m_size))
 		return 0;
 
 	auto pos = static_cast<uint64_t>(offset);
@@ -556,6 +557,10 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	std::vector<std::pair<size_t, size_t>> dataEntryRanges;
 
 	auto res = sqpack_views{
+		.Index1 = {},
+		.Index2 = {},
+		.Data = {},
+		.Entries = {},
 		.HashOnlyEntries = std::move(m_hashOnlyEntries),
 		.FullPathEntries = std::move(m_fullEntries),
 	};
@@ -627,9 +632,14 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 
 		dataSubheaders.emplace_back(sqdata::header{
 			.HeaderSize = sizeof(sqdata::header),
+			.Null1 = 0,
 			.Unknown1 = sqdata::header::Unknown1_Value,
+			.DataSize = {},
 			.SpanIndex = static_cast<uint32_t>(i),
+			.Null2 = 0,
 			.MaxFileSize = m_maxFileSize,
+			.DataSha1 = {},
+			.Sha1 = {},
 		});
 		dataSubheaders.back().DataSize = datEnds[i] - dataHeaderSize;
 
@@ -653,9 +663,9 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	std::vector<sqindex::pair_hash_with_text_locator> conflictEntries1;
 	for (const auto& [pairHash, correspondingEntries] : pairHashes) {
 		if (correspondingEntries.size() == 1) {
-			fileEntries1.emplace_back(sqindex::pair_hash_locator{pairHash.second, pairHash.first, correspondingEntries.front()->locator(), 0});
+			fileEntries1.emplace_back(sqindex::pair_hash_locator{.NameHash = pairHash.second, .PathHash = pairHash.first, .Locator = correspondingEntries.front()->locator(), .Padding = 0});
 		} else {
-			fileEntries1.emplace_back(sqindex::pair_hash_locator{pairHash.second, pairHash.first, sqindex::data_locator::Synonym(), 0});
+			fileEntries1.emplace_back(sqindex::pair_hash_locator{.NameHash = pairHash.second, .PathHash = pairHash.first, .Locator = sqindex::data_locator::Synonym(), .Padding = 0});
 			uint32_t i = 0;
 			for (const auto& entry : correspondingEntries) {
 				conflictEntries1.emplace_back(sqindex::pair_hash_with_text_locator{
@@ -663,6 +673,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 					.PathHash = pairHash.first,
 					.Locator = entry->locator(),
 					.ConflictIndex = i++,
+					.FullPath = {},
 				});
 				const auto& path = entry->path_spec().text();
 				strncpy_s(conflictEntries1.back().FullPath, path.c_str(), path.size());
@@ -674,15 +685,16 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 		.PathHash = sqindex::pair_hash_with_text_locator::EndOfList,
 		.Locator = 0,
 		.ConflictIndex = sqindex::pair_hash_with_text_locator::EndOfList,
+		.FullPath = {},
 	});
 
 	std::vector<sqindex::full_hash_locator> fileEntries2;
 	std::vector<sqindex::full_hash_with_text_locator> conflictEntries2;
 	for (const auto& [fullHash, correspondingEntries] : fullHashes) {
 		if (correspondingEntries.size() == 1) {
-			fileEntries2.emplace_back(sqindex::full_hash_locator{fullHash, correspondingEntries.front()->locator()});
+			fileEntries2.emplace_back(sqindex::full_hash_locator{.FullPathHash = fullHash, .Locator = correspondingEntries.front()->locator()});
 		} else {
-			fileEntries2.emplace_back(sqindex::full_hash_locator{fullHash, sqindex::data_locator::Synonym()});
+			fileEntries2.emplace_back(sqindex::full_hash_locator{.FullPathHash = fullHash, .Locator = sqindex::data_locator::Synonym()});
 			uint32_t i = 0;
 			for (const auto& entry : correspondingEntries) {
 				conflictEntries2.emplace_back(sqindex::full_hash_with_text_locator{
@@ -690,6 +702,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 					.UnusedHash = 0,
 					.Locator = entry->locator(),
 					.ConflictIndex = i++,
+					.FullPath = {},
 				});
 				const auto& path = entry->path_spec().text();
 				strncpy_s(conflictEntries2.back().FullPath, path.c_str(), path.size());
@@ -701,6 +714,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 		.UnusedHash = sqindex::full_hash_with_text_locator::EndOfList,
 		.Locator = 0,
 		.ConflictIndex = sqindex::full_hash_with_text_locator::EndOfList,
+		.FullPath = {},
 	});
 
 	memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
@@ -727,7 +741,7 @@ xivres::sqpack::generator::sqpack_views xivres::sqpack::generator::export_to_vie
 	return res;
 }
 
-void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict, size_t cores) {
+void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir, bool strict, size_t /*cores*/) {
 	header dataHeader{};
 	memcpy(dataHeader.Signature, header::Signature_Value, sizeof(header::Signature_Value));
 	dataHeader.HeaderSize = sizeof header;
@@ -764,7 +778,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 
 		for (size_t i = 0;;) {
 			for (; i < entries.size() && waiter.pending() < (std::max<size_t>)(8, 2 * waiter.pool().concurrency()); ++i) {
-				waiter.submit([this, i, entry = &entries[i]](util::thread_pool::base_task& task) {
+				waiter.submit([i, entry = &entries[i]](const util::thread_pool::base_task& task) {
 					task.throw_if_cancelled();
 					return std::make_pair(i, entry->base_stream()->read_vector<char>());
 				});
@@ -787,8 +801,8 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 						std::vector<char> buf(65536);
 						util::hash_sha1 sha1;
 						dataFile.seekg(sizeof header + sizeof(sqdata::header), std::ios::beg);
-						align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
-							dataFile.read(buf.data(), static_cast<size_t>(size));
+						align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t /*index*/, uint64_t /*offset*/, uint64_t size) {
+							dataFile.read(buf.data(), static_cast<std::streamsize>(size));
 							if (!dataFile)
 								throw std::runtime_error("Failed to read from output data file.");
 							sha1.process_bytes(buf.data(), static_cast<size_t>(size));
@@ -807,10 +821,14 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 				dataFile.open(dir / std::format("{}.win32.dat{}", DatName, dataSubheaders.size()), std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
 				dataSubheaders.emplace_back(sqdata::header{
 					.HeaderSize = sizeof(sqdata::header),
+					.Null1 = 0,
 					.Unknown1 = sqdata::header::Unknown1_Value,
-					.DataSize = 0,
+					.DataSize = {},
 					.SpanIndex = static_cast<uint32_t>(dataSubheaders.size()),
+					.Null2 = 0,
 					.MaxFileSize = m_maxFileSize,
+					.DataSha1 = {},
+					.Sha1 = {},
 				});
 			}
 
@@ -828,8 +846,8 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 				std::vector<char> buf(65536);
 				util::hash_sha1 sha1;
 				dataFile.seekg(sizeof header + sizeof(sqdata::header), std::ios::beg);
-				align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t index, uint64_t offset, uint64_t size) {
-					dataFile.read(buf.data(), static_cast<size_t>(size));
+				align<uint64_t>(dataSubheaders.back().DataSize, buf.size()).iterate_chunks([&](uint64_t /*index*/, uint64_t /*offset*/, uint64_t size) {
+					dataFile.read(buf.data(), static_cast<std::streamsize>(size));
 					if (!dataFile)
 						throw std::runtime_error("Failed to read from output data file.");
 					sha1.process_bytes(buf.data(), static_cast<size_t>(size));
@@ -850,9 +868,9 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 	std::vector<sqindex::pair_hash_with_text_locator> conflictEntries1;
 	for (const auto& [pairHash, correspondingEntries] : pairHashes) {
 		if (correspondingEntries.size() == 1) {
-			fileEntries1.emplace_back(sqindex::pair_hash_locator{pairHash.second, pairHash.first, correspondingEntries.front()->locator(), 0});
+			fileEntries1.emplace_back(sqindex::pair_hash_locator{.NameHash = pairHash.second, .PathHash = pairHash.first, .Locator = correspondingEntries.front()->locator(), .Padding = 0});
 		} else {
-			fileEntries1.emplace_back(sqindex::pair_hash_locator{pairHash.second, pairHash.first, sqindex::data_locator::Synonym(), 0});
+			fileEntries1.emplace_back(sqindex::pair_hash_locator{.NameHash = pairHash.second, .PathHash = pairHash.first, .Locator = sqindex::data_locator::Synonym(), .Padding = 0});
 			uint32_t i = 0;
 			for (const auto& entry : correspondingEntries) {
 				conflictEntries1.emplace_back(sqindex::pair_hash_with_text_locator{
@@ -860,6 +878,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.PathHash = pairHash.first,
 					.Locator = entry->locator(),
 					.ConflictIndex = i++,
+					.FullPath = {},
 				});
 				const auto& path = entry->path_spec().text();
 				strncpy_s(conflictEntries1.back().FullPath, path.c_str(), path.size());
@@ -871,15 +890,16 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 		.PathHash = sqindex::pair_hash_with_text_locator::EndOfList,
 		.Locator = 0,
 		.ConflictIndex = sqindex::pair_hash_with_text_locator::EndOfList,
+		.FullPath = {},
 	});
 
 	std::vector<sqindex::full_hash_locator> fileEntries2;
 	std::vector<sqindex::full_hash_with_text_locator> conflictEntries2;
 	for (const auto& [fullHash, correspondingEntries] : fullHashes) {
 		if (correspondingEntries.size() == 1) {
-			fileEntries2.emplace_back(sqindex::full_hash_locator{fullHash, correspondingEntries.front()->locator()});
+			fileEntries2.emplace_back(sqindex::full_hash_locator{.FullPathHash = fullHash, .Locator = correspondingEntries.front()->locator()});
 		} else {
-			fileEntries2.emplace_back(sqindex::full_hash_locator{fullHash, sqindex::data_locator::Synonym()});
+			fileEntries2.emplace_back(sqindex::full_hash_locator{.FullPathHash = fullHash, .Locator = sqindex::data_locator::Synonym()});
 			uint32_t i = 0;
 			for (const auto& entry : correspondingEntries) {
 				conflictEntries2.emplace_back(sqindex::full_hash_with_text_locator{
@@ -887,6 +907,7 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 					.UnusedHash = 0,
 					.Locator = entry->locator(),
 					.ConflictIndex = i++,
+					.FullPath = {},
 				});
 				const auto& path = entry->path_spec().text();
 				strncpy_s(conflictEntries2.back().FullPath, path.c_str(), path.size());
@@ -898,15 +919,16 @@ void xivres::sqpack::generator::export_to_files(const std::filesystem::path& dir
 		.UnusedHash = sqindex::full_hash_with_text_locator::EndOfList,
 		.Locator = 0,
 		.ConflictIndex = sqindex::full_hash_with_text_locator::EndOfList,
+		.FullPath = {},
 	});
 
 	auto indexData = export_index_file_data<sqindex::sqindex_type::Index, sqindex::pair_hash_locator, sqindex::pair_hash_with_text_locator, true>(
 		dataSubheaders.size(), std::move(fileEntries1), conflictEntries1, m_sqpackIndexSegment3, std::vector<sqindex::path_hash_locator>(), strict);
-	std::ofstream(dir / std::format("{}.win32.index", DatName), std::ios::binary).write(reinterpret_cast<const char*>(indexData.data()), indexData.size());
+	std::ofstream(dir / std::format("{}.win32.index", DatName), std::ios::binary).write(reinterpret_cast<const char*>(indexData.data()), static_cast<std::streamsize>(indexData.size()));
 
 	indexData = export_index_file_data<sqindex::sqindex_type::Index, sqindex::full_hash_locator, sqindex::full_hash_with_text_locator, false>(
 		dataSubheaders.size(), std::move(fileEntries2), conflictEntries2, m_sqpackIndex2Segment3, std::vector<sqindex::path_hash_locator>(), strict);
-	std::ofstream(dir / std::format("{}.win32.index2", DatName), std::ios::binary).write(reinterpret_cast<const char*>(indexData.data()), indexData.size());
+	std::ofstream(dir / std::format("{}.win32.index2", DatName), std::ios::binary).write(reinterpret_cast<const char*>(indexData.data()), static_cast<std::streamsize>(indexData.size()));
 }
 
 std::unique_ptr<xivres::default_base_stream> xivres::sqpack::generator::get(const path_spec& pathSpec) const {

@@ -44,7 +44,7 @@ std::vector<uint8_t> xivres::sound::reader::get_header_bytes(const stream& strm)
 	res.resize(static_cast<size_t>((std::min<uint64_t>)(InitialBufferSize, strm.size())));
 	strm.read_fully(0, std::span(res));
 
-	const auto& header = *reinterpret_cast<sound::header*>(&res[0]);
+	const auto& header = *reinterpret_cast<sound::header*>(res.data());
 	if (header.HeaderSize != sizeof header)
 		throw std::invalid_argument("invalid HeaderSize");
 
@@ -58,13 +58,13 @@ std::vector<uint8_t> xivres::sound::reader::get_header_bytes(const stream& strm)
 xivres::sound::reader::reader(std::shared_ptr<stream> strm)
 	: m_stream(std::move(strm))
 	, m_headerBuffer(get_header_bytes(*m_stream))
-	, m_header(*reinterpret_cast<const header*>(&m_headerBuffer[0]))
+	, m_header(*reinterpret_cast<const header*>(m_headerBuffer.data()))
 	, m_offsets(*reinterpret_cast<const offsets*>(&m_headerBuffer[m_header.HeaderSize]))
 	, m_offsetsTable1(util::span_cast<uint32_t>(m_headerBuffer, m_header.HeaderSize + sizeof m_offsets, m_offsets.Table1And4EntryCount))
 	, m_offsetsTable2(util::span_cast<uint32_t>(m_headerBuffer, m_offsets.Table2Offset, m_offsets.Table2EntryCount))
 	, m_soundEntryOffsets(util::span_cast<uint32_t>(m_headerBuffer, m_offsets.SoundEntryOffset, m_offsets.SoundEntryCount))
 	, m_offsetsTable4(util::span_cast<uint32_t>(m_headerBuffer, m_offsets.Table4Offset, m_offsets.Table1And4EntryCount))
-	, m_offsetsTable5(util::span_cast<uint32_t>(m_headerBuffer, m_offsets.Table5Offset, (m_headerBuffer.size() - m_offsets.Table5Offset), 1))
+	, m_offsetsTable5(util::span_cast<uint32_t>(m_headerBuffer, m_offsets.Table5Offset, m_headerBuffer.size() - m_offsets.Table5Offset, 1))
 	, m_endOfSoundEntries(m_header.FileSize)
 	, m_endOfTable5(!m_soundEntryOffsets.empty() && m_soundEntryOffsets.front() ? m_soundEntryOffsets.front() : m_endOfSoundEntries)
 	, m_endOfTable2(!m_offsetsTable5.empty() && m_offsetsTable5.front() ? m_offsetsTable5.front() : m_endOfTable5)
@@ -86,7 +86,7 @@ std::vector<uint32_t> xivres::sound::reader::sound_item::marked_sample_block_ind
 }
 
 const xivres::sound::wave_format_ex& xivres::sound::reader::sound_item::get_wav_header() const {
-	const auto& header = *reinterpret_cast<const wave_format_ex*>(&ExtraData[0]);
+	const auto& header = *reinterpret_cast<const wave_format_ex*>(ExtraData.data());
 	if (sizeof header + header.cbSize != ExtraData.size_bytes())
 		throw std::invalid_argument("invalid OggSeekTableHeader size");
 	return header;
@@ -130,7 +130,7 @@ const xivres::sound::sound_entry_ogg_header& xivres::sound::reader::sound_item::
 		throw std::invalid_argument("Not ogg");
 	if (ExtraData.size_bytes() < sizeof sound_entry_ogg_header)
 		throw std::invalid_argument("ExtraData too small to fit OggSeekTableHeader");
-	const auto& header = *reinterpret_cast<sound_entry_ogg_header*>(&ExtraData[0]);
+	const auto& header = *reinterpret_cast<sound_entry_ogg_header*>(ExtraData.data());
 	if (header.HeaderSize != sizeof header)
 		throw std::invalid_argument("invalid OggSeekTableHeader size");
 	return header;
@@ -172,11 +172,11 @@ xivres::sound::reader::sound_item xivres::sound::reader::read_sound_item(size_t 
 
 	sound_item res{};
 	res.Buffer = read_entry(m_soundEntryOffsets, m_endOfSoundEntries, static_cast<uint32_t>(entryIndex));
-	res.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]);
+	res.Header = reinterpret_cast<sound_entry_header*>(res.Buffer.data());
 	
 	if (const auto minSize = sizeof *res.Header + res.Header->StreamOffset + res.Header->StreamSize; res.Buffer.size() < minSize) {
 		res.Buffer.resize(minSize);	
-		res.Header = reinterpret_cast<sound_entry_header*>(&res.Buffer[0]);
+		res.Header = reinterpret_cast<sound_entry_header*>(res.Buffer.data());
 	}
 
 	auto pos = sizeof *res.Header;
@@ -219,12 +219,12 @@ void xivres::sound::writer::sound_item::export_to(std::vector<uint8_t>& res) con
 void xivres::sound::writer::sound_item::set_mark_chunks(uint32_t loopStartSampleBlockIndex, uint32_t loopEndSampleBlockIndex, std::span<const uint32_t> marks) {
 	auto& buf = AuxChunks[std::string(sound_entry_aux_chunk::Name_Mark, sizeof(sound_entry_aux_chunk::Name_Mark))];
 	buf.resize(12 + marks.size_bytes());
-	auto& markHeader = *reinterpret_cast<sound_entry_aux_chunk::mark_chunk_data*>(&buf[0]);
+	auto& markHeader = *reinterpret_cast<sound_entry_aux_chunk::mark_chunk_data*>(buf.data());
 	markHeader.LoopStartSampleBlockIndex = loopStartSampleBlockIndex;
 	markHeader.LoopEndSampleBlockIndex = loopEndSampleBlockIndex;
 	markHeader.Count = static_cast<uint32_t>(marks.size());
 	if (!marks.empty())
-		memcpy(&buf[12], &marks[0], marks.size_bytes());
+		memcpy(&buf[12], marks.data(), marks.size_bytes());
 }
 
 xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_reader_sound_item(const reader::sound_item& item) {
@@ -251,8 +251,18 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_empty(
 	if (!duration) {
 		return {
 			.Header = {
+				.StreamSize = 0,
+				.ChannelCount = 0,
+				.SamplingRate = 0,
 				.Format = sound_entry_format::Empty,
+				.LoopStartOffset = 0,
+				.LoopEndOffset = 0,
+				.StreamOffset = 0,
+				.Flags = sound_entry_flags::None,
 			},
+			.AuxChunks = {},
+			.ExtraData = {},
+			.Data = {},
 		};
 	}
 
@@ -263,7 +273,13 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_empty(
 			.ChannelCount = 1,
 			.SamplingRate = 44100,
 			.Format = sound_entry_format::WaveFormatPcm,
+			.LoopStartOffset = 0,
+			.LoopEndOffset = 0,
+			.StreamOffset = 0,
+			.Flags = sound_entry_flags::None,
 		},
+		.AuxChunks = {},
+		.ExtraData = {},
 		.Data = std::vector<uint8_t>(blankLength),
 	};
 }
@@ -283,7 +299,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 	const auto seekTableSpan = util::span_cast<uint8_t>(seekTable);
 	oggHeaderBytes.insert(oggHeaderBytes.end(), seekTableSpan.begin(), seekTableSpan.end());
 	oggHeaderBytes.insert(oggHeaderBytes.end(), headerPages.begin(), headerPages.end());
-	auto& oggHeader = *reinterpret_cast<sound_entry_ogg_header*>(&oggHeaderBytes[0]);
+	auto& oggHeader = *reinterpret_cast<sound_entry_ogg_header*>(oggHeaderBytes.data());
 	oggHeader.Version = 0x02;
 	oggHeader.HeaderSize = 0x20;
 	oggHeader.SeekTableSize = static_cast<uint32_t>(seekTableSpan.size_bytes());
@@ -299,6 +315,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_o
 			.StreamOffset = static_cast<uint32_t>(oggHeaderBytes.size()),
 			.Flags = sound_entry_flags::None,
 		},
+		.AuxChunks = {},
 		.ExtraData = std::move(oggHeaderBytes),
 		.Data = std::move(dataPages),
 	};
@@ -321,7 +338,7 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 		auto r = reader(hdr.WaveFormatExSize, true);
 		wfbuf.insert(wfbuf.end(), r.begin(), r.end());
 	}
-	auto& wfex = *reinterpret_cast<wave_format_ex*>(&wfbuf[0]);
+	auto& wfex = *reinterpret_cast<wave_format_ex*>(wfbuf.data());
 
 	auto pos = sizeof hdr + hdr.WaveFormatExSize;
 	while (pos - 8 < hdr.RemainingSize) {
@@ -366,11 +383,11 @@ xivres::sound::writer::sound_item xivres::sound::writer::sound_item::make_from_w
 }
 
 const xivres::sound::wave_format_ex& xivres::sound::writer::sound_item::as_wave_format_ex() const {
-	return *reinterpret_cast<const wave_format_ex*>(&ExtraData[0]);
+	return *reinterpret_cast<const wave_format_ex*>(ExtraData.data());
 }
 
 xivres::sound::wave_format_ex& xivres::sound::writer::sound_item::as_wave_format_ex() {
-	return *reinterpret_cast<wave_format_ex*>(&ExtraData[0]);
+	return *reinterpret_cast<wave_format_ex*>(ExtraData.data());
 }
 
 std::vector<uint8_t> xivres::sound::writer::export_to_bytes() const {
@@ -430,10 +447,10 @@ std::vector<uint8_t> xivres::sound::writer::export_to_bytes() const {
 		.HeaderSize = sizeof header,
 		.FileSize = static_cast<uint32_t>(requiredSize),
 	};
-	memcpy(reinterpret_cast<header*>(&res[0])->SedbSignature,
+	memcpy(reinterpret_cast<header*>(res.data())->SedbSignature,
 			header::SedbSignature_Value,
 			sizeof(header::SedbSignature_Value));
-	memcpy(reinterpret_cast<header*>(&res[0])->SscfSignature,
+	memcpy(reinterpret_cast<header*>(res.data())->SscfSignature,
 			header::SscfSignature_Value,
 			sizeof(header::SscfSignature_Value));
 

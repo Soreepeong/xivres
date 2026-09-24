@@ -22,7 +22,7 @@ std::shared_ptr<xivres::texture::stream> xivres::texture::mipmap_stream::to_sing
 	return res;
 }
 
-xivres::texture::wrapped_mipmap_stream::wrapped_mipmap_stream(header header, size_t mipmapIndex, std::shared_ptr<const stream> underlying)
+xivres::texture::wrapped_mipmap_stream::wrapped_mipmap_stream(const header& header, size_t mipmapIndex, std::shared_ptr<const stream> underlying)
 	: mipmap_stream(
 		(std::max)(1, header.Width >> mipmapIndex),
 		(std::max)(1, header.Height >> mipmapIndex),
@@ -143,7 +143,6 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 		{
 			if (cbSource < pixelCount * sizeof(util::r16g16b16a16f))
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(b8g8r8a8view));
 			const auto view = util::span_cast<util::r16g16b16a16f>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
@@ -158,7 +157,6 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 		{
 			if (cbSource < pixelCount * sizeof(util::r32g32b32a32f))
 				throw std::runtime_error("Truncated data detected");
-			strm.read_fully(0, std::span(b8g8r8a8view));
 			const auto view = util::span_cast<util::r32g32b32a32f>(buf8);
 			while (const auto len = static_cast<uint32_t>((std::min<uint64_t>)(cbSource - read, sizeof buf8))) {
 				strm.read_fully(read, buf8, len);
@@ -180,7 +178,7 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 					DecompressBlockDXT1(
 						pos / 2 % strm.Width,
 						pos / 2 / strm.Width * 4,
-						strm.Width, &buf8[i], &b8g8r8a8view[0]);
+						strm.Width, &buf8[i], b8g8r8a8view.data());
 				}
 			}
 			break;
@@ -194,16 +192,18 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 				strm.read_fully(read, buf8, len);
 				read += len;
 				for (size_t i = 0, count = len; i < count; i += 16, pos += 16) {
+					const auto x = pos / 4 % strm.Width;
+					const auto y = pos / 4 / strm.Width * 4;
 					DecompressBlockDXT1(
-						pos / 4 % strm.Width,
-						pos / 4 / strm.Width * 4,
-						strm.Width, &buf8[i], &b8g8r8a8view[0]);
+						static_cast<uint32_t>(x),
+						static_cast<uint32_t>(y),
+						strm.Width, &buf8[i + 8], b8g8r8a8view.data());
 					for (size_t dy = 0; dy < 4; dy += 1) {
 						for (size_t dx = 0; dx < 4; dx += 2) {
-							auto& native1 = b8g8r8a8view[dy * strm.Width + dx];
+							auto& native1 = b8g8r8a8view[(y + dy) * strm.Width + x + dx];
 							native1 = util::b8g8r8a8(native1.R, native1.G, native1.B, 17 * (buf8[i + dy * 2 + dx / 2] & 0xF));
 
-							auto& native2 = b8g8r8a8view[dy * strm.Width + dx + 1];
+							auto& native2 = b8g8r8a8view[(y + dy) * strm.Width + x + dx + 1];
 							native2 = util::b8g8r8a8(native2.R, native2.G, native2.B, 17 * (buf8[i + dy * 2 + dx / 2] >> 4));
 						}
 					}
@@ -223,7 +223,7 @@ std::shared_ptr<xivres::texture::memory_mipmap_stream> xivres::texture::memory_m
 					DecompressBlockDXT5(
 						pos / 4 % strm.Width,
 						pos / 4 / strm.Width * 4,
-						strm.Width, &buf8[i], &b8g8r8a8view[0]);
+						strm.Width, &buf8[i], b8g8r8a8view.data());
 				}
 			}
 			break;

@@ -14,7 +14,7 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 
 	struct State {
 		const stream& texStream;
-		std::shared_ptr<mipmap_stream> strm;
+		std::shared_ptr<mipmap_stream> strm{};
 
 		union {
 			struct {
@@ -23,47 +23,52 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 			};
 			BITMAPINFO bmi{};
 		};
-		std::wstring title;
-		int showmode;
-		int repeatIndex, mipmapIndex, depthIndex;
-		std::vector<uint8_t> buf;
-		std::vector<uint8_t> transparent;
-		bool closed;
+		std::wstring title{};
+		int showmode = 0;
+		int repeatIndex = 0, mipmapIndex = 0, depthIndex = 0;
+		std::vector<uint8_t> buf{};
+		std::vector<uint8_t> transparent{};
+		bool closed = false;
 
-		HWND hwnd;
+		HWND hwnd = nullptr;
 
-		POINT renderOffset;
+		POINT renderOffset{};
 
-		POINT down;
-		POINT downOrig;
-		bool dragging;
-		bool isLeft;
-		bool dragMoved;
-		int zoomFactor;
+		POINT down{};
+		POINT downOrig{};
+		bool dragging = false;
+		bool isLeft = false;
+		bool dragMoved = false;
+		int zoomFactor = 0;
 
 		bool refreshPending = false;
+
+		State(const stream& s, std::wstring t)
+			: texStream(s)
+			, title(std::move(t)) {
+		}
 
 		[[nodiscard]] auto GetZoom() const {
 			return std::pow(2, 1. * zoomFactor / WHEEL_DELTA / 8);
 		}
 
-		void LoadMipmap(int repeatIndex, int mipmapIndex, int depthIndex) {
-			this->repeatIndex = repeatIndex = (std::min)(texStream.repeat_count() - 1, (std::max)(0, repeatIndex));
-			this->mipmapIndex = mipmapIndex = (std::min)(texStream.mipmap_count() - 1, (std::max)(0, mipmapIndex));
-			this->depthIndex = depthIndex = (std::min)(DepthCount() - 1, (std::max)(0, depthIndex));
+		void LoadMipmap(int newRepeatIndex, int newMipmapIndex, int newDepthIndex) {
+			repeatIndex = (std::min)(texStream.repeat_count() - 1, (std::max)(0, newRepeatIndex));
+			mipmapIndex = (std::min)(texStream.mipmap_count() - 1, (std::max)(0, newMipmapIndex));
+			depthIndex = (std::min)(DepthCount() - 1, (std::max)(0, newDepthIndex));
 
 			strm = memory_mipmap_stream::as_argb8888(*texStream.mipmap_at(repeatIndex, mipmapIndex));
 			const auto planeSize = calc_raw_data_length(strm->Type, strm->Width, strm->Height, 1);
-			buf = strm->read_vector<uint8_t>(depthIndex * planeSize, planeSize);
+			buf = strm->read_vector<uint8_t>(static_cast<std::streamoff>(static_cast<size_t>(depthIndex) * planeSize), planeSize);
 			{
 				transparent = buf;
 				const auto w = static_cast<size_t>(strm->Width);
 				const auto h = static_cast<size_t>(strm->Height);
-				const auto view = std::span(reinterpret_cast<util::b8g8r8a8*>(&transparent[0]), w * h);
+				const auto view = std::span(reinterpret_cast<util::b8g8r8a8*>(transparent.data()), w * h);
 				for (size_t i = 0; i < h; ++i) {
 					for (size_t j = 0; j < w; ++j) {
 						auto& v = view[i * w + j];
-						auto bg = (i / 8 + j / 8) % 2 ? util::b8g8r8a8(255, 255, 255, 255) : util::b8g8r8a8(150, 150, 150, 255);
+						const auto bg = (i / 8 + j / 8) % 2 ? util::b8g8r8a8(255, 255, 255, 255) : util::b8g8r8a8(150, 150, 150, 255);
 						v.R = (v.R * v.A + bg.R * (255U - v.A)) / 255U;
 						v.G = (v.G * v.A + bg.G * (255U - v.A)) / 255U;
 						v.B = (v.B * v.A + bg.B * (255U - v.A)) / 255U;
@@ -118,22 +123,24 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 					for (auto& bitfield : bitfields)
 						reinterpret_cast<util::b8g8r8a8*>(&bitfield)->set_components(0, 0, 0, 255);
 					break;
+				default:
+					break;
 			}
-			StretchDIBits(hdc, renderOffset.x, renderOffset.y, dw, dh, 0, 0, strm->Width, strm->Height, showmode == 0 ? &transparent[0] : &buf[0], &bmi, DIB_RGB_COLORS, SRCCOPY);
+			StretchDIBits(hdc, renderOffset.x, renderOffset.y, dw, dh, 0, 0, strm->Width, strm->Height, showmode == 0 ? transparent.data() : buf.data(), &bmi, DIB_RGB_COLORS, SRCCOPY);
 			if (renderOffset.x > 0) {
-				const auto rt = RECT{ 0, clip.top, renderOffset.x, clip.bottom };
+				const auto rt = RECT{ .left = 0, .top = clip.top, .right = renderOffset.x, .bottom = clip.bottom };
 				FillRect(hdc, &rt, GetStockBrush(WHITE_BRUSH));
 			}
 			if (renderOffset.x + dw < wrt.right - wrt.left) {
-				const auto rt = RECT{ renderOffset.x + dw, clip.top, wrt.right - wrt.left, clip.bottom };
+				const auto rt = RECT{ .left = renderOffset.x + dw, .top = clip.top, .right = wrt.right - wrt.left, .bottom = clip.bottom };
 				FillRect(hdc, &rt, GetStockBrush(WHITE_BRUSH));
 			}
 			if (renderOffset.y > 0) {
-				const auto rt = RECT{ clip.left, 0, clip.right, renderOffset.y };
+				const auto rt = RECT{ .left = clip.left, .top = 0, .right = clip.right, .bottom = renderOffset.y };
 				FillRect(hdc, &rt, GetStockBrush(WHITE_BRUSH));
 			}
 			if (renderOffset.y + dh < wrt.bottom - wrt.top) {
-				const auto rt = RECT{ clip.left, renderOffset.y + dh, clip.right, wrt.bottom - wrt.top };
+				const auto rt = RECT{ .left = clip.left, .top = renderOffset.y + dh, .right = clip.right, .bottom = wrt.bottom - wrt.top };
 				FillRect(hdc, &rt, GetStockBrush(WHITE_BRUSH));
 			}
 			if (newdc)
@@ -141,7 +148,7 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 		}
 
 		void ChangeZoom(int newZoomFactor, int nmx, int nmy) {
-			POINT nm = { nmx, nmy };
+			POINT nm = { .x = nmx, .y = nmy };
 			ScreenToClient(hwnd, &nm);
 			const double mx = nm.x, my = nm.y;
 			const auto ox = (mx - renderOffset.x) / GetZoom();
@@ -161,14 +168,10 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 			GetClientRect(hwnd, &rt);
 			const auto zwidth = static_cast<int>(strm->Width * GetZoom());
 			const auto zheight = static_cast<int>(strm->Height * GetZoom());
-			if (renderOffset.x < rt.right - rt.left - Margin - zwidth)
-				renderOffset.x = rt.right - rt.left - Margin - zwidth;
-			if (renderOffset.x > Margin)
-				renderOffset.x = Margin;
-			if (renderOffset.y < rt.bottom - rt.top - Margin - zheight)
-				renderOffset.y = rt.bottom - rt.top - Margin - zheight;
-			if (renderOffset.y > Margin)
-				renderOffset.y = Margin;
+			renderOffset.x = (std::max)(renderOffset.x, rt.right - rt.left - Margin - zwidth);
+			renderOffset.x = (std::min)(renderOffset.x, static_cast<LONG>(Margin));
+			renderOffset.y = (std::max)(renderOffset.y, rt.bottom - rt.top - Margin - zheight);
+			renderOffset.y = (std::min)(renderOffset.y, static_cast<LONG>(Margin));
 			InvalidateRect(hwnd, nullptr, FALSE);
 			refreshPending = true;
 		}
@@ -194,16 +197,18 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 				case 5:
 					w += L" (Alpha)";
 					break;
+				default:
+					break;
 			}
 			SetWindowTextW(hwnd, w.c_str());
 		}
 
-		int DepthCount() const {
+		[[nodiscard]] int DepthCount() const {
 			return (std::max)(1, texStream.depth() / (1 << mipmapIndex));
 		}
-	} state{ .texStream = texStream, .title = std::move(title), };
+	} previewState(texStream, std::move(title));
 
-	state.LoadMipmap(0, 0, 0);
+	previewState.LoadMipmap(0, 0, 0);
 
 	WNDCLASSEXW wcex{};
 	wcex.cbSize = sizeof(WNDCLASSEX);
@@ -285,6 +290,8 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 							if (!state.refreshPending)
 								state.LoadMipmap(state.repeatIndex, state.mipmapIndex, (state.depthIndex + 1) % state.DepthCount());
 							return 0;
+						default:
+							break;
 					}
 					break;
 				}
@@ -296,7 +303,7 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 						state.dragging = true;
 						state.dragMoved = false;
 						state.isLeft = msg == WM_LBUTTONDOWN;
-						state.downOrig = { GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam) };
+						state.downOrig = { .x = GET_X_LPARAM(lParam), .y = GET_Y_LPARAM(lParam) };
 						ClientToScreen(hwnd, &state.downOrig);
 						if (state.isLeft) {
 							SetCursorPos(state.down.x = GetSystemMetrics(SM_CXSCREEN) / 2,
@@ -316,12 +323,12 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 						RECT rt;
 						GetClientRect(hwnd, &rt);
 
-						POINT screenCursorPos = { GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam) };
+						POINT screenCursorPos = { .x = GET_X_LPARAM(lParam), .y = GET_Y_LPARAM(lParam) };
 						ClientToScreen(hwnd, &screenCursorPos);
 
 						auto displaceX = screenCursorPos.x - state.down.x;
 						auto displaceY = screenCursorPos.y - state.down.y;
-						const auto speed = (state.isLeft ? 1 : 4);
+						const auto speed = state.isLeft ? 1 : 4;
 						if (!state.dragMoved) {
 							if (!displaceX && !displaceY)
 								return 0;
@@ -383,34 +390,38 @@ void xivres::texture::preview(const stream& texStream, std::wstring title) {
 				case WM_NCDESTROY:
 				{
 					state.closed = true;
+					break;
 				}
+
+				default:
+					break;
 			}
 		}
 		return DefWindowProcW(hwnd, msg, wParam, lParam);
 	};
 	RegisterClassExW(&wcex);
 
-	const auto unreg = util::on_dtor([&]() {
+	const auto unreg = util::on_dtor([&] {
 		UnregisterClassW(wcex.lpszClassName, wcex.hInstance);
 	});
 
-	RECT rc{ 0, 0, texStream.width(), texStream.height() };
+	RECT rc{ .left = 0, .top = 0, .right = texStream.width(), .bottom = texStream.height() };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	state.hwnd = CreateWindowExW(0, wcex.lpszClassName, state.title.c_str(), WS_OVERLAPPEDWINDOW,
+	previewState.hwnd = CreateWindowExW(0, wcex.lpszClassName, previewState.title.c_str(), WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		(std::max)(640L, (std::min)(1920L, rc.right - rc.left)),
 		(std::max)(480L, (std::min)(1080L, rc.bottom - rc.top)),
 		nullptr, nullptr, nullptr, nullptr);
-	if (!state.hwnd)
-		throw std::system_error(GetLastError(), std::system_category());
-	SetWindowLongPtrW(state.hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&state));
+	if (!previewState.hwnd)
+		throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
+	SetWindowLongPtrW(previewState.hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&previewState));
 
-	state.UpdateTitle();
-	ShowWindow(state.hwnd, SW_SHOW);
+	previewState.UpdateTitle();
+	ShowWindow(previewState.hwnd, SW_SHOW);
 
 	MSG msg{};
-	while (!state.closed && GetMessageW(&msg, nullptr, 0, 0)) {
-		if (msg.hwnd != state.hwnd && IsDialogMessageW(msg.hwnd, &msg))
+	while (!previewState.closed && GetMessageW(&msg, nullptr, 0, 0)) {
+		if (msg.hwnd != previewState.hwnd && IsDialogMessageW(msg.hwnd, &msg))
 			continue;
 		TranslateMessage(&msg);
 		DispatchMessageW(&msg);

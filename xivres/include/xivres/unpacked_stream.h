@@ -1,6 +1,8 @@
 #ifndef XIVRES_PACKEDFILEUNPACKINGSTREAM_H_
 #define XIVRES_PACKEDFILEUNPACKINGSTREAM_H_
 
+#include <utility>
+
 #include "packed_stream.h"
 #include "util.thread_pool.h"
 #include "util.zlib_wrapper.h"
@@ -24,7 +26,6 @@ namespace xivres {
 		class block_decoder {
 			static constexpr auto ReadBufferMaxSize = 16384;
 
-			base_unpacker& m_unpacker;
 			util::thread_pool::task_waiter<> m_waiter;
 			bool m_bMultithreaded = false;
 
@@ -34,7 +35,7 @@ namespace xivres {
 			uint32_t m_currentOffset;
 
 		public:
-			block_decoder(base_unpacker& unpacker, void* buf, std::streamsize length, std::streampos offset);
+			block_decoder(void* buf, std::streamsize length, std::streamoff offset);
 			block_decoder(block_decoder&&) = delete;
 			block_decoder(const block_decoder&) = delete;
 			block_decoder& operator=(block_decoder&&) = delete;
@@ -114,12 +115,12 @@ namespace xivres {
 				return 0;
 
 			const auto fullSize = *m_entryHeader.DecompressedSize;
-			if (offset >= fullSize)
+			if (std::cmp_greater_equal(offset, fullSize))
 				return 0;
 			if (offset + length > fullSize)
 				length = fullSize - offset;
 
-			auto read = m_decoder->read(offset, buf, length);
+			const auto read =m_decoder->read(offset, buf, length);
 			if (read != length)
 				std::fill_n(static_cast<char*>(buf) + read, length - read, 0);
 			return length;

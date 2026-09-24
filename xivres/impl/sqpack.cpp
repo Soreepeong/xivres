@@ -66,7 +66,7 @@ void xivres::sqpack::sqindex::header::verify_or_throw(sqindex_type expectedIndex
 		throw bad_data_error("Segment4.Count == 0");
 }
 
-void xivres::sqdata::header::verify_or_throw(uint32_t expectedSpanIndex) const {
+void xivres::sqdata::header::verify_or_throw(uint32_t /*expectedSpanIndex*/) const {
 	if (HeaderSize != sizeof header)
 		throw bad_data_error("sizeof IndexHeader != 0x400");
 	Sha1.verify(util::span_cast<char>(1, this).subspan(0, offsetof(xivres::sqdata::header, Sha1)), "IndexHeader SHA-1");

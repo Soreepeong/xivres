@@ -8,9 +8,8 @@
 #pragma warning(push)
 #pragma warning(disable: 26495)
 // ReSharper disable once CppPossiblyUninitializedMember
-xivres::base_unpacker::block_decoder::block_decoder(base_unpacker& unpacker, void* buf, std::streamsize length, std::streampos offset)  // NOLINT(cppcoreguidelines-pro-type-member-init)
-	: m_unpacker(unpacker)
-	, m_target(static_cast<uint8_t*>(buf), static_cast<size_t>(length))
+xivres::base_unpacker::block_decoder::block_decoder(void* buf, std::streamsize length, std::streamoff offset)  // NOLINT(cppcoreguidelines-pro-type-member-init)
+	: m_target(static_cast<uint8_t*>(buf), static_cast<size_t>(length))
 	, m_remaining(m_target)
 	, m_skipLength(static_cast<uint32_t>(offset))
 	, m_currentOffset(0) {
@@ -47,13 +46,13 @@ bool xivres::base_unpacker::block_decoder::skip_to(size_t offset, bool dataFille
 }
 
 bool xivres::base_unpacker::block_decoder::forward_copy(std::span<const uint8_t> data) {
-	const auto dataSize = static_cast<std::streamsize>(data.size());
+	const auto dataSize = data.size();
 
 	if (m_skipLength >= dataSize)
 		return skip(dataSize);
 
-	const auto available = (std::min)(m_remaining.size(), static_cast<size_t>(data.size() - m_skipLength));
-	const auto src = data.subspan(static_cast<size_t>(m_skipLength), available);
+	const auto available = (std::min)(m_remaining.size(), data.size() - m_skipLength);
+	const auto src = data.subspan(m_skipLength, available);
 	std::copy_n(src.begin(), available, m_remaining.begin());
 	return skip(m_skipLength + available, true);
 }
@@ -62,7 +61,7 @@ bool xivres::base_unpacker::block_decoder::forward_sqblock(std::span<const uint8
 	if (data.size() < sizeof(packed::block_header))
 		throw bad_data_error("Block read size < sizeof blockHeader");
 	
-	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
+	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(data.data());
 	data = data.subspan(0, blockHeader.total_block_size());
 
 	if (m_skipLength >= blockHeader.DecompressedSize)
@@ -81,7 +80,7 @@ bool xivres::base_unpacker::block_decoder::forward_sqblock(std::span<const uint8
 }
 
 void xivres::base_unpacker::block_decoder::decode_block_to(std::span<const uint8_t> data, std::span<uint8_t> target, size_t skip) const {
-	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(&data[0]);
+	const auto& blockHeader = *reinterpret_cast<const packed::block_header*>(data.data());
 	auto inflater = util::zlib_inflater::pooled();
 	if (!inflater || !inflater->is(-MAX_WBITS))
 		inflater.emplace(-MAX_WBITS);
@@ -90,7 +89,7 @@ void xivres::base_unpacker::block_decoder::decode_block_to(std::span<const uint8
 		const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), blockHeader.DecompressedSize);
 		if (buf.size_bytes() != blockHeader.DecompressedSize)
 			throw bad_data_error(std::format("Expected {} bytes, inflated to {} bytes", *blockHeader.DecompressedSize, buf.size_bytes()));
-		std::copy_n(&buf[static_cast<size_t>(skip)], target.size_bytes(), target.begin());
+		std::copy_n(&buf[skip],target.size_bytes(), target.begin());
 
 	} else {
 		const auto buf = (*inflater)(data.subspan(sizeof blockHeader, blockHeader.CompressedSize), target);

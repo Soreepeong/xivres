@@ -22,14 +22,14 @@ std::streamsize xivres::standard_unpacker::read(std::streamoff offset, void* buf
 	if (!length || m_blocks.empty())
 		return 0;
 
-	block_decoder info(*this, buf, length, offset);
-	
-	auto it = std::upper_bound(m_blocks.begin(), m_blocks.end(), static_cast<uint32_t>(offset));
+	block_decoder info(buf, length, offset);
+
+	auto it = std::ranges::upper_bound(m_blocks, static_cast<uint32_t>(offset), {}, &block_info::RequestOffset);
 	if (it != m_blocks.begin())
 		--it;
 
-	const auto itEnd = std::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length));
-	info.multithreaded(std::distance(it, itEnd) >= MinBlockCountForMultithreadedDecompression);
+	const auto itEnd = std::ranges::upper_bound(it, m_blocks.end(), static_cast<uint32_t>(offset + length), {}, &block_info::RequestOffset);
+	info.multithreaded(std::cmp_greater_equal(std::distance(it, itEnd), MinBlockCountForMultithreadedDecompression));
 
 	const auto preloadFrom = static_cast<std::streamoff>(it->BlockOffset);
 	const auto preloadTo = static_cast<std::streamoff>(itEnd == m_blocks.end() ? m_blocks.back().BlockOffset + m_blocks.back().BlockSize : itEnd->BlockOffset);

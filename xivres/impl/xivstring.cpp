@@ -25,7 +25,7 @@ std::unique_ptr<xivres::xivstring::xivexpr> xivres::xivstring::xivexpr::parse(st
 
 xivres::xivstring::xivpayload::xivpayload(std::string_view s)
 	: m_type(static_cast<xivpayload_type>(s.at(0))) {
-	auto length = xivexpr_uint32(s.substr(1));
+	const auto length = xivexpr_uint32(s.substr(1));
 	m_escaped = s.substr(0, 1 + length.size() + length.value());
 }
 
@@ -156,7 +156,7 @@ const std::vector<std::unique_ptr<xivres::xivstring::xivexpr>>& xivres::xivstrin
 	if (!m_expressions.empty() || m_escaped.empty())
 		return m_expressions;
 
-	auto length = xivexpr_uint32(std::string_view(m_escaped).substr(1));
+	const auto length = xivexpr_uint32(std::string_view(m_escaped).substr(1));
 
 	std::vector<std::unique_ptr<xivexpr>> expressions;
 	for (auto remaining = std::string_view(m_escaped).substr(1 + length.size()); !remaining.empty();) {
@@ -178,7 +178,7 @@ const std::string& xivres::xivstring::xivpayload::escape() const {
 		static_cast<void>(expr->encode(std::span(body).subspan(i)));
 	}
 
-	auto length = xivexpr_uint32(static_cast<uint32_t>(body.size()));
+	const auto length = xivexpr_uint32(static_cast<uint32_t>(body.size()));
 
 	std::string res;
 	res.reserve(1 + length.size() + length.value());
@@ -394,15 +394,27 @@ size_t xivres::xivstring::xivexpr_uint32::size() const {
 size_t xivres::xivstring::xivexpr_uint32::encode(std::span<char> s) const {
 	const auto res = util::span_cast<uint8_t>(s);
 	if (m_value < 0xCF) {
-		res[0] = m_value + 1;
+		res[0] = static_cast<uint8_t>(m_value + 1);
 		return 1;
 	} else {
 		res[0] = 0xF0;
 		size_t offset = 1;
-		if (const auto v = (0xFF & (m_value >> 24))) res[0] |= 8, res[offset++] = v;
-		if (const auto v = (0xFF & (m_value >> 16))) res[0] |= 4, res[offset++] = v;
-		if (const auto v = (0xFF & (m_value >> 8))) res[0] |= 2, res[offset++] = v;
-		if (const auto v = (0xFF & (m_value >> 0))) res[0] |= 1, res[offset++] = v;
+		if (const auto v = static_cast<uint8_t>(m_value >> 24)) {
+			res[0] |= 8;
+			res[offset++] = v;
+		}
+		if (const auto v = static_cast<uint8_t>(m_value >> 16)) {
+			res[0] |= 4;
+			res[offset++] = v;
+		}
+		if (const auto v = static_cast<uint8_t>(m_value >> 8)) {
+			res[0] |= 2;
+			res[offset++] = v;
+		}
+		if (const auto v = static_cast<uint8_t>(m_value)) {
+			res[0] |= 1;
+			res[offset++] = v;
+		}
 		res[0] -= 1;
 		return offset;
 	}
@@ -474,9 +486,9 @@ std::string xivres::xivstring::xivexpr_param::repr() const {
 		case xivexpr_type::Xde:
 		case xivexpr_type::Xdf:
 		case xivexpr_type::Xec:
-			return std::format("<expr type=\"Param\">unknown:0x{:02}</expr>", static_cast<int>(m_type));
+			return std::format("<expr type=\"Param\">unknown:0x{:02x}</expr>", static_cast<int>(m_type));
 		default:
-			return std::format("<expr type=\"Param\">invalid:0x{:02}</expr>", static_cast<int>(m_type));
+			return std::format("<expr type=\"Param\">invalid:0x{:02x}</expr>", static_cast<int>(m_type));
 	}
 }
 
@@ -527,7 +539,7 @@ std::string xivres::xivstring::xivexpr_unary::repr() const {
 			res = "<expr type=\"ObjectParam\">";
 			break;
 		default:
-			res = std::format("<expr type=\"InvalidParam:0x{:02}\">", static_cast<int>(m_type));
+			res = std::format("<expr type=\"InvalidParam:0x{:02x}\">", static_cast<int>(m_type));
 	}
 	res += m_operand->repr();
 	res += "</expr>";
@@ -594,7 +606,7 @@ std::string xivres::xivstring::xivexpr_binary::repr() const {
 			res = "<expr type=\"ne\">";
 			break;
 		default:
-			res = std::format("<expr type=\"InvalidBinary:0x{:02}\">", static_cast<int>(m_type));
+			res = std::format("<expr type=\"InvalidBinary:0x{:02x}\">", static_cast<int>(m_type));
 	}
 	res += m_operand1->repr();
 	res += m_operand2->repr();

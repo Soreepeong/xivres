@@ -112,7 +112,7 @@ namespace xivres::sqpack {
 
 		class sqpack_view_entry_cache {
 		public:
-			static constexpr uint64_t MaxBufferedEntrySize = (INTPTR_MAX == INT64_MAX ? 1024 : 64) * 1048576;
+			static constexpr uint64_t MaxBufferedEntrySize = (INTPTR_MAX == INT64_MAX ? 1024ULL : 64ULL) * 1048576;
 			static constexpr std::chrono::seconds ReaderTimeout{30};
 			static constexpr std::chrono::seconds StreamMinimumHold{15};
 

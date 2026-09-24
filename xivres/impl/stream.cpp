@@ -3,6 +3,8 @@
 #include <Windows.h>
 #endif
 
+#include <utility>
+
 #include "../include/xivres/stream.h"
 #include "../include/xivres/util.thread_pool.h"
 
@@ -79,7 +81,7 @@ struct xivres::file_stream::data {
 	[[nodiscard]] std::streamsize size() const {
 		LARGE_INTEGER fs{};
 		GetFileSizeEx(m_hFile, &fs);
-		return static_cast<std::streamsize>(fs.QuadPart);
+		return fs.QuadPart;
 	}
 
 	std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const {
@@ -90,7 +92,7 @@ struct xivres::file_stream::data {
 				const auto toRead = static_cast<DWORD>((std::min<int64_t>)(ChunkSize, length - i));
 				const auto r = read(offset + i, static_cast<char*>(buf) + i, toRead);
 				totalRead += r;
-				if (r != toRead)
+				if (std::cmp_not_equal(r, toRead))
 					break;
 			}
 			return static_cast<std::streamsize>(totalRead);
@@ -220,10 +222,11 @@ xivres::memory_stream::memory_stream(std::span<const uint8_t> view)
 }
 
 xivres::memory_stream::memory_stream(memory_stream&& r) noexcept {
-	std::swap(*this, r);
+	swap(*this, r);
 }
 
-xivres::memory_stream::memory_stream(const memory_stream& r) {
+xivres::memory_stream::memory_stream(const memory_stream& r)
+	: default_base_stream(r) {
 	m_buffer = r.m_buffer;
 	if (r.owns_data())
 		m_view = {m_buffer};
@@ -251,7 +254,7 @@ std::streamsize xivres::memory_stream::size() const {
 }
 
 std::streamsize xivres::memory_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (offset >= static_cast<std::streamoff>(m_view.size()))
+	if (std::cmp_greater_equal(offset, m_view.size()))
 		return 0;
 	if (offset + length > static_cast<std::streamoff>(m_view.size()))
 		length = static_cast<std::streamsize>(m_view.size() - offset);

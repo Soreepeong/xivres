@@ -29,10 +29,10 @@ namespace xivres::util {
 }
 
 template<>
-struct std::formatter<xivres::util::module_relative, char> : std::formatter<std::basic_string<char>, char> {
+struct std::formatter<xivres::util::module_relative, char> : std::formatter<std::string> {
 	template<class FormatContext>
 	auto format(const xivres::util::module_relative& t, FormatContext& fc) const {
-		return std::formatter<std::basic_string<char>, char>::format(t.to_string(), fc);
+		return std::formatter<std::string>::format(t.to_string(), fc);
 	}
 };
 

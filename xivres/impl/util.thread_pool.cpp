@@ -40,7 +40,7 @@ xivres::util::thread_pool::base_task* xivres::util::thread_pool::pool::current_t
 }
 
 void xivres::util::thread_pool::pool::concurrency(size_t newConcurrency) {
-	std::lock_guard lock(*m_pmtxTask);
+	std::scoped_lock lock(*m_pmtxTask);
 	m_nConcurrency = newConcurrency;
 	m_cvTask.notify_one();
 }
@@ -54,7 +54,7 @@ bool xivres::util::thread_pool::base_task::operator<(const base_task& r) const {
 }
 
 xivres::util::on_dtor xivres::util::thread_pool::pool::release_working_status() {
-	std::lock_guard lock(*m_pmtxTask);
+	std::scoped_lock lock(*m_pmtxTask);
 	if (!m_mapThreads.contains(std::this_thread::get_id()))
 		return {};
 
@@ -64,8 +64,8 @@ xivres::util::on_dtor xivres::util::thread_pool::pool::release_working_status() 
 }
 
 void xivres::util::thread_pool::pool::worker_body() {
-	std::shared_ptr pmtxTask(m_pmtxTask);
-	std::shared_ptr pmtxThread(m_pmtxThread);
+	const std::shared_ptr pmtxTask(m_pmtxTask);
+	const std::shared_ptr pmtxThread(m_pmtxThread);
 	std::unique_lock taskLock(*pmtxTask);
 	std::unique_lock threadLock(*pmtxThread);
 
@@ -120,6 +120,6 @@ void xivres::util::thread_pool::pool::dispatch_task_to_worker() {
 }
 
 xivres::util::thread_pool::object_pool<std::vector<uint8_t>>::scoped_pooled_object xivres::util::thread_pool::pooled_byte_buffer() {
-	static object_pool<std::vector<uint8_t>> s_pool([](size_t c, std::vector<uint8_t>& buf) { return c / 2 < std::thread::hardware_concurrency() && buf.size() < 1048576; });
+	static object_pool<std::vector<uint8_t>> s_pool([](size_t c, const std::vector<uint8_t>& buf) { return c / 2 < std::thread::hardware_concurrency() && buf.size() < 1048576; });
 	return *s_pool;
 }

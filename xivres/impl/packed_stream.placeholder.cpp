@@ -22,7 +22,7 @@ std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, v
 	auto relativeOffset = offset;
 	auto out = std::span(static_cast<char*>(buf), static_cast<size_t>(length));
 
-	if (relativeOffset < sizeof m_header) {
+	if (std::cmp_less(relativeOffset, sizeof m_header)) {
 		const auto src = util::span_cast<uint8_t>(1, &m_header).subspan(static_cast<size_t>(relativeOffset));
 		const auto available = (std::min)(out.size_bytes(), src.size_bytes());
 		std::copy_n(src.begin(), available, out.begin());
@@ -47,7 +47,7 @@ std::streamsize xivres::placeholder_packed_stream::read(std::streamoff offset, v
 	if (const auto dataSize = m_stream ? m_stream->size() : 0) {
 		if (relativeOffset < dataSize) {
 			const auto available = (std::min)(out.size_bytes(), static_cast<size_t>(dataSize - relativeOffset));
-			m_stream->read_fully(relativeOffset, &out[0], static_cast<std::streamsize>(available));
+			m_stream->read_fully(relativeOffset, out.data(),static_cast<std::streamsize>(available));
 			out = out.subspan(available);
 			relativeOffset = 0;
 

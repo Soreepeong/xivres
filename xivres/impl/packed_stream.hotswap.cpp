@@ -1,5 +1,7 @@
 #include "../include/xivres/packed_stream.hotswap.h"
 
+#include <utility>
+
 xivres::hotswap_packed_stream::hotswap_packed_stream(const xivres::path_spec& pathSpec, uint32_t reservedSize, std::shared_ptr<const packed_stream> strm)
 	: packed_stream(pathSpec)
 	, m_reservedSize(align(reservedSize))
@@ -25,7 +27,7 @@ std::streamsize xivres::hotswap_packed_stream::size() const {
 }
 
 std::streamsize xivres::hotswap_packed_stream::read(std::streamoff offset, void* buf, std::streamsize length) const {
-	if (offset >= m_reservedSize)
+	if (std::cmp_greater_equal(offset, m_reservedSize))
 		return 0;
 	if (offset + length > m_reservedSize)
 		length = m_reservedSize - offset;
@@ -37,7 +39,7 @@ std::streamsize xivres::hotswap_packed_stream::read(std::streamoff offset, void*
 
 	if (offset < underlyingStreamLength) {
 		const auto dataTarget = target.subspan(0, static_cast<size_t>(dataLength));
-		const auto readLength = static_cast<size_t>(underlyingStream.read(offset, &dataTarget[0], dataTarget.size_bytes()));
+		const auto readLength = static_cast<size_t>(underlyingStream.read(offset, dataTarget.data(), static_cast<std::streamsize>(dataTarget.size_bytes())));
 		if (readLength != dataTarget.size_bytes())
 			throw std::logic_error("HotSwappableEntryProvider underlying data read fail");
 		target = target.subspan(readLength);
@@ -52,5 +54,5 @@ void xivres::hotswap_packed_stream::hold_until(std::chrono::steady_clock::time_p
 }
 
 xivres::packed::type xivres::hotswap_packed_stream::get_packed_type() const {
-	return m_stream ? m_stream->get_packed_type() : (m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type());
+	return m_stream ? m_stream->get_packed_type() : m_baseStream ? m_baseStream->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }

@@ -10,42 +10,42 @@ namespace xivres::util {
 		T Value;
 		char Bytes[sizeof(T)];
 
-		static byte_order_storage<T> from_without_swap(T value) {
-			return byte_order_storage<T>(value);
+		static byte_order_storage from_without_swap(T value) {
+			return { .Value = value };
 		}
 
-		static T to_without_swap(byte_order_storage<T> storage) {
+		static T to_without_swap(byte_order_storage storage) {
 			return storage.Value;
 		}
 
-		static byte_order_storage<T> from_with_swap(T value);
+		static byte_order_storage from_with_swap(T value);
 
-		static T to_with_swap(byte_order_storage<T> storage);
+		static T to_with_swap(byte_order_storage storage);
 	};
 
 	template<typename T>
-	inline byte_order_storage<T> byte_order_storage<T>::from_with_swap(T value) {
+	byte_order_storage<T> byte_order_storage<T>::from_with_swap(T value) {
 		if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
-			return byte_order_storage<T>(value);
+			return { .Value = value };
 
 		else if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t>)
-			return byte_order_storage<T>(static_cast<T>(_byteswap_ushort(static_cast<uint16_t>(value))));
+			return { .Value = static_cast<T>(_byteswap_ushort(static_cast<uint16_t>(value))) };
 
 		else if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t>)
-			return byte_order_storage<T>(static_cast<T>(_byteswap_ulong(static_cast<uint32_t>(value))));
+			return { .Value = static_cast<T>(_byteswap_ulong(static_cast<uint32_t>(value))) };
 
 		else if constexpr (std::is_same_v<T, uint64_t> || std::is_same_v<T, int64_t>)
-			return byte_order_storage<T>(static_cast<T>(_byteswap_uint64(static_cast<uint64_t>(value))));
+			return { .Value = static_cast<T>(_byteswap_uint64(static_cast<uint64_t>(value))) };
 
 		else {
-			auto storage = byte_order_storage(value);
+			byte_order_storage storage{ .Value = value };
 			std::reverse(storage.Bytes, storage.Bytes + sizeof(T));
 			return storage;
 		}
 	}
 
 	template<typename T>
-	inline T byte_order_storage<T>::to_with_swap(byte_order_storage<T> storage) {
+	T byte_order_storage<T>::to_with_swap(byte_order_storage storage) {
 		if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
 			return storage.Value;
 
@@ -74,67 +74,67 @@ namespace xivres::util {
 			: Storage(FromNative(defaultValue)) {
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator=(T newValue) {
+		byte_order_base& operator=(T newValue) {
 			Storage = FromNative(newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator+=(T newValue) {
+		byte_order_base& operator+=(T newValue) {
 			Storage = FromNative(ToNative(Storage) + newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator-=(T newValue) {
+		byte_order_base& operator-=(T newValue) {
 			Storage = FromNative(ToNative(Storage) - newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator*=(T newValue) {
+		byte_order_base& operator*=(T newValue) {
 			Storage = FromNative(ToNative(Storage) * newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator/=(T newValue) {
+		byte_order_base& operator/=(T newValue) {
 			Storage = FromNative(ToNative(Storage) / newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator%=(T newValue) {
+		byte_order_base& operator%=(T newValue) {
 			Storage = FromNative(ToNative(Storage) % newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator&=(T newValue) {
+		byte_order_base& operator&=(T newValue) {
 			Storage = FromNative(ToNative(Storage) & newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator|=(T newValue) {
+		byte_order_base& operator|=(T newValue) {
 			Storage = FromNative(ToNative(Storage) | newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator^=(T newValue) {
+		byte_order_base& operator^=(T newValue) {
 			Storage = FromNative(ToNative(Storage) ^ newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator<<=(T newValue) {
+		byte_order_base& operator<<=(T newValue) {
 			Storage = FromNative(ToNative(Storage) << newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator>>=(T newValue) {
+		byte_order_base& operator>>=(T newValue) {
 			Storage = FromNative(ToNative(Storage) >> newValue);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator++() {
+		byte_order_base& operator++() {
 			Storage = FromNative(ToNative(Storage) + 1);
 			return *this;
 		}
 
-		byte_order_base<T, FromNative, ToNative>& operator--() {
+		byte_order_base& operator--() {
 			Storage = FromNative(ToNative(Storage) - 1);
 			return *this;
 		}
