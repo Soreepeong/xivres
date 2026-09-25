@@ -29,6 +29,9 @@ namespace xivres {
 		void hold_until(std::chrono::steady_clock::time_point until) const override;
 
 		void close();
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override { return {m_path}; }
 	};
 }
 

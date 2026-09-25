@@ -115,6 +115,11 @@ xivres::packed::type xivres::sqpack::generator::entry_info::get_packed_type() co
 	return current ? current->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }
 
+xivres::stream_source xivres::sqpack::generator::entry_info::source_impl() const {
+	const auto current = current_stream();
+	return current ? current->source() : stream_source{};
+}
+
 xivres::sqpack::generator::add_result& xivres::sqpack::generator::add_result::operator+=(add_result& r) {
 	Added.insert(Added.end(), r.Added.begin(), r.Added.end());
 	Replaced.insert(Replaced.end(), r.Replaced.begin(), r.Replaced.end());

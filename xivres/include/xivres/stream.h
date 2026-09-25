@@ -7,8 +7,10 @@
 #include <mutex>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "util.span_cast.h"
+#include "util.tag_holder.h"
 
 namespace xivres {
 	class partial_view_stream;
@@ -16,8 +18,33 @@ namespace xivres {
 	template<typename T>
 	using linear_reader = std::function<std::span<T>(size_t len, bool throwOnIncompleteRead)>;
 
-	class stream {
+	struct stream_source {
+		std::filesystem::path Path;
+		std::streamoff Offset = 0;
+		std::vector<util::tag_set> Tags;
+
+		template<typename T>
+		[[nodiscard]] std::shared_ptr<const T> find_tag() const {
+			for (auto it = Tags.rbegin(); it != Tags.rend(); ++it) {
+				if (auto tag = it->get<T>())
+					return tag;
+			}
+			return nullptr;
+		}
+	};
+
+	class stream : public util::tag_holder {
+	protected:
+		[[nodiscard]] virtual stream_source source_impl() const { return {}; }
+
 	public:
+		[[nodiscard]] stream_source source() const {
+			auto result = source_impl();
+			if (auto own = tags(); !own.empty())
+				result.Tags.push_back(std::move(own));
+			return result;
+		}
+
 		stream() = default;
 		stream(stream&&) = default;
 		stream(const stream&) = default;
@@ -109,6 +136,9 @@ namespace xivres {
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 		[[nodiscard]] std::unique_ptr<stream> substream(std::streamoff offset, std::streamsize length = (std::numeric_limits<std::streamsize>::max)()) const override;
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override;
 	};
 
 	class file_stream : public default_base_stream {
@@ -126,6 +156,9 @@ namespace xivres {
 
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override;
 	};
 
 	class memory_stream : public default_base_stream {

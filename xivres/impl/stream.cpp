@@ -56,6 +56,12 @@ std::unique_ptr<xivres::stream> xivres::partial_view_stream::substream(std::stre
 	return std::make_unique<partial_view_stream>(m_streamSharedPtr, m_offset + offset, (std::min)(length, m_size));
 }
 
+xivres::stream_source xivres::partial_view_stream::source_impl() const {
+	auto result = m_stream.source();
+	result.Offset += m_offset;
+	return result;
+}
+
 #ifdef _WIN32
 struct xivres::file_stream::data {
 	const std::filesystem::path m_path;
@@ -186,6 +192,7 @@ xivres::file_stream::file_stream(std::filesystem::path path)
 
 std::streamsize xivres::file_stream::size() const { return m_data->size(); }
 std::streamsize xivres::file_stream::read(std::streamoff offset, void* buf, std::streamsize length) const { return m_data->read(offset, buf, length); }
+xivres::stream_source xivres::file_stream::source_impl() const { return {m_data ? m_data->m_path : std::filesystem::path()}; }
 
 xivres::memory_stream& xivres::memory_stream::operator=(const memory_stream& r) {
 	if (r.owns_data()) {

@@ -72,6 +72,9 @@ namespace xivres::sqpack {
 			std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 			void hold_until(std::chrono::steady_clock::time_point until) const override;
 			[[nodiscard]] packed::type get_packed_type() const override;
+
+		protected:
+			[[nodiscard]] stream_source source_impl() const override;
 		};
 
 		class data_view_stream : public default_base_stream {

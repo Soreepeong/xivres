@@ -125,6 +125,11 @@ namespace xivres {
 				std::fill_n(static_cast<char*>(buf) + read, length - read, 0);
 			return length;
 		}
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override {
+			return m_provider->source();
+		}
 	};
 }
 

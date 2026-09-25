@@ -64,3 +64,8 @@ xivres::packed::type xivres::hotswap_packed_stream::get_packed_type() const {
 	const auto current = current_stream();
 	return current ? current->get_packed_type() : placeholder_packed_stream::instance().get_packed_type();
 }
+
+xivres::stream_source xivres::hotswap_packed_stream::source_impl() const {
+	const auto current = current_stream();
+	return current ? current->source() : stream_source{};
+}

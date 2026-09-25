@@ -75,6 +75,11 @@ namespace xivres {
 		std::shared_ptr<const stream> base_stream() const {
 			return m_stream;
 		}
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override {
+			return m_stream->source();
+		}
 	};
 
 	class untyped_passthrough_packer {
@@ -126,6 +131,7 @@ namespace xivres {
 	public:
 		passthrough_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm)
 			: packed_stream(std::move(spec))
+			, m_stream(strm)
 			, m_packer(std::move(strm)) {
 		}
 
@@ -139,6 +145,11 @@ namespace xivres {
 
 		packed::type get_packed_type() const final {
 			return m_packer.get_packed_type();
+		}
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override {
+			return m_stream->source();
 		}
 	};
 
@@ -201,6 +212,7 @@ namespace xivres {
 		constexpr static int CompressionLevel_AlreadyPacked = Z_BEST_COMPRESSION + 1;
 
 		mutable std::mutex m_mtx;
+		const stream_source m_originalSource;
 		mutable std::shared_ptr<const stream> m_stream;
 		mutable int m_compressionLevel;
 		const bool m_bMultithreaded;
@@ -208,6 +220,7 @@ namespace xivres {
 	public:
 		compressing_packed_stream(xivres::path_spec spec, std::shared_ptr<const stream> strm, int compressionLevel = Z_BEST_COMPRESSION, bool multithreaded = true)
 			: packed_stream(std::move(spec))
+			, m_originalSource(strm->source())
 			, m_stream(std::move(strm))
 			, m_compressionLevel(compressionLevel)
 			, m_bMultithreaded(multithreaded) {
@@ -225,6 +238,11 @@ namespace xivres {
 
 		packed::type get_packed_type() const final {
 			return TPacker::Type;
+		}
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override {
+			return m_originalSource;
 		}
 
 	private:

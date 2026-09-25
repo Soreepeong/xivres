@@ -32,6 +32,9 @@ namespace xivres {
 
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
+
+	protected:
+		[[nodiscard]] stream_source source_impl() const override { return {path()}; }
 	};
 }
 
