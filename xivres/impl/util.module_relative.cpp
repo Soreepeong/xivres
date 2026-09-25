@@ -11,13 +11,13 @@ std::string xivres::util::module_relative::to_string() const {
 		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		static_cast<LPCWSTR>(Address),
 		&hModule))
-		return std::format("0x{:#x}", reinterpret_cast<uintptr_t>(Address));
+		return std::format("0x{:X}", reinterpret_cast<uintptr_t>(Address));
 
 	std::wstring path(MAX_PATH, L'\0');
 	while (true) {
 		const auto len = GetModuleFileNameW(hModule, path.data(), static_cast<DWORD>(path.size()));
 		if (!len)
-			return std::format("0x{:#x}", reinterpret_cast<uintptr_t>(Address));
+			return std::format("0x{:X}", reinterpret_cast<uintptr_t>(Address));
 		if (len < path.size()) {
 			path.resize(len);
 			break;
@@ -29,5 +29,5 @@ std::string xivres::util::module_relative::to_string() const {
 	const auto offset = static_cast<const char*>(Address) - base;
 	const auto name = std::filesystem::path(path).filename().string();
 
-	return std::format("{}+0x{:#x}", name, offset);
+	return std::format("{}+0x{:X}", name, offset);
 }
