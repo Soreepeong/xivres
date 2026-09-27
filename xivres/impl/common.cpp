@@ -72,8 +72,8 @@ void xivres::to_json(nlohmann::json& j, const game_publisher& value) {
 		case game_publisher::SquareEnixEurope:
 			j = "SquareEnixEurope";
 			break;
-		case game_publisher::ShandaGames:
-			j = "ShandaGames";
+		case game_publisher::ShengquGames:
+			j = "ShengquGames";
 			break;
 		case game_publisher::ActozSoft:
 			j = "ActozSoft";
@@ -100,8 +100,8 @@ void xivres::from_json(const nlohmann::json& j, game_publisher& newValue) {
 		newValue = game_publisher::SquareEnixAmerica;
 	else if (newValueString == "squareenixeurope" || newValueString == "europe")
 		newValue = game_publisher::SquareEnixEurope;
-	else if (newValueString == "shandagames" || newValueString == "china")
-		newValue = game_publisher::ShandaGames;
+	else if (newValueString == "shengqugames" || newValueString == "shandagames" || newValueString == "china")
+		newValue = game_publisher::ShengquGames;
 	else if (newValueString == "actozsoft" || newValueString == "korea")
 		newValue = game_publisher::ActozSoft;
 	else if (newValueString == "userjoygames" || newValueString == "taiwan")
@@ -113,8 +113,8 @@ void xivres::to_json(nlohmann::json& j, const game_release_publisher& value) {
 		case game_release_publisher::SquareEnix:
 			j = "SquareEnix";
 			break;
-		case game_release_publisher::ShandaGames:
-			j = "ShandaGames";
+		case game_release_publisher::ShengquGames:
+			j = "ShengquGames";
 			break;
 		case game_release_publisher::ActozSoft:
 			j = "ActozSoft";
@@ -137,8 +137,8 @@ void xivres::from_json(const nlohmann::json& j, game_release_publisher& newValue
 
 	if (newValueString == "squareenix" || newValueString == "international")
 		newValue = game_release_publisher::SquareEnix;
-	else if (newValueString == "shandagames" || newValueString == "chinese")
-		newValue = game_release_publisher::ShandaGames;
+	else if (newValueString == "shengqugames" || newValueString == "shandagames" || newValueString == "chinese")
+		newValue = game_release_publisher::ShengquGames;
 	else if (newValueString == "actozsoft" || newValueString == "korean")
 		newValue = game_release_publisher::ActozSoft;
 	else if (newValueString == "userjoygames" || newValueString == "taiwanese")

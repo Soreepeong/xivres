@@ -29,9 +29,11 @@ namespace xivres {
 		SquareEnixJapan = 1,
 		SquareEnixAmerica = 2,
 		SquareEnixEurope = 3,
-		ShandaGames = 4,
+		ShengquGames = 4,
 		ActozSoft = 5,
 		UserjoyGames = 6,
+
+		ShandaGames = ShengquGames,
 	};
 
 	void to_json(nlohmann::json&, const game_publisher&);
@@ -40,7 +42,7 @@ namespace xivres {
 	enum class game_release_publisher {
 		Unspecified,
 		SquareEnix,
-		ShandaGames,
+		ShengquGames,
 		ActozSoft,
 		UserjoyGames,
 	};
