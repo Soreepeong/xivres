@@ -14,6 +14,31 @@
 #include "../include/xivres.fontgen/TeamHypersomnia-rectpack2D/src/finders_interface.h"
 #endif
 
+// Whether a codepoint must be left out of glyph and kerning tables.
+// Game fonts contain none of these; they are control or invisible formatting characters that break text layout,
+// or codepoints that cannot occur in valid text. RTL scripts are left out as the game cannot lay them out.
+static bool is_excluded_codepoint(char32_t c) {
+	// Format characters (General Category Cf) except U+00AD SOFT HYPHEN, which the game fonts do contain.
+	static constexpr std::pair<char32_t, char32_t> FormatCharacters[]{
+		{0x0600, 0x0605}, {0x061C, 0x061C}, {0x06DD, 0x06DD}, {0x070F, 0x070F}, {0x0890, 0x0891}, {0x08E2, 0x08E2},
+		{0x180E, 0x180E}, {0x200B, 0x200F}, {0x202A, 0x202E}, {0x2060, 0x2064}, {0x2066, 0x206F}, {0xFEFF, 0xFEFF},
+		{0xFFF9, 0xFFFB}, {0x110BD, 0x110BD}, {0x110CD, 0x110CD}, {0x13430, 0x1343F}, {0x1BCA0, 0x1BCA3},
+		{0x1D173, 0x1D17A}, {0xE0001, 0xE0001}, {0xE0020, 0xE007F},
+	};
+
+	if (c < 0x20 || (0x7F <= c && c <= 0x9F))  // C0 controls, DEL, C1 controls
+		return true;
+	if (0xD800 <= c && c <= 0xDFFF)  // surrogates
+		return true;
+	if ((0xFDD0 <= c && c <= 0xFDEF) || (c & 0xFFFE) == 0xFFFE || c > 0x10FFFF)  // noncharacters
+		return true;
+	for (const auto& [first, last] : FormatCharacters) {
+		if (first <= c && c <= last)
+			return true;
+	}
+	return (xivres::util::unicode::blocks::block_for(c).Purpose & xivres::util::unicode::blocks::RTL) != 0;
+}
+
 xivres::fontgen::fontdata_packer::target_plan::target_glyph::target_glyph(fontdata::stream& font, const fontdata::glyph_entry& entry, size_t sourceFontIndex)
 	: Font(font)
 	, Entry(entry)
@@ -322,7 +347,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 						target.Entry.TextureOffsetY = util::range_check_cast<uint16_t>(gm.Y1);
 					else
 						target.Entry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
-					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<uint32_t>)(gm.Y2, target.Font.line_height()) - (std::min)(0, gm.Y1));
+					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<int>)(gm.Y2, static_cast<int>(target.Font.line_height())) - (std::min)(0, gm.Y1));
 					target.Entry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - (std::min)(0, gm.X1));
 					target.Entry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - target.Entry.BoundingWidth);
 
@@ -348,11 +373,10 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 	for (size_t i = 0; i < m_sourceFonts.size(); i++) {
 		const auto& font = m_sourceFonts[i];
 		for (const auto& codepoint : font->all_codepoints()) {
+			if (is_excluded_codepoint(codepoint))
+				continue;
+
 			auto& block = util::unicode::blocks::block_for(codepoint);
-			if (block.Purpose & util::unicode::blocks::RTL)
-				continue;
-			if (codepoint < 0x20 || codepoint == 0x7F)
-				continue;
 
 			const auto uniqid = font->get_base_font_glyph_uniqid(codepoint);
 			auto& pInfo = rectangleInfoMap[uniqid];
@@ -391,8 +415,10 @@ void xivres::fontgen::fontdata_packer::prepare_target_font_basic_info() {
 
 		const auto& kerningPairs = sourceFont.all_kerning_pairs();
 		targetFont.reserve_kernings(kerningPairs.size());
-		for (const auto& kp : kerningPairs)
-			targetFont.add_kerning(kp.first.first, kp.first.second, kp.second);
+		for (const auto& kp : kerningPairs) {
+			if (!is_excluded_codepoint(kp.first.first) && !is_excluded_codepoint(kp.first.second))
+				targetFont.add_kerning(kp.first.first, kp.first.second, kp.second);
+		}
 	}
 }
 

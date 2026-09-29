@@ -1,11 +1,16 @@
 #include "../include/xivres.fontgen/freetype_fixed_size_font.h"
 
+#include <cmath>
+
 #include <harfbuzz/hb-ft.h>
 
 #include "xivres/util.bitmap_copy.h"
 
 #include FT_BITMAP_H
+#include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
+
+#include <functional>
 
 static FT_Error success_or_throw(FT_Error error, std::initializer_list<FT_Error> acceptables = {}) {
 	if (!error)
@@ -65,15 +70,17 @@ public:
 	[[nodiscard]] std::span<uint8_t> get_buffer() const;
 };
 
-xivres::fontgen::glyph_metrics xivres::fontgen::freetype_fixed_size_font::freetype_glyph_to_metrics(FT_Glyph glyph, int x, int y) const {
+xivres::fontgen::glyph_metrics xivres::fontgen::freetype_fixed_size_font::freetype_glyph_to_metrics(uint32_t glyphIndex, FT_Glyph glyph, int x, int y) const {
+	const auto adjustment = m_face.get_glyph_adjustment(glyphIndex);
+
 	FT_BBox cbox;
 	FT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &cbox);
 	glyph_metrics res;
-	res.X1 = x + cbox.xMin;
-	res.Y1 = y + ascent() - cbox.yMax;
+	res.X1 = x + cbox.xMin + adjustment.PlacementX;
+	res.Y1 = y + ascent() - cbox.yMax + adjustment.PlacementY;
 	res.X2 = res.X1 + static_cast<int>(cbox.xMax - cbox.xMin);
 	res.Y2 = res.Y1 + static_cast<int>(cbox.yMax - cbox.yMin);
-	res.AdvanceX = (glyph->advance.x + 1024 * 64 - 1) / (1024 * 64);
+	res.AdvanceX = static_cast<int>(std::lround(static_cast<double>(glyph->advance.x) / 0x10000)) + adjustment.AdvanceX;  // 16.16 fixed point
 	return res;
 }
 
@@ -92,7 +99,7 @@ bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, uint8_t
 
 	auto glyph = m_face.load_glyph(glyphIndex, true);
 	auto bitmapGlyph = reinterpret_cast<FT_BitmapGlyph>(glyph.get());
-	auto dest = freetype_glyph_to_metrics(glyph.get(), drawX, drawY);
+	auto dest = freetype_glyph_to_metrics(glyphIndex, glyph.get(), drawX, drawY);
 	auto src = dest;
 	src.translate(-src.X1, -src.Y1);
 	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
@@ -121,7 +128,7 @@ bool xivres::fontgen::freetype_fixed_size_font::draw(char32_t codepoint, util::b
 
 	auto glyph = m_face.load_glyph(glyphIndex, true);
 	auto bitmapGlyph = reinterpret_cast<FT_BitmapGlyph>(glyph.get());
-	auto dest = freetype_glyph_to_metrics(glyph.get(), drawX, drawY);
+	auto dest = freetype_glyph_to_metrics(glyphIndex, glyph.get(), drawX, drawY);
 	auto src = dest;
 	src.translate(-src.X1, -src.Y1);
 	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
@@ -161,7 +168,7 @@ bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_metrics(char32_t c
 	if (!glyphIndex)
 		return false;
 
-	gm = freetype_glyph_to_metrics(m_face.load_glyph(glyphIndex, false).get());
+	gm = freetype_glyph_to_metrics(glyphIndex, m_face.load_glyph(glyphIndex, false).get());
 	return true;
 }
 
@@ -169,12 +176,13 @@ const std::set<char32_t>& xivres::fontgen::freetype_fixed_size_font::all_codepoi
 	return m_face.all_characters();
 }
 
+// Vertical metrics are subject to the vertical scale of the transformation, as the glyphs are.
 int xivres::fontgen::freetype_fixed_size_font::line_height() const {
-	return (m_face->size->metrics.height + 63) / 64;
+	return static_cast<int>(std::ceil(static_cast<double>(m_face->size->metrics.height) / 64 * std::abs(m_face.matrix().yy / 65536.)));
 }
 
 int xivres::fontgen::freetype_fixed_size_font::ascent() const {
-	return (m_face->size->metrics.ascender + 63) / 64;
+	return static_cast<int>(std::ceil(static_cast<double>(m_face->size->metrics.ascender) / 64 * std::abs(m_face.matrix().yy / 65536.)));
 }
 
 float xivres::fontgen::freetype_fixed_size_font::font_size() const {
@@ -289,12 +297,49 @@ FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::create
 	FT_Face face;
 	success_or_throw(FT_New_Memory_Face(library, &info.Data[0], static_cast<FT_Long>(info.Data.size()), info.FaceIndex, &face));
 	try {
+		// Variable fonts: start from the instance selected by the face index, and apply the requested axis values.
+		// Unless requested otherwise, the optical size follows the font size.
+		if (FT_HAS_MULTIPLE_MASTERS(face)) {
+			FT_MM_Var* mm = nullptr;
+			success_or_throw(FT_Get_MM_Var(face, &mm));
+			const auto mmFree = std::unique_ptr<FT_MM_Var, std::function<void(FT_MM_Var*)>>(mm, [library](FT_MM_Var* p) { FT_Done_MM_Var(library, p); });
+
+			std::vector<FT_Fixed> coordinates(mm->num_axis);
+			success_or_throw(FT_Get_Var_Design_Coordinates(face, mm->num_axis, coordinates.data()));
+			for (FT_UInt i = 0; i < mm->num_axis; i++) {
+				const auto& axis = mm->axis[i];
+				const auto tag = _byteswap_ulong(static_cast<uint32_t>(axis.tag));
+				if (const auto it = info.Params.Variations.find(tag); it != info.Params.Variations.end())
+					coordinates[i] = static_cast<FT_Fixed>(std::lround(it->second * 65536.));
+				else if (tag == util::truetype::Fvar::OpticalSizeAxisTag.NativeValue)
+					coordinates[i] = static_cast<FT_Fixed>(std::lround(info.Size * 65536.));
+				coordinates[i] = std::clamp(coordinates[i], axis.minimum, axis.maximum);
+			}
+			success_or_throw(FT_Set_Var_Design_Coordinates(face, mm->num_axis, coordinates.data()));
+		}
+
 		success_or_throw(FT_Set_Char_Size(face, 0, static_cast<FT_F26Dot6>(64.f * info.Size), 72, 72));
 		return face;
 	} catch (...) {
 		success_or_throw(FT_Done_Face(face));
 		throw;
 	}
+}
+
+std::optional<float> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_baseline(uint32_t baselineTag) const {
+	const auto it = m_info->Baselines.find(baselineTag);
+	return it == m_info->Baselines.end() ? std::nullopt : std::optional(it->second);
+}
+
+std::optional<float> xivres::fontgen::freetype_fixed_size_font::get_baseline(uint32_t baselineTag) const {
+	return m_face.get_baseline(baselineTag);
+}
+
+xivres::fontgen::glyph_adjustment xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_glyph_adjustment(uint32_t glyphIndex) const {
+	if (glyphIndex > 0xFFFF)
+		return {};
+	const auto it = m_info->GlyphAdjustments.find(static_cast<uint16_t>(glyphIndex));
+	return it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
 }
 
 const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::all_kerning_pairs() const {
@@ -313,19 +358,29 @@ float xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::font_siz
 	return m_info->Size;
 }
 
+const FT_Matrix& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::matrix() const {
+	return m_info->Matrix;
+}
+
 FT_Library xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::library() const {
 	return m_library.get();
 }
 
 int xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_char_index(char32_t codepoint) const {
-	if (!m_hbFont)
-		return static_cast<int>(FT_Get_Char_Index(m_face, codepoint));
+	return resolve_glyph_index(m_face, m_hbFont, codepoint, m_info->Params);
+}
+
+int xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::resolve_glyph_index(FT_Face face, hb_font_t* hbFont, char32_t codepoint, const create_struct& params) {
+	if (!hbFont)
+		return static_cast<int>(FT_Get_Char_Index(face, codepoint));
 
 	const auto buf = hb_buffer_create();
 	const auto bufFree = std::unique_ptr<hb_buffer_t, decltype(&hb_buffer_destroy)>(buf, hb_buffer_destroy);
 	hb_buffer_add_codepoints(buf, reinterpret_cast<const hb_codepoint_t*>(&codepoint), 1, 0, 1);
+	if (!params.Language.empty())
+		hb_buffer_set_language(buf, hb_language_from_string(params.Language.c_str(), static_cast<int>(params.Language.size())));
 	hb_buffer_guess_segment_properties(buf);
-	hb_shape(m_hbFont, buf, m_info->Params.Features.data(), static_cast<unsigned>(m_info->Params.Features.size()));
+	hb_shape(hbFont, buf, params.Features.data(), static_cast<unsigned>(params.Features.size()));
 	unsigned count = 0;
 	const auto* infos = hb_buffer_get_glyph_infos(buf, &count);
 	return (count > 0) ? static_cast<int>(infos[0].codepoint) : 0;
@@ -369,7 +424,7 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper& xivres::fontge
 	auto face = create_face(library.get(), *r.m_info);
 
 	hb_font_t* newHbFont = nullptr;
-	if (!r.m_info->Params.Features.empty())
+	if (r.m_info->Params.requires_shaping())
 		newHbFont = hb_ft_font_create(face, nullptr);
 
 	*this = nullptr;
@@ -403,7 +458,7 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 	, m_info(r.m_info) {
 	if (r.m_face) {
 		m_face = create_face(m_library.get(), *m_info);
-		if (!m_info->Params.Features.empty())
+		if (m_info->Params.requires_shaping())
 			m_hbFont = hb_ft_font_create(m_face, nullptr);
 	}
 }
@@ -440,36 +495,59 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 	for (char32_t c = FT_Get_First_Char(m_face, &glyphIndex); glyphIndex; c = FT_Get_Next_Char(m_face, c, &glyphIndex))
 		info->Characters.insert(c);
 
+	if (info->Params.requires_shaping())
+		m_hbFont = hb_ft_font_create(m_face, nullptr);
+
 	freetype_font_table kernDataRef(m_face, util::truetype::Kern::DirectoryTableTag.ReverseNativeValue);
 	freetype_font_table gposDataRef(m_face, util::truetype::Gpos::DirectoryTableTag.ReverseNativeValue);
-	freetype_font_table cmapDataRef(m_face, util::truetype::Cmap::DirectoryTableTag.ReverseNativeValue);
-	util::truetype::Kern::View kern(kernDataRef.get_span<char>());
-	util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
-	util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
-	if (cmap && (kern || gpos)) {
-		const auto cmapVector = cmap.GetGlyphToCharMap();
-
-		if (kern)
-			info->KerningPairs = kern.Parse(cmapVector);
-
-		if (gpos) {
-			const auto pairs = gpos.ExtractAdvanceX(cmapVector);
-			// do not overwrite
-			info->KerningPairs.insert(pairs.begin(), pairs.end());
+	if (kernDataRef || gposDataRef) {
+		// Positioning is keyed by the glyphs that are actually drawn, which may be substituted by the selected features.
+		std::vector<std::set<char32_t>> glyphToCharMap(65536);
+		for (const auto c : info->Characters) {
+			if (const auto glyphIndex = resolve_glyph_index(m_face, m_hbFont, c, info->Params); glyphIndex > 0 && glyphIndex < 65536)
+				glyphToCharMap[glyphIndex].insert(c);
 		}
 
-		for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end();) {
-			it->second = static_cast<int>(static_cast<float>(it->second) * info->Size / static_cast<float>(m_face->size->face->units_per_EM));
-			if (it->second)
-				++it;
-			else
-				it = info->KerningPairs.erase(it);
+		freetype_font_table gdefDataRef(m_face, util::truetype::Gdef::DirectoryTableTag.ReverseNativeValue);
+		freetype_font_table fvarDataRef(m_face, util::truetype::Fvar::DirectoryTableTag.ReverseNativeValue);
+		freetype_font_table avarDataRef(m_face, util::truetype::Avar::DirectoryTableTag.ReverseNativeValue);
+		opentype_positioning_params params{
+			.Gpos = gposDataRef.get_span<char>(),
+			.Kern = kernDataRef.get_span<char>(),
+			.Gdef = gdefDataRef.get_span<char>(),
+			.Fvar = fvarDataRef.get_span<char>(),
+			.Avar = avarDataRef.get_span<char>(),
+			.DesignCoordinates = get_design_coordinates(m_library.get(), m_face),
+			.Language = info->Params.Language,
+			.Size = info->Size,
+			.UnitsPerEm = m_face->units_per_EM,
+			.ScaleX = matrix.M11,
+			.ScaleY = matrix.M22,
+		};
+		for (const auto& feature : info->Params.Features) {
+			if (feature.value)
+				params.FeatureTags.insert(_byteswap_ulong(feature.tag));
 		}
+
+		const auto hbBlob = std::unique_ptr<hb_blob_t, decltype(&hb_blob_destroy)>(
+			hb_blob_create(reinterpret_cast<const char*>(info->Data.data()), static_cast<unsigned>(info->Data.size()), HB_MEMORY_MODE_READONLY, nullptr, nullptr),
+			&hb_blob_destroy);
+		const auto hbFace = std::unique_ptr<hb_face_t, decltype(&hb_face_destroy)>(hb_face_create(hbBlob.get(), static_cast<unsigned>(info->FaceIndex) & 0xFFFF), &hb_face_destroy);
+		params.HarfBuzzFace = hbFace.get();
+
+		auto positioning = extract_opentype_positioning(params, glyphToCharMap);
+		info->KerningPairs = std::move(positioning.KerningPairs);
+		info->GlyphAdjustments = std::move(positioning.GlyphAdjustments);
+	}
+
+	// Baselines are subject to the vertical scale of the transformation, as the glyphs are.
+	if (freetype_font_table baseDataRef(m_face, util::truetype::Base::DirectoryTableTag.ReverseNativeValue); baseDataRef) {
+		const auto scale = static_cast<double>(info->Size) * matrix.M22 / m_face->units_per_EM;
+		for (const auto& [tag, value] : read_baselines(baseDataRef.get_span<char>()))
+			info->Baselines.emplace(tag, static_cast<float>(value * scale));
 	}
 
 	m_info = std::move(info);
-	if (!m_info->Params.Features.empty())
-		m_hbFont = hb_ft_font_create(m_face, nullptr);
 }
 
 xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper()
@@ -511,4 +589,26 @@ freetype_font_table::freetype_font_table(FT_Face face, uint32_t tag) {
 	m_buf.resize(len);
 	if (success_or_throw(FT_Load_Sfnt_Table(face, tag, 0, &m_buf[0], &len), {FT_Err_Table_Missing}))
 		return;
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::create_struct::requires_shaping() const {
+	return !Features.empty() || !Language.empty();
+}
+std::map<uint32_t, float> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_design_coordinates(FT_Library library, FT_Face face) {
+	std::map<uint32_t, float> result;
+	if (!FT_HAS_MULTIPLE_MASTERS(face))
+		return result;
+
+	FT_MM_Var* mm = nullptr;
+	if (FT_Get_MM_Var(face, &mm))
+		return result;
+	const auto mmFree = std::unique_ptr<FT_MM_Var, std::function<void(FT_MM_Var*)>>(mm, [library](FT_MM_Var* p) { FT_Done_MM_Var(library, p); });
+
+	std::vector<FT_Fixed> coordinates(mm->num_axis);
+	if (FT_Get_Var_Design_Coordinates(face, mm->num_axis, coordinates.data()))
+		return result;
+
+	for (FT_UInt i = 0; i < mm->num_axis; i++)
+		result.emplace(_byteswap_ulong(static_cast<uint32_t>(mm->axis[i].tag)), static_cast<float>(coordinates[i]) / 65536.f);
+	return result;
 }

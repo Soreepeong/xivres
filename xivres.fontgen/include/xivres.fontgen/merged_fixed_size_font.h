@@ -9,6 +9,13 @@ namespace xivres::fontgen {
 		Middle,
 		Baseline,
 		Bottom,
+
+		// Aligns the roman baselines ('romn') that the BASE tables of the fonts list; a font without one uses its origin.
+		RomanBaseline,
+
+		// Aligns the centers of the ideographic character faces ('icfb' to 'icft', or 'ideo' to 'idtp') that the BASE tables
+		// of the fonts list; a font without them uses the middle of its line.
+		IdeographicCenter,
 	};
 
 	enum class codepoint_merge_mode {
@@ -26,6 +33,10 @@ namespace xivres::fontgen {
 			int Ascent{};
 			int LineHeight{};
 			vertical_alignment Alignment = vertical_alignment::Baseline;
+
+			// Positions of the reference lines of the first font, from the top of the line, in pixels.
+			float RomanBaselineY{};
+			float IdeographicCenterY{};
 		};
 
 		std::vector<std::shared_ptr<fixed_size_font>> m_fonts;
@@ -70,8 +81,14 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
+		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
+
 	private:
 		[[nodiscard]] static int get_vertical_adjustment(const info& info, const fixed_size_font& font);
+
+		[[nodiscard]] static float get_roman_baseline_y(const fixed_size_font& font);
+
+		[[nodiscard]] static float get_ideographic_center_y(const fixed_size_font& font);
 	};
 }
 

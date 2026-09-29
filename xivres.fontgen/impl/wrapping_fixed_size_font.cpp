@@ -88,7 +88,7 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 			gm.AdvanceX = gm.AdvanceX + m_info->LetterSpacing;
 			gm.translate(m_info->HorizontalOffset, m_info->BaselineShift);
 		} else {
-			gm.AdvanceX = gm.AdvanceX + m_info->LetterSpacing - gm.X1;
+			gm.AdvanceX = gm.AdvanceX + m_info->LetterSpacing - remainingOffset;
 			gm.translate(-gm.X1, m_info->BaselineShift);
 
 			do {
@@ -104,7 +104,18 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 		}
 	}
 
-	m_kerningPairs.emplace(m_font->all_kerning_pairs());
+	// Kerning follows the glyphs actually drawn: a codepoint replaced with another takes the kerning of the replacement.
+	m_kerningPairs.emplace();
+	for (const auto& [pair, value] : m_font->all_kerning_pairs()) {
+		const auto left = reverseMappedCodepoints.find(pair.first);
+		const auto right = reverseMappedCodepoints.find(pair.second);
+		if (left == reverseMappedCodepoints.end() || right == reverseMappedCodepoints.end())
+			continue;
+
+		for (const auto leftUnmapped : left->second)
+			for (const auto rightUnmapped : right->second)
+				(*m_kerningPairs)[std::make_pair(leftUnmapped, rightUnmapped)] = value;
+	}
 #pragma warning(push)
 #pragma warning(disable: 26812)
 	for (const auto& [group, chars] : negativeLsbChars) {
@@ -162,8 +173,10 @@ bool xivres::fontgen::wrapping_fixed_size_font::try_get_glyph_metrics(char32_t c
 		gm.translate(m_info->HorizontalOffset, m_info->BaselineShift);
 		gm.AdvanceX += m_info->LetterSpacing;
 	} else {
+		// The glyph is moved right so that it does not start left of the pen, and the advance grows by the same amount;
+		// all_kerning_pairs adds remainingOffset back where possible, so that net pen movement stays AdvanceX + LetterSpacing.
 		gm.translate(-gm.X1, m_info->BaselineShift);
-		gm.AdvanceX += m_info->LetterSpacing - gm.X1;
+		gm.AdvanceX += m_info->LetterSpacing - remainingOffset;
 	}
 
 	return true;
@@ -171,6 +184,10 @@ bool xivres::fontgen::wrapping_fixed_size_font::try_get_glyph_metrics(char32_t c
 
 const std::set<char32_t>& xivres::fontgen::wrapping_fixed_size_font::all_codepoints() const {
 	return m_info->Codepoints;
+}
+
+std::optional<float> xivres::fontgen::wrapping_fixed_size_font::get_baseline(uint32_t baselineTag) const {
+	return m_font->get_baseline(baselineTag);
 }
 
 int xivres::fontgen::wrapping_fixed_size_font::line_height() const {

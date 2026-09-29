@@ -39,6 +39,7 @@
     <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\insert_and_split.h" />
     <ClInclude Include="include\xivres.fontgen\TeamHypersomnia-rectpack2D\src\rect_structs.h" />
     <ClInclude Include="include\xivres.fontgen\merged_fixed_size_font.h" />
+    <ClInclude Include="include\xivres.fontgen\opentype_positioning.h" />
     <ClInclude Include="include\xivres.fontgen\text_measurer.h" />
     <ClInclude Include="include\xivres.fontgen\util.truetype.h" />
     <ClInclude Include="include\xivres.fontgen\wrapping_fixed_size_font.h" />
@@ -50,6 +51,7 @@
     <ClCompile Include="impl\fontdata_fixed_size_font.cpp" />
     <ClCompile Include="impl\fixed_size_font.cpp" />
     <ClCompile Include="impl\merged_fixed_size_font.cpp" />
+    <ClCompile Include="impl\opentype_positioning.cpp" />
     <ClCompile Include="impl\text_measurer.cpp" />
     <ClCompile Include="impl\wrapping_fixed_size_font.cpp" />
   </ItemGroup>

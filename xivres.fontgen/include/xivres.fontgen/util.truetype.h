@@ -2,10 +2,19 @@
 #define XIVRES_FONTGENERATOR_TRUETYPEUTILS_H_
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstddef>
+#include <cstring>
+#include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <span>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "xivres/util.byte_order.h"
 #include "xivres/util.unicode.h"
@@ -124,7 +133,7 @@ namespace xivres::util::truetype {
 				if (data.size_bytes() < sizeof(uint16_t))
 					return;
 
-				if (2 * (*obj->Count + 1) > data.size_bytes())
+				if (sizeof(uint16_t) + sizeof(FeatureRecord) * *obj->Count > data.size_bytes())
 					return;
 
 				m_obj = obj;
@@ -141,6 +150,18 @@ namespace xivres::util::truetype {
 
 			decltype(m_obj) operator->() const {
 				return m_obj;
+			}
+
+			// Returns the lookup indices of the feature, or an empty span if the feature table is out of bounds.
+			[[nodiscard]] std::span<const BE<uint16_t>> LookupIndices(size_t featureIndex) const {
+				const auto offset = static_cast<size_t>(*m_obj->Records[featureIndex].FeatureOffset);
+				if (offset + offsetof(FeatureTable, LookupListIndices) > m_length)
+					return {};
+				const auto& feature = *reinterpret_cast<const FeatureTable*>(m_bytes + offset);
+				const auto count = static_cast<size_t>(*feature.LookupIndexCount);
+				if (offset + offsetof(FeatureTable, LookupListIndices) + sizeof(uint16_t) * count > m_length)
+					return {};
+				return { feature.LookupListIndices, count };
 			}
 
 			[[nodiscard]] std::span<const FeatureRecord> Records() const {
@@ -285,7 +306,9 @@ namespace xivres::util::truetype {
 			}
 
 			[[nodiscard]] std::span<const char> SubtableSpan(size_t index) const {
-				const auto offset = *m_obj->SubtableOffsets[index];
+				const auto offset = static_cast<size_t>(*m_obj->SubtableOffsets[index]);
+				if (offset >= m_length)
+					return {};
 				return { m_bytes + offset, m_length - offset };
 			}
 
@@ -395,11 +418,11 @@ namespace xivres::util::truetype {
 
 					case 2:
 					{
+						// First range whose end is not before glyphId.
 						const auto rangeSpan = RangeRecordSpan();
-						const auto bec = RangeRecord{ .EndGlyphId = static_cast<uint16_t>(glyphId) };
-						const auto i = std::ranges::upper_bound(rangeSpan, bec, [](const RangeRecord& l, const RangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
-						if (i >= 0 && rangeSpan[i].StartGlyphId <= glyphId && glyphId <= rangeSpan[i].EndGlyphId)
-							return rangeSpan[i].StartCoverageIndex + glyphId - rangeSpan[i].StartGlyphId;
+						const auto it = std::ranges::lower_bound(rangeSpan, glyphId, {}, [](const RangeRecord& r) { return static_cast<size_t>(*r.EndGlyphId); });
+						if (it != rangeSpan.end() && *it->StartGlyphId <= glyphId)
+							return *it->StartCoverageIndex + glyphId - *it->StartGlyphId;
 
 						break;
 					}
@@ -516,8 +539,8 @@ namespace xivres::util::truetype {
 					{
 						for (const auto& range : std::span(m_obj->Format2.ClassValueArray, m_obj->Format2.Header.ClassRangeCount)) {
 							auto& target = res[*range.Class];
-							for (auto i = *range.StartGlyphId, i_ = *range.EndGlyphId; i <= i_; i++)
-								target.insert(i);
+							for (uint32_t i = *range.StartGlyphId, i_ = *range.EndGlyphId; i <= i_; i++)
+								target.insert(static_cast<uint16_t>(i));
 						}
 						break;
 					}
@@ -541,8 +564,8 @@ namespace xivres::util::truetype {
 					{
 						for (const auto& range : std::span(m_obj->Format2.ClassValueArray, m_obj->Format2.Header.ClassRangeCount)) {
 							const auto classValue = *range.Class;
-							for (auto i = *range.StartGlyphId, i_ = *range.EndGlyphId; i <= i_; i++)
-								res[i] = classValue;
+							for (uint32_t i = *range.StartGlyphId, i_ = *range.EndGlyphId; i <= i_; i++)
+								res[static_cast<uint16_t>(i)] = classValue;
 						}
 						break;
 					}
@@ -563,11 +586,11 @@ namespace xivres::util::truetype {
 
 					case 2:
 					{
+						// First range whose end is not before glyphId.
 						const auto rangeSpan = std::span(m_obj->Format2.ClassValueArray, m_obj->Format2.Header.ClassRangeCount);
-						const auto bec = Format2ClassRanges::ClassRangeRecord{ .EndGlyphId = glyphId };
-						const auto i = std::ranges::upper_bound(rangeSpan, bec, [](const Format2ClassRanges::ClassRangeRecord& l, const Format2ClassRanges::ClassRangeRecord& r) { return *l.EndGlyphId < *r.EndGlyphId; }) - rangeSpan.begin() - 1;
-						if (i >= 0 && rangeSpan[i].StartGlyphId <= glyphId && glyphId <= rangeSpan[i].EndGlyphId)
-							return rangeSpan[i].Class;
+						const auto it = std::ranges::lower_bound(rangeSpan, glyphId, {}, [](const Format2ClassRanges::ClassRangeRecord& r) { return *r.EndGlyphId; });
+						if (it != rangeSpan.end() && *it->StartGlyphId <= glyphId)
+							return *it->Class;
 
 						return 0;
 					}
@@ -943,6 +966,18 @@ namespace xivres::util::truetype {
 				BE<uint32_t> StartCharCode;
 				BE<uint32_t> EndCharCode;
 				BE<uint32_t> GlyphId;
+
+				// Adds mappings for this group, ignoring codepoints past U+10FFFF and glyph IDs that do not fit in result.
+				void AddToGlyphToCharMap(std::vector<std::set<char32_t>>& result, bool sequentialGlyphs) const {
+					const auto first = static_cast<uint64_t>(*StartCharCode);
+					const auto last = (std::min<uint64_t>)(*EndCharCode, 0x10FFFF);
+					for (auto c = first; c <= last; c++) {
+						const auto glyphId = static_cast<uint64_t>(*GlyphId) + (sequentialGlyphs ? c - first : 0);
+						if (glyphId >= result.size())
+							break;
+						result[static_cast<size_t>(glyphId)].insert(static_cast<char32_t>(c));
+					}
+				}
 			};
 
 			class IFormatView {
@@ -1223,9 +1258,9 @@ namespace xivres::util::truetype {
 						if (c >= 0x10000)
 							return 0;
 
-						const auto bec = BE<uint16_t>(static_cast<uint16_t>(c));
-						const auto i = std::ranges::upper_bound(EndCodeSpan(), bec, [](const auto& l, const auto& r) { return *l < *r; }) - EndCodeSpan().begin() - 1;
-						if (i < 0)
+						// First segment whose end is not before c.
+						const auto i = std::ranges::lower_bound(EndCodeSpan(), c, {}, [](const BE<uint16_t>& v) { return static_cast<uint32_t>(*v); }) - EndCodeSpan().begin();
+						if (i >= static_cast<ptrdiff_t>(EndCodeSpan().size()))
 							return 0;
 
 						const auto startCode = *StartCode(i);
@@ -1363,9 +1398,10 @@ namespace xivres::util::truetype {
 					}
 
 					void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {
-						for (char32_t c = *m_obj->Header.FirstCode, c_ = c + *m_obj->Header.EntryCount; c < c_; c++)
-							if (const auto glyphId = *m_obj->GlyphId[c])
-								result[glyphId].insert(c);
+						const auto firstCode = static_cast<char32_t>(*m_obj->Header.FirstCode);
+						for (size_t i = 0, i_ = *m_obj->Header.EntryCount; i < i_; i++)
+							if (const auto glyphId = *m_obj->GlyphId[i]; glyphId && glyphId < result.size())
+								result[glyphId].insert(static_cast<char32_t>(firstCode + i));
 					}
 				};
 			};
@@ -1435,19 +1471,18 @@ namespace xivres::util::truetype {
 					[[nodiscard]] std::span<const MapGroup> GroupSpan() const { return { const_cast<MapGroup*>(m_obj->Group), static_cast<size_t>(*m_obj->Header.GroupCount) }; }
 
 					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
-						MapGroup tmp;
-						tmp.EndCharCode = c;
-						const auto& group = std::upper_bound(GroupSpan().begin(), GroupSpan().end(), tmp, [](const MapGroup& l, const MapGroup& r) { return *l.EndCharCode < *r.EndCharCode; })[-1];
-						if (&group < m_obj->Group || c < *group.StartCharCode || c > *group.EndCharCode)
+						// First group whose end is not before c.
+						const auto groups = GroupSpan();
+						const auto it = std::ranges::lower_bound(groups, c, {}, [](const MapGroup& g) { return static_cast<uint32_t>(*g.EndCharCode); });
+						if (it == groups.end() || c < *it->StartCharCode)
 							return 0;
 
-						return static_cast<uint16_t>(group.GlyphId + c - group.StartCharCode);
+						return static_cast<uint16_t>(*it->GlyphId + c - *it->StartCharCode);
 					}
 
 					void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {
 						for (const auto& group : GroupSpan())
-							for (char32_t c = *group.StartCharCode, c_ = *group.EndCharCode; c <= c_; c++)
-								result[group.GlyphId + c - group.StartCharCode].insert(c);
+							group.AddToGlyphToCharMap(result, true);
 					}
 				};
 			};
@@ -1520,13 +1555,14 @@ namespace xivres::util::truetype {
 						if (c < m_obj->Header.FirstCode || c >= m_obj->Header.FirstCode + m_obj->Header.EntryCount)
 							return 0;
 
-						return m_obj->GlyphId[c];
+						return m_obj->GlyphId[c - m_obj->Header.FirstCode];
 					}
 
 					void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {
-						for (char32_t c = *m_obj->Header.FirstCode, c_ = c + *m_obj->Header.EntryCount; c < c_; c++)
-							if (const auto glyphId = *m_obj->GlyphId[c])
-								result[glyphId].insert(c);
+						const auto firstCode = static_cast<uint64_t>(*m_obj->Header.FirstCode);
+						for (size_t i = 0, i_ = *m_obj->Header.EntryCount; i < i_ && firstCode + i <= 0x10FFFF; i++)
+							if (const auto glyphId = *m_obj->GlyphId[i]; glyphId && glyphId < result.size())
+								result[glyphId].insert(static_cast<char32_t>(firstCode + i));
 					}
 				};
 			};
@@ -1595,28 +1631,22 @@ namespace xivres::util::truetype {
 					[[nodiscard]] std::span<const MapGroup> MapGroupSpan() const { return { const_cast<MapGroup*>(m_obj->MapGroups), *m_obj->Header.GroupCount }; }
 
 					[[nodiscard]] uint16_t CharToGlyph(uint32_t c) const {
-						MapGroup tmp;
-						tmp.EndCharCode = c;
-						const auto& group = std::upper_bound(MapGroupSpan().begin(), MapGroupSpan().end(), tmp, [](const MapGroup& l, const MapGroup& r) { return *l.EndCharCode < *r.EndCharCode; })[-1];
-						if (&group < m_obj->MapGroups || c < *group.StartCharCode || c > *group.EndCharCode)
+						// First group whose end is not before c.
+						const auto groups = MapGroupSpan();
+						const auto it = std::ranges::lower_bound(groups, c, {}, [](const MapGroup& g) { return static_cast<uint32_t>(*g.EndCharCode); });
+						if (it == groups.end() || c < *it->StartCharCode)
 							return 0;
 
 						if (*m_obj->Header.FormatId == 12)
-							return static_cast<uint16_t>(*group.GlyphId + c - group.StartCharCode);
+							return static_cast<uint16_t>(*it->GlyphId + c - *it->StartCharCode);
 						else
-							return static_cast<uint16_t>(*group.GlyphId);
+							return static_cast<uint16_t>(*it->GlyphId);
 					}
 
 					void GetGlyphToCharMap(std::vector<std::set<char32_t>>& result) const override {
-						if (*m_obj->Header.FormatId == 12) {
-							for (const auto& group : MapGroupSpan())
-								for (char32_t c = *group.StartCharCode, c_ = *group.EndCharCode; c <= c_; c++)
-									result[group.GlyphId + c - group.StartCharCode].insert(c);
-						} else {
-							for (const auto& group : MapGroupSpan())
-								for (char32_t c = *group.StartCharCode, c_ = *group.EndCharCode; c <= c_; c++)
-									result[group.GlyphId].insert(c);
-						}
+						const auto sequentialGlyphs = *m_obj->Header.FormatId == 12;
+						for (const auto& group : MapGroupSpan())
+							group.AddToGlyphToCharMap(result, sequentialGlyphs);
 					}
 				};
 			};
@@ -1892,11 +1922,11 @@ namespace xivres::util::truetype {
 							return;  // invalid kern table
 
 						const auto& kernSubtableHeader = *reinterpret_cast<const SubtableHeader*>(data.data());
-						if (data.size_bytes() < kernSubtableHeader.Length)
+						if (data.size_bytes() < kernSubtableHeader.Length || kernSubtableHeader.Length < sizeof(kernSubtableHeader))
 							return;  // invalid kern table
 
 						const auto coverage = *kernSubtableHeader.Coverage;
-						if (kernSubtableHeader.Version == 0 && coverage.Horizontal) {
+						if (kernSubtableHeader.Version == 0 && coverage.Horizontal && !coverage.Minimum && !coverage.CrossStream) {
 							const auto formatData = data.subspan(sizeof(kernSubtableHeader), kernSubtableHeader.Length - sizeof(kernSubtableHeader));
 							switch (coverage.Format) {
 								case 0:
@@ -1918,12 +1948,13 @@ namespace xivres::util::truetype {
 				BE<uint32_t> SubtableCount;
 			};
 
+			// Apple defines the flags from the most significant bit: 0x8000 vertical, 0x4000 cross-stream, 0x2000 variation; the low byte is the format.
 			struct Coverage {
-				uint16_t Vertical : 1;
-				uint16_t CrossStream : 1;
-				uint16_t Variation : 1;
-				uint16_t Reserved1 : 5;
 				uint16_t Format : 8;
+				uint16_t Reserved1 : 5;
+				uint16_t Variation : 1;
+				uint16_t CrossStream : 1;
+				uint16_t Vertical : 1;
 			};
 
 			struct SubtableHeader {
@@ -1995,17 +2026,21 @@ namespace xivres::util::truetype {
 						if (data.size_bytes() < kernSubtableHeader.Length)
 							return;  // invalid kern table
 
+						if (kernSubtableHeader.Length < sizeof(kernSubtableHeader))
+							return;  // invalid kern table
+
 						const auto coverage = *kernSubtableHeader.Coverage;
-						if (!coverage.Vertical) {
+						if (!coverage.Vertical && !coverage.CrossStream && !coverage.Variation) {
 							const auto formatData = data.subspan(sizeof(kernSubtableHeader), kernSubtableHeader.Length - sizeof(kernSubtableHeader));
 							switch (coverage.Format) {
 								case 0:
 									if (Format0::View view(formatData); view)
-										view.Parse(result, glyphToCharMap, false);
+										view.Parse(result, glyphToCharMap, true);
 									break;
 
 								default:
-									__debugbreak();
+									// Formats 1 (state table), 2 (class table) and 3 (index array) are not supported.
+									break;
 							}
 						}
 
@@ -2081,10 +2116,342 @@ namespace xivres::util::truetype {
 		};
 	};
 
+	namespace detail {
+		// Reads a big endian value, or returns std::nullopt if it lies outside the data.
+		template<typename T>
+		std::optional<T> ReadBigEndian(std::span<const char> data, size_t offset) {
+			if (offset > data.size() || data.size() - offset < sizeof(T))
+				return std::nullopt;
+			return **reinterpret_cast<const BE<T>*>(data.data() + offset);
+		}
+	}
+
+	struct Fvar {
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/fvar
+
+		static constexpr TagStruct DirectoryTableTag{ { 'f', 'v', 'a', 'r' } };
+		static constexpr TagStruct OpticalSizeAxisTag{ { 'o', 'p', 's', 'z' } };
+
+		struct Axis {
+			uint32_t Tag;  // TagStruct::NativeValue
+			float Minimum;
+			float Default;
+			float Maximum;
+		};
+
+		// Returns the variation axes of the font, or an empty vector if the font is not a variable font.
+		[[nodiscard]] static std::vector<Axis> ReadAxes(std::span<const char> fvar) {
+			using detail::ReadBigEndian;
+
+			std::vector<Axis> result;
+			const auto majorVersion = ReadBigEndian<uint16_t>(fvar, 0);
+			const auto axesArrayOffset = ReadBigEndian<uint16_t>(fvar, 4);
+			const auto axisCount = ReadBigEndian<uint16_t>(fvar, 8);
+			const auto axisSize = ReadBigEndian<uint16_t>(fvar, 10);
+			if (majorVersion != 1 || !axesArrayOffset || !axisCount || !axisSize || *axisSize < 20)
+				return result;
+
+			for (size_t i = 0; i < *axisCount; i++) {
+				const auto offset = *axesArrayOffset + static_cast<size_t>(*axisSize) * i;
+				const auto minimum = ReadBigEndian<int32_t>(fvar, offset + 4);
+				const auto defaultValue = ReadBigEndian<int32_t>(fvar, offset + 8);
+				const auto maximum = ReadBigEndian<int32_t>(fvar, offset + 12);
+				if (!minimum || !defaultValue || !maximum)
+					return {};
+
+				uint32_t tag;
+				std::memcpy(&tag, fvar.data() + offset, sizeof tag);
+				result.emplace_back(Axis{
+					.Tag = tag,
+					.Minimum = static_cast<float>(*minimum) / 65536.f,
+					.Default = static_cast<float>(*defaultValue) / 65536.f,
+					.Maximum = static_cast<float>(*maximum) / 65536.f,
+				});
+			}
+			return result;
+		}
+
+		// Converts design coordinates to normalized coordinates, applying avar if present.
+		// Axes without a given coordinate are at their default.
+		[[nodiscard]] static std::vector<float> NormalizeCoordinates(const std::vector<Axis>& axes, const std::map<uint32_t, float>& designCoordinates, std::span<const char> avar) {
+			using detail::ReadBigEndian;
+
+			// Normalized coordinates are stored as F2DOT14; quantize as shapers and rasterizers do.
+			const auto quantize = [](double v) { return static_cast<float>(std::round(v * 16384.) / 16384.); };
+
+			std::vector<float> result;
+			result.reserve(axes.size());
+			for (const auto& axis : axes) {
+				const auto it = designCoordinates.find(axis.Tag);
+				const auto value = std::clamp(it == designCoordinates.end() ? axis.Default : it->second, axis.Minimum, axis.Maximum);
+				double normalized = 0;
+				if (value < axis.Default && axis.Default > axis.Minimum)
+					normalized = (static_cast<double>(value) - axis.Default) / (static_cast<double>(axis.Default) - axis.Minimum);
+				else if (value > axis.Default && axis.Maximum > axis.Default)
+					normalized = (static_cast<double>(value) - axis.Default) / (static_cast<double>(axis.Maximum) - axis.Default);
+				result.push_back(quantize(normalized));
+			}
+
+			// avar version 1: SegmentMaps[axisCount] { uint16 positionMapCount; { F2DOT14 fromCoordinate, toCoordinate; }[] }
+			if (ReadBigEndian<uint16_t>(avar, 0) == 1 && ReadBigEndian<uint16_t>(avar, 6) == axes.size()) {
+				size_t offset = 8;
+				for (auto& coordinate : result) {
+					const auto count = ReadBigEndian<uint16_t>(avar, offset);
+					if (!count)
+						break;
+					offset += 2;
+
+					std::vector<std::pair<double, double>> map;
+					for (size_t i = 0; i < *count; i++, offset += 4) {
+						const auto from = ReadBigEndian<int16_t>(avar, offset);
+						const auto to = ReadBigEndian<int16_t>(avar, offset + 2);
+						if (!from || !to)
+							return result;
+						map.emplace_back(*from / 16384., *to / 16384.);
+					}
+
+					// Piecewise linear interpolation between the mapping points.
+					for (size_t i = 1; i < map.size(); i++) {
+						if (coordinate <= map[i].first) {
+							const auto& [x0, y0] = map[i - 1];
+							const auto& [x1, y1] = map[i];
+							if (x1 > x0)
+								coordinate = quantize(y0 + (y1 - y0) * (coordinate - x0) / (x1 - x0));
+							else
+								coordinate = static_cast<float>(y1);
+							break;
+						}
+					}
+				}
+			}
+
+			return result;
+		}
+	};
+
+	struct ItemVariationStore {
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
+
+		class View {
+			std::span<const char> m_data;
+
+		public:
+			View() = default;
+
+			explicit View(std::span<const char> data) {
+				if (detail::ReadBigEndian<uint16_t>(data, 0) == 1)
+					m_data = data;
+			}
+
+			explicit operator bool() const {
+				return !m_data.empty();
+			}
+
+			// Returns the delta of the item for the given normalized coordinates, in font units.
+			[[nodiscard]] double GetDelta(uint16_t outerIndex, uint16_t innerIndex, std::span<const float> coordinates) const {
+				using detail::ReadBigEndian;
+
+				const auto regionListOffset = ReadBigEndian<uint32_t>(m_data, 2);
+				const auto dataCount = ReadBigEndian<uint16_t>(m_data, 6);
+				if (!regionListOffset || !dataCount || outerIndex >= *dataCount)
+					return 0;
+
+				const auto dataOffset = ReadBigEndian<uint32_t>(m_data, 8 + 4 * static_cast<size_t>(outerIndex));
+				if (!dataOffset)
+					return 0;
+
+				// ItemVariationData { uint16 itemCount; uint16 wordDeltaCount; uint16 regionIndexCount; uint16 regionIndexes[]; deltaSets[] }
+				const auto itemCount = ReadBigEndian<uint16_t>(m_data, *dataOffset);
+				const auto wordDeltaCount = ReadBigEndian<uint16_t>(m_data, *dataOffset + 2);
+				const auto regionIndexCount = ReadBigEndian<uint16_t>(m_data, *dataOffset + 4);
+				if (!itemCount || !wordDeltaCount || !regionIndexCount || innerIndex >= *itemCount)
+					return 0;
+
+				const auto longWords = (*wordDeltaCount & 0x8000) != 0;
+				const auto wordCount = static_cast<size_t>(*wordDeltaCount & 0x7FFF);
+				const size_t wordSize = longWords ? 4 : 2;
+				const size_t shortSize = longWords ? 2 : 1;
+				const auto rowSize = wordCount * wordSize + (*regionIndexCount - wordCount) * shortSize;
+				if (wordCount > *regionIndexCount)
+					return 0;
+
+				const auto rowOffset = *dataOffset + 6 + 2 * static_cast<size_t>(*regionIndexCount) + rowSize * innerIndex;
+				double delta = 0;
+				size_t cellOffset = rowOffset;
+				for (size_t i = 0; i < *regionIndexCount; i++) {
+					const auto cellSize = i < wordCount ? wordSize : shortSize;
+					const auto cell = ReadSignedCell(cellOffset, cellSize);
+					cellOffset += cellSize;
+					const auto regionIndex = ReadBigEndian<uint16_t>(m_data, *dataOffset + 6 + 2 * i);
+					if (!cell || !regionIndex)
+						return 0;
+					if (*cell)
+						delta += *cell * GetRegionScalar(*regionListOffset, *regionIndex, coordinates);
+				}
+				return delta;
+			}
+
+		private:
+			[[nodiscard]] std::optional<int32_t> ReadSignedCell(size_t offset, size_t size) const {
+				using detail::ReadBigEndian;
+				switch (size) {
+					case 4:
+						return ReadBigEndian<int32_t>(m_data, offset);
+					case 2:
+						if (const auto v = ReadBigEndian<int16_t>(m_data, offset))
+							return *v;
+						return std::nullopt;
+					case 1:
+						if (const auto v = ReadBigEndian<int8_t>(m_data, offset))
+							return *v;
+						return std::nullopt;
+					default:
+						return std::nullopt;
+				}
+			}
+
+			[[nodiscard]] double GetRegionScalar(size_t regionListOffset, size_t regionIndex, std::span<const float> coordinates) const {
+				using detail::ReadBigEndian;
+
+				// VariationRegionList { uint16 axisCount; uint16 regionCount; VariationRegion { F2DOT14 start, peak, end; }[axisCount][regionCount] }
+				const auto axisCount = ReadBigEndian<uint16_t>(m_data, regionListOffset);
+				const auto regionCount = ReadBigEndian<uint16_t>(m_data, regionListOffset + 2);
+				if (!axisCount || !regionCount || regionIndex >= *regionCount)
+					return 0;
+
+				double scalar = 1;
+				for (size_t axis = 0; axis < *axisCount; axis++) {
+					const auto offset = regionListOffset + 4 + (regionIndex * *axisCount + axis) * 6;
+					const auto startValue = ReadBigEndian<int16_t>(m_data, offset);
+					const auto peakValue = ReadBigEndian<int16_t>(m_data, offset + 2);
+					const auto endValue = ReadBigEndian<int16_t>(m_data, offset + 4);
+					if (!startValue || !peakValue || !endValue)
+						return 0;
+
+					const auto start = *startValue / 16384., peak = *peakValue / 16384., end = *endValue / 16384.;
+					const auto coordinate = axis < coordinates.size() ? static_cast<double>(coordinates[axis]) : 0.;
+					if (start > peak || peak > end)
+						continue;
+					if (start < 0 && end > 0 && peak != 0)
+						continue;
+					if (peak == 0 || coordinate == peak)
+						continue;
+					if (coordinate <= start || coordinate >= end)
+						return 0;
+					scalar *= coordinate < peak ? (coordinate - start) / (peak - start) : (end - coordinate) / (end - peak);
+				}
+				return scalar;
+			}
+		};
+	};
+
+	struct Gdef {
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/gdef
+
+		static constexpr TagStruct DirectoryTableTag{ { 'G', 'D', 'E', 'F' } };
+
+		// Returns the item variation store of GDEF version 1.3 and later.
+		[[nodiscard]] static ItemVariationStore::View GetItemVariationStore(std::span<const char> gdef) {
+			using detail::ReadBigEndian;
+			if (ReadBigEndian<uint16_t>(gdef, 0) != 1 || ReadBigEndian<uint16_t>(gdef, 2).value_or(0) < 3)
+				return {};
+			const auto offset = ReadBigEndian<uint32_t>(gdef, 14).value_or(0);
+			if (!offset || offset >= gdef.size())
+				return {};
+			return ItemVariationStore::View(gdef.subspan(offset));
+		}
+	};
+
+	struct Avar {
+		static constexpr TagStruct DirectoryTableTag{ { 'a', 'v', 'a', 'r' } };
+	};
+
+	struct Base {
+		// https://learn.microsoft.com/en-us/typography/opentype/spec/base
+
+		static constexpr TagStruct DirectoryTableTag{ { 'B', 'A', 'S', 'E' } };
+
+		static constexpr TagStruct RomanBaselineTag{ { 'r', 'o', 'm', 'n' } };
+		static constexpr TagStruct IdeographicEmBoxBottomTag{ { 'i', 'd', 'e', 'o' } };
+		static constexpr TagStruct IdeographicEmBoxTopTag{ { 'i', 'd', 't', 'p' } };
+		static constexpr TagStruct IdeographicFaceBottomTag{ { 'i', 'c', 'f', 'b' } };
+		static constexpr TagStruct IdeographicFaceTopTag{ { 'i', 'c', 'f', 't' } };
+
+		// Returns the horizontal baselines of the first of scriptTags that the table lists, or of its first script if none,
+		// keyed by baseline tags. Values are in font units, above the origin of the glyphs.
+		[[nodiscard]] static std::map<uint32_t, int> ReadHorizontalBaselines(std::span<const char> base, std::span<const uint32_t> scriptTags) {
+			using detail::ReadBigEndian;
+
+			std::map<uint32_t, int> result;
+			if (ReadBigEndian<uint16_t>(base, 0) != 1)
+				return result;
+
+			// Axis { Offset16 baseTagListOffset; Offset16 baseScriptListOffset; }
+			const auto axisOffset = static_cast<size_t>(ReadBigEndian<uint16_t>(base, 4).value_or(0));
+			if (!axisOffset)
+				return result;
+			const auto tagListOffset = ReadBigEndian<uint16_t>(base, axisOffset).value_or(0);
+			const auto scriptListOffset = ReadBigEndian<uint16_t>(base, axisOffset + 2).value_or(0);
+			if (!tagListOffset || !scriptListOffset)
+				return result;
+
+			// BaseTagList { uint16 baseTagCount; Tag baselineTags[]; }
+			const auto tagList = axisOffset + tagListOffset;
+			const auto tagCount = ReadBigEndian<uint16_t>(base, tagList).value_or(0);
+			std::vector<uint32_t> baselineTags;
+			for (size_t i = 0; i < tagCount; i++) {
+				if (tagList + 2 + 4 * i + 4 > base.size())
+					return result;
+				uint32_t tag;
+				std::memcpy(&tag, base.data() + tagList + 2 + 4 * i, sizeof tag);
+				baselineTags.push_back(tag);
+			}
+
+			// BaseScriptList { uint16 baseScriptCount; { Tag baseScriptTag; Offset16 baseScriptOffset; }[] }
+			const auto scriptList = axisOffset + scriptListOffset;
+			const auto scriptCount = ReadBigEndian<uint16_t>(base, scriptList).value_or(0);
+			std::optional<size_t> scriptOffset;
+			for (const auto wanted : scriptTags) {
+				for (size_t i = 0; i < scriptCount && !scriptOffset; i++) {
+					uint32_t tag;
+					if (scriptList + 2 + 6 * i + 6 > base.size())
+						return result;
+					std::memcpy(&tag, base.data() + scriptList + 2 + 6 * i, sizeof tag);
+					if (tag == wanted)
+						scriptOffset = scriptList + ReadBigEndian<uint16_t>(base, scriptList + 2 + 6 * i + 4).value_or(0);
+				}
+				if (scriptOffset)
+					break;
+			}
+			if (!scriptOffset && scriptCount)
+				scriptOffset = scriptList + ReadBigEndian<uint16_t>(base, scriptList + 6).value_or(0);
+			if (!scriptOffset)
+				return result;
+
+			// BaseScript { Offset16 baseValuesOffset; ... }
+			// BaseValues { uint16 defaultBaselineIndex; uint16 baseCoordCount; Offset16 baseCoordOffsets[]; }
+			// BaseCoord { uint16 format; int16 coordinate; ... }
+			const auto valuesOffset = ReadBigEndian<uint16_t>(base, *scriptOffset).value_or(0);
+			if (!valuesOffset)
+				return result;
+			const auto values = *scriptOffset + valuesOffset;
+			const auto coordCount = ReadBigEndian<uint16_t>(base, values + 2).value_or(0);
+			for (size_t i = 0; i < coordCount && i < baselineTags.size(); i++) {
+				const auto coordOffset = ReadBigEndian<uint16_t>(base, values + 4 + 2 * i).value_or(0);
+				if (!coordOffset)
+					continue;
+				if (const auto coordinate = ReadBigEndian<int16_t>(base, values + coordOffset + 2))
+					result.emplace(baselineTags[i], *coordinate);
+			}
+			return result;
+		}
+	};
+
 	struct Gpos {
 		// https://docs.microsoft.com/en-us/typography/opentype/spec/gpos
 
 		static constexpr TagStruct DirectoryTableTag{ { 'G', 'P', 'O', 'S' } };
+		static constexpr TagStruct KerningFeatureTag{ { 'k', 'e', 'r', 'n' } };
 
 		struct GposHeaderV1_0 {
 			Fixed Version;
@@ -2250,6 +2617,9 @@ namespace xivres::util::truetype {
 						if (data.size_bytes() < sizeof(FormatHeader) + static_cast<size_t>(2) * (*obj->Header.PairSetCount))
 							return;
 
+						if (*obj->Header.CoverageOffset >= data.size_bytes())
+							return;
+
 						if (CoverageTable::View coverageTable(reinterpret_cast<const char*>(obj) + *obj->Header.CoverageOffset, data.size_bytes() - *obj->Header.CoverageOffset); !coverageTable)
 							return;
 
@@ -2336,17 +2706,27 @@ namespace xivres::util::truetype {
 					View(const void* pData, size_t length) : View(std::span(static_cast<const char*>(pData), length)) {}
 					template<typename T>
 					View(std::span<T> data) : View() {
-						if (data.size_bytes() < 2)
+						if (data.size_bytes() < sizeof(FormatHeader))
 							return;
 
 						const auto obj = reinterpret_cast<decltype(m_obj)>(&data[0]);
 
-						const auto bit = ((*obj->Header.ValueFormat2).Value << 16) | (*obj->Header.ValueFormat1).Value;
+						if (obj->Header.FormatId != 2)
+							return;
+
+						const auto bit = (static_cast<uint32_t>((*obj->Header.ValueFormat2).Value) << 16) | (*obj->Header.ValueFormat1).Value;
 						const auto valueCountPerPairValueRecord = static_cast<size_t>(std::popcount<uint32_t>(bit));
 
 						if (data.size_bytes() < sizeof(FormatHeader) + sizeof(BE<uint16_t>) * valueCountPerPairValueRecord * (*obj->Header.Class1Count) * (*obj->Header.Class2Count))
 							return;
 
+						for (const size_t offset : {*obj->Header.CoverageOffset, *obj->Header.ClassDef1Offset, *obj->Header.ClassDef2Offset}) {
+							if (offset >= data.size_bytes())
+								return;
+						}
+
+						if (CoverageTable::View v(reinterpret_cast<const char*>(obj) + *obj->Header.CoverageOffset, data.size_bytes() - *obj->Header.CoverageOffset); !v)
+							return;
 						if (ClassDefTable::View v(reinterpret_cast<const char*>(obj) + *obj->Header.ClassDef1Offset, data.size_bytes() - *obj->Header.ClassDef1Offset); !v)
 							return;
 						if (ClassDefTable::View v(reinterpret_cast<const char*>(obj) + *obj->Header.ClassDef2Offset, data.size_bytes() - *obj->Header.ClassDef2Offset); !v)
@@ -2374,28 +2754,26 @@ namespace xivres::util::truetype {
 						return &m_obj->Records[m_valueCountPerPairValueRecord * (class1 * *m_obj->Header.Class2Count + class2)];
 					}
 
+					// Unlike PairValueRecord of Format1, Class2Record does not begin with a glyph ID;
+					// the requested value is preceded only by the values of lower bits that are set.
+					// desiredRecord must have exactly one bit set.
 					[[nodiscard]] uint16_t GetValueRecord1(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
-						if (!((*m_obj->Header.ValueFormat1).Value & desiredRecord.Value))
+						const auto desired = static_cast<uint32_t>(desiredRecord.Value);
+						if (!(m_bit & desired))
 							return 0;
-						auto bit = m_bit;
-						auto pRecord = GetPairValueRecord(class1, class2);
-						for (auto i = static_cast<uint32_t>(desiredRecord.Value); i && bit; i >>= 1, bit >>= 1) {
-							if (bit & 1)
-								pRecord++;
-						}
-						return **pRecord;
+						return *GetPairValueRecord(class1, class2)[std::popcount(m_bit & (desired - 1))];
 					}
 
 					[[nodiscard]] uint16_t GetValueRecord2(size_t class1, size_t class2, ValueFormatFlags desiredRecord) const {
-						if (!((*m_obj->Header.ValueFormat2).Value & desiredRecord.Value))
+						const auto desired = static_cast<uint32_t>(desiredRecord.Value) << 16;
+						if (!(m_bit & desired))
 							return 0;
-						auto bit = m_bit;
-						auto pRecord = GetPairValueRecord(class1, class2);
-						for (auto i = static_cast<uint32_t>(desiredRecord.Value) << 16; i && bit; i >>= 1, bit >>= 1) {
-							if (bit & 1)
-								pRecord++;
-						}
-						return **pRecord;
+						return *GetPairValueRecord(class1, class2)[std::popcount(m_bit & (desired - 1))];
+					}
+
+					[[nodiscard]] CoverageTable::View CoverageTableView() const {
+						const auto offset = static_cast<size_t>(*m_obj->Header.CoverageOffset);
+						return { m_bytes + offset, m_length - offset };
 					}
 
 					[[nodiscard]] ClassDefTable::View GetClassTableDefinition1() const {
@@ -2472,126 +2850,637 @@ namespace xivres::util::truetype {
 				return m_obj;
 			}
 
-			[[nodiscard]] std::map<std::pair<char32_t, char32_t>, int> ExtractAdvanceX(const std::vector<std::set<char32_t>>& glyphToCharMap) const {
-				std::map<std::pair<char32_t, char32_t>, int> result;
+			// What Device and VariationIndex tables of ValueRecords are evaluated against.
+			struct ValueContext {
+				// Item variation store of GDEF, and the normalized coordinates of the instance, for variable fonts.
+				ItemVariationStore::View VariationStore;
+				std::span<const float> NormalizedCoordinates;
 
-				FeatureList::View featureList(m_bytes + *m_obj->HeaderV1_0.FeatureListOffset, m_length - *m_obj->HeaderV1_0.FeatureListOffset);
-				const auto test = featureList.Records();
+				// Horizontal and vertical pixels per em, for Device tables; 0 to ignore them.
+				unsigned PpemX = 0;
+				unsigned PpemY = 0;
 
-				const auto lookupListOffset = *m_obj->HeaderV1_0.LookupListOffset;
+				// Font units per em, to convert the pixel adjustments of Device tables into font units.
+				unsigned UnitsPerEm = 0;
+			};
+			// Returns the type of the lookup, resolving extension lookups, or 0 if the lookup is invalid.
+			[[nodiscard]] LookupType GetLookupType(uint16_t lookupIndex) const {
+				const auto lookupListOffset = static_cast<size_t>(*m_obj->HeaderV1_0.LookupListOffset);
+				if (!lookupListOffset || lookupListOffset >= m_length)
+					return static_cast<LookupType>(0);
+
+				LookupList::View lookupList(m_bytes + lookupListOffset, m_length - lookupListOffset);
+				if (!lookupList || lookupIndex >= lookupList.Offsets().size())
+					return static_cast<LookupType>(0);
+
+				const auto offset = lookupListOffset + *lookupList.Offsets()[lookupIndex];
+				if (offset >= m_length)
+					return static_cast<LookupType>(0);
+
+				LookupTable::View lookupTable(m_bytes + offset, m_length - offset);
+				if (!lookupTable)
+					return static_cast<LookupType>(0);
+
+				const auto lookupType = *lookupTable->Header.LookupType;
+				if (lookupType != LookupType::ExtensionPositioning || !*lookupTable->Header.SubtableCount)
+					return lookupType;
+
+				const auto subtableSpan = lookupTable.SubtableSpan(0);
+				if (subtableSpan.size() < sizeof(ExtensionPositioningSubtable::Format1))
+					return static_cast<LookupType>(0);
+				return *reinterpret_cast<const ExtensionPositioningSubtable::Format1*>(subtableSpan.data())->ExtensionLookupType;
+			}
+
+			// Returns whether the font has a 'kern' feature with lookups.
+			[[nodiscard]] bool HasKerningFeature() const {
+				const auto featureList = GetFeatureListView();
+				if (!featureList)
+					return false;
+
+				const auto records = featureList.Records();
+				for (size_t i = 0; i < records.size(); i++) {
+					if (records[i].FeatureTag.NativeValue == KerningFeatureTag.NativeValue && !featureList.LookupIndices(i).empty())
+						return true;
+				}
+				return false;
+			}
+
+			// Returns the indices into LookupList of the lookups of the given features. Tags are in TagStruct::NativeValue form.
+			// The script is the first of scriptTags that the font has, falling back to DFLT, dflt, and latn as shapers do.
+			// The language system is the first of languageTags that the script has, falling back to its default language system.
+			// If the font has no script list, every matching feature is used.
+			// For variable fonts, feature tables are substituted as FeatureVariations specifies for the normalized coordinates.
+			[[nodiscard]] std::set<uint16_t> GetFeatureLookupIndices(const std::set<uint32_t>& featureTags, std::span<const uint32_t> scriptTags, std::span<const uint32_t> languageTags, std::span<const float> normalizedCoordinates = {}) const {
+				static constexpr TagStruct FallbackScriptTags[]{ { { 'D', 'F', 'L', 'T' } }, { { 'd', 'f', 'l', 't' } }, { { 'l', 'a', 't', 'n' } } };
+
+				std::set<uint16_t> result;
+
+				const auto featureList = GetFeatureListView();
+				if (!featureList)
+					return result;
+
+				const auto features = featureList.Records();
+				const auto substitutions = GetFeatureSubstitutions(normalizedCoordinates);
+				const auto addFeature = [&](size_t featureIndex) {
+					if (featureIndex >= features.size() || !featureTags.contains(features[featureIndex].FeatureTag.NativeValue))
+						return;
+
+					if (const auto it = substitutions.find(static_cast<uint16_t>(featureIndex)); it != substitutions.end()) {
+						for (const auto lookupIndex : it->second)
+							result.insert(lookupIndex);
+						return;
+					}
+
+					for (const auto& lookupIndex : featureList.LookupIndices(featureIndex))
+						result.insert(*lookupIndex);
+				};
+
+				const auto readUInt16 = [this](size_t offset) -> std::optional<uint16_t> {
+					if (offset + sizeof(uint16_t) > m_length)
+						return std::nullopt;
+					return *reinterpret_cast<const BE<uint16_t>*>(m_bytes + offset);
+				};
+				const auto readTag = [this](size_t offset) -> std::optional<uint32_t> {
+					if (offset + sizeof(uint32_t) > m_length)
+						return std::nullopt;
+					uint32_t tag;
+					std::memcpy(&tag, m_bytes + offset, sizeof tag);
+					return tag;
+				};
+
+				// ScriptList { uint16 scriptCount; ScriptRecord { Tag scriptTag; Offset16 scriptOffset; } scriptRecords[]; }
+				// Script { Offset16 defaultLangSysOffset; uint16 langSysCount; LangSysRecord { Tag langSysTag; Offset16 langSysOffset; } langSysRecords[]; }
+				// LangSys { Offset16 lookupOrderOffset; uint16 requiredFeatureIndex; uint16 featureIndexCount; uint16 featureIndices[]; }
+				const auto scriptListOffset = static_cast<size_t>(*m_obj->HeaderV1_0.ScriptListOffset);
+				const auto scriptCount = scriptListOffset ? readUInt16(scriptListOffset).value_or(0) : 0;
+				if (!scriptCount) {
+					for (size_t i = 0; i < features.size(); i++)
+						addFeature(i);
+					return result;
+				}
+
+				// Finds the offset to the table of the record with the given tag, among (count) records of 6 bytes each.
+				const auto findRecord = [&](size_t tableOffset, size_t recordsOffset, size_t count, uint32_t tag) -> size_t {
+					for (size_t i = 0; i < count; i++) {
+						const auto recordTag = readTag(recordsOffset + 6 * i);
+						const auto recordOffset = readUInt16(recordsOffset + 6 * i + 4);
+						if (!recordTag || !recordOffset)
+							return 0;
+						if (*recordTag == tag)
+							return tableOffset + *recordOffset;
+					}
+					return 0;
+				};
+
+				size_t scriptTableOffset = 0;
+				for (const auto tag : scriptTags) {
+					if ((scriptTableOffset = findRecord(scriptListOffset, scriptListOffset + 2, scriptCount, tag)))
+						break;
+				}
+				for (const auto& tag : FallbackScriptTags) {
+					if (scriptTableOffset)
+						break;
+					scriptTableOffset = findRecord(scriptListOffset, scriptListOffset + 2, scriptCount, tag.NativeValue);
+				}
+				if (!scriptTableOffset)
+					return result;
+
+				size_t langSysOffset = 0;
+				const auto langSysCount = readUInt16(scriptTableOffset + 2).value_or(0);
+				for (const auto tag : languageTags) {
+					if ((langSysOffset = findRecord(scriptTableOffset, scriptTableOffset + 4, langSysCount, tag)))
+						break;
+				}
+				if (!langSysOffset) {
+					const auto defaultLangSysOffset = readUInt16(scriptTableOffset).value_or(0);
+					if (!defaultLangSysOffset)
+						return result;
+					langSysOffset = scriptTableOffset + defaultLangSysOffset;
+				}
+
+				const auto requiredFeatureIndex = readUInt16(langSysOffset + 2);
+				const auto featureIndexCount = readUInt16(langSysOffset + 4);
+				if (!requiredFeatureIndex || !featureIndexCount)
+					return result;
+
+				if (*requiredFeatureIndex != 0xFFFF)
+					addFeature(*requiredFeatureIndex);
+				for (size_t j = 0; j < *featureIndexCount; j++) {
+					if (const auto featureIndex = readUInt16(langSysOffset + 6 + 2 * j))
+						addFeature(*featureIndex);
+				}
+
+				return result;
+			}
+
+			// Extracts horizontal pair kerning from the given lookups, in font units:
+			// XAdvance of the first glyph plus XPlacement of the second glyph.
+			// Lookups are applied in LookupList order and their values add up.
+			// Within a lookup, the first subtable that applies to a pair wins, even if its value is zero.
+			[[nodiscard]] std::map<std::pair<char32_t, char32_t>, double> ExtractAdvanceX(const std::vector<std::set<char32_t>>& glyphToCharMap, const std::set<uint16_t>& lookupIndices, const ValueContext& context = {}) const {
+				const auto lookupListOffset = static_cast<size_t>(*m_obj->HeaderV1_0.LookupListOffset);
+				if (!lookupListOffset || lookupListOffset >= m_length)
+					return {};
+
 				LookupList::View lookupList(m_bytes + lookupListOffset, m_length - lookupListOffset);
 				if (!lookupList)
 					return {};
 
-				for (const auto& lookupTableOffset : lookupList.Offsets()) {
-					const auto offset = lookupListOffset + *lookupTableOffset;
-					
+				// Only glyphs that are mapped from a codepoint can take part in the result.
+				std::vector<uint16_t> mappedGlyphs;
+				for (size_t i = 0, i_ = (std::min<size_t>)(glyphToCharMap.size(), 65536); i < i_; i++) {
+					if (!glyphToCharMap[i].empty())
+						mappedGlyphs.push_back(static_cast<uint16_t>(i));
+				}
+
+				// Key is (left glyph << 16) | right glyph.
+				std::unordered_map<uint32_t, double> glyphPairs;
+
+				const auto lookupOffsets = lookupList.Offsets();
+				for (const auto lookupIndex : lookupIndices) {
+					if (lookupIndex >= lookupOffsets.size())
+						continue;
+
+					const auto offset = lookupListOffset + *lookupOffsets[lookupIndex];
+					if (offset >= m_length)
+						continue;
+
+					if (LookupTable::View lookupTable(m_bytes + offset, m_length - offset); lookupTable)
+						ApplyPairAdjustmentLookup(lookupTable, glyphToCharMap, mappedGlyphs, glyphPairs, context);
+				}
+
+				std::map<std::pair<char32_t, char32_t>, double> result;
+				for (const auto& [key, value] : glyphPairs) {
+					if (value == 0)
+						continue;
+
+					for (const auto c1 : glyphToCharMap[key >> 16])
+						for (const auto c2 : glyphToCharMap[key & 0xFFFF])
+							result[std::make_pair(c1, c2)] = value;
+				}
+
+				return result;
+			}
+
+
+			// Reads a field of a ValueRecord, adding the adjustment of its Device or VariationIndex table if any, in font units.
+			// subtable is the table that device offsets are relative to: the PairSet table for PairPosFormat1, and the subtable otherwise.
+			// desiredRecord must be one of PlacementX, PlacementY, AdvanceX, or AdvanceY.
+			[[nodiscard]] static double ReadValueRecordField(std::span<const char> subtable, const char* pRecord, uint16_t valueFormat, ValueFormatFlags desiredRecord, const ValueContext& context) {
+				const auto bit = static_cast<uint32_t>(desiredRecord.Value);
+
+				double value = 0;
+				if (valueFormat & bit) {
+					const auto fieldOffset = sizeof(uint16_t) * std::popcount(valueFormat & (bit - 1));
+					value = **reinterpret_cast<const BE<int16_t>*>(pRecord + fieldOffset);
+				}
+
+				// Device offsets follow the four value fields, in the same order. A device offset may be present without its value field.
+				if (const auto deviceBit = bit << 4; valueFormat & deviceBit) {
+					const auto deviceFieldOffset = sizeof(uint16_t) * std::popcount(valueFormat & (deviceBit - 1));
+					if (const auto deviceOffset = static_cast<size_t>(**reinterpret_cast<const BE<uint16_t>*>(pRecord + deviceFieldOffset))) {
+						const auto isVertical = desiredRecord.PlacementY || desiredRecord.AdvanceY;
+						value += EvaluateDeviceTable(subtable, deviceOffset, context, isVertical ? context.PpemY : context.PpemX);
+					}
+				}
+				return value;
+			}
+
+			// Evaluates a Device or VariationIndex table, in font units.
+			[[nodiscard]] static double EvaluateDeviceTable(std::span<const char> subtable, size_t offset, const ValueContext& context, unsigned ppem) {
+				using detail::ReadBigEndian;
+
+				// Device { uint16 startSize; uint16 endSize; uint16 deltaFormat; ... }
+				// VariationIndex { uint16 deltaSetOuterIndex; uint16 deltaSetInnerIndex; uint16 deltaFormat = 0x8000; }
+				const auto first = ReadBigEndian<uint16_t>(subtable, offset);
+				const auto second = ReadBigEndian<uint16_t>(subtable, offset + 2);
+				const auto deltaFormat = ReadBigEndian<uint16_t>(subtable, offset + 4);
+				if (!first || !second || !deltaFormat)
+					return 0;
+
+				if (*deltaFormat == 0x8000) {
+					if (!context.VariationStore)
+						return 0;
+					return context.VariationStore.GetDelta(*first, *second, context.NormalizedCoordinates);
+				}
+
+				// Device formats 1, 2, and 3 pack signed pixel adjustments of 2, 4, and 8 bits, for sizes startSize to endSize.
+				const auto startSize = *first, endSize = *second;
+				if (*deltaFormat < 1 || *deltaFormat > 3 || !ppem || !context.UnitsPerEm || ppem < startSize || ppem > endSize)
+					return 0;
+
+				const auto bits = 1u << *deltaFormat;
+				const auto valuesPerWord = 16 / bits;
+				const auto index = ppem - startSize;
+				const auto word = ReadBigEndian<uint16_t>(subtable, offset + 6 + 2 * static_cast<size_t>(index / valuesPerWord));
+				if (!word)
+					return 0;
+
+				const auto shift = 16 - bits * (index % valuesPerWord + 1);
+				auto pixels = static_cast<int>((*word >> shift) & ((1u << bits) - 1));
+				if (pixels >= static_cast<int>(1u << (bits - 1)))
+					pixels -= static_cast<int>(1u << bits);
+				return static_cast<double>(pixels) * context.UnitsPerEm / ppem;
+			}
+
+			struct SingleAdjustment {
+				double PlacementX = 0;
+				double PlacementY = 0;
+				double AdvanceX = 0;
+			};
+
+			// Extracts single glyph adjustments (lookup type 1) from the given lookups for the given glyphs, in font units.
+			// Lookups are applied in LookupList order and their values add up.
+			// Within a lookup, the first subtable that covers a glyph applies to it.
+			[[nodiscard]] std::map<uint16_t, SingleAdjustment> ExtractSingleAdjustments(const std::set<uint16_t>& lookupIndices, const std::vector<uint16_t>& glyphs, const ValueContext& context = {}) const {
+				std::map<uint16_t, SingleAdjustment> result;
+
+				const auto lookupListOffset = static_cast<size_t>(*m_obj->HeaderV1_0.LookupListOffset);
+				if (!lookupListOffset || lookupListOffset >= m_length)
+					return result;
+
+				LookupList::View lookupList(m_bytes + lookupListOffset, m_length - lookupListOffset);
+				if (!lookupList)
+					return result;
+
+				const auto lookupOffsets = lookupList.Offsets();
+				for (const auto lookupIndex : lookupIndices) {
+					if (lookupIndex >= lookupOffsets.size())
+						continue;
+
+					const auto offset = lookupListOffset + *lookupOffsets[lookupIndex];
+					if (offset >= m_length)
+						continue;
+
 					LookupTable::View lookupTable(m_bytes + offset, m_length - offset);
 					if (!lookupTable)
 						continue;
 
+					std::vector<SinglePositioningSubtable> subtables;
 					for (size_t subtableIndex = 0, i_ = *lookupTable->Header.SubtableCount; subtableIndex < i_; subtableIndex++) {
 						auto subtableSpan = lookupTable.SubtableSpan(subtableIndex);
-
-						switch (*lookupTable->Header.LookupType) {
-						case LookupType::PairAdjustment:
-							break;
-
-						case LookupType::ExtensionPositioning: {
-							if (subtableSpan.size() < sizeof(ExtensionPositioningSubtable::Format1))
-								continue;
-							const auto& table = *reinterpret_cast<const ExtensionPositioningSubtable::Format1*>(subtableSpan.data());
-							if (*table.PosFormat != 1)
-								continue;
-							if (*table.ExtensionLookupType != LookupType::PairAdjustment)
-								continue;
-							subtableSpan = subtableSpan.subspan(table.ExtensionOffset);
-							break;
-						}
-
-						default:
+						if (!ResolveExtension(*lookupTable->Header.LookupType, LookupType::SingleAdjustment, subtableSpan))
 							continue;
-						}
+						if (SinglePositioningSubtable subtable(subtableSpan); subtable)
+							subtables.emplace_back(subtable);
+					}
 
-						if (PairAdjustmentPositioningSubtable::Format1::View v(subtableSpan); v) {
-							if (!(*v->Header.ValueFormat1).AdvanceX && !(*v->Header.ValueFormat2).PlacementX)
+					for (const auto glyph : glyphs) {
+						for (const auto& subtable : subtables) {
+							const auto pRecord = subtable.GetValueRecord(glyph);
+							if (!pRecord)
 								continue;
 
-							const auto coverageTable = v.CoverageTableView();
-							if (coverageTable->Header.FormatId == 1) {
-								const auto glyphSpan = coverageTable.GlyphSpan();
-								for (size_t coverageIndex = 0; coverageIndex < glyphSpan.size(); coverageIndex++) {
-									const auto glyph1Id = *glyphSpan[coverageIndex];
-									for (const auto c1 : glyphToCharMap[glyph1Id]) {
-										const auto pairSetView = v.PairSetView(coverageIndex);
-										for (size_t pairIndex = 0, j_ = *pairSetView->Count; pairIndex < j_; pairIndex++) {
-											for (const auto c2 : glyphToCharMap[pairSetView.GetSecondGlyph(pairIndex)]) {
-												const auto val = static_cast<int16_t>(pairSetView.GetValueRecord1(pairIndex, { .AdvanceX = 1 }))
-													+ static_cast<int16_t>(pairSetView.GetValueRecord2(pairIndex, { .PlacementX = 1 }));
-												if (val)
-													result[std::make_pair(c1, c2)] = val;
-											}
-										}
-									}
-								}
-
-							} else if (coverageTable->Header.FormatId == 2) {
-								for (const auto& rangeRecord : coverageTable.RangeRecordSpan()) {
-									const auto startGlyphId = static_cast<size_t>(*rangeRecord.StartGlyphId);
-									const auto endGlyphId = static_cast<size_t>(*rangeRecord.EndGlyphId);
-									const auto startCoverageIndex = static_cast<size_t>(*rangeRecord.StartCoverageIndex);
-									for (size_t glyphIndex = 0, i_ = endGlyphId - startGlyphId + 1; glyphIndex < i_; glyphIndex++) {
-										const auto glyph1Id = startGlyphId + glyphIndex;
-										for (const auto c1 : glyphToCharMap[glyph1Id]) {
-											const auto pairSetView = v.PairSetView(startCoverageIndex + glyphIndex);
-											for (size_t pairIndex = 0, j_ = *pairSetView->Count; pairIndex < j_; pairIndex++) {
-												for (const auto c2 : glyphToCharMap[pairSetView.GetSecondGlyph(pairIndex)]) {
-													const auto val = static_cast<int16_t>(pairSetView.GetValueRecord1(pairIndex, { .AdvanceX = 1 }))
-														+ static_cast<int16_t>(pairSetView.GetValueRecord2(pairIndex, { .PlacementX = 1 }));
-													if (val)
-														result[std::make_pair(c1, c2)] = val;
-												}
-											}
-										}
-									}
-								}
+							const auto valueX = subtable.ReadValue(pRecord, ValueFormatFlags{ .PlacementX = 1 }, context);
+							const auto valueY = subtable.ReadValue(pRecord, ValueFormatFlags{ .PlacementY = 1 }, context);
+							const auto advanceX = subtable.ReadValue(pRecord, ValueFormatFlags{ .AdvanceX = 1 }, context);
+							if (valueX != 0 || valueY != 0 || advanceX != 0) {
+								auto& target = result[glyph];
+								target.PlacementX += valueX;
+								target.PlacementY += valueY;
+								target.AdvanceX += advanceX;
 							}
-
-						} else if (PairAdjustmentPositioningSubtable::Format2::View v(subtableSpan); v) {
-							if (!(*v->Header.ValueFormat1).AdvanceX && !(*v->Header.ValueFormat2).PlacementX)
-								continue;
-
-							for (const auto& [class1, glyphs1] : v.GetClassTableDefinition1().ClassToGlyphMap()) {
-								if (class1 >= v->Header.Class1Count)
-									continue;
-
-								for (const auto& [class2, glyphs2] : v.GetClassTableDefinition2().ClassToGlyphMap()) {
-									if (class2 >= v->Header.Class1Count)
-										continue;
-
-									const auto rec1 = static_cast<int16_t>(v.GetValueRecord1(class1, class2, { .AdvanceX = 1 }));
-									const auto rec2 = static_cast<int16_t>(v.GetValueRecord2(class1, class2, { .PlacementX = 1 }));
-									const auto val = rec1 + rec2;
-									if (!val)
-										continue;
-
-									for (const auto glyph1 : glyphs1) {
-										for (const auto c1 : glyphToCharMap[glyph1]) {
-											for (const auto glyph2 : glyphs2) {
-												for (const auto c2 : glyphToCharMap[glyph2]) {
-													result[std::make_pair(c1, c2)] = val;
-												}
-											}
-										}
-									}
-								}
-							}
+							break;
 						}
 					}
 				}
 
 				return result;
 			}
+
+		private:
+			// Returns the lookup indices of the feature tables that FeatureVariations substitutes for the normalized coordinates, keyed by feature index.
+			[[nodiscard]] std::map<uint16_t, std::vector<uint16_t>> GetFeatureSubstitutions(std::span<const float> normalizedCoordinates) const {
+				using detail::ReadBigEndian;
+
+				std::map<uint16_t, std::vector<uint16_t>> result;
+				if (normalizedCoordinates.empty())
+					return result;
+
+				// GPOS 1.1 header: ... Offset32 featureVariationsOffset at offset 10.
+				const std::span<const char> gpos(m_bytes, m_length);
+				if (ReadBigEndian<uint16_t>(gpos, 0) != 1 || ReadBigEndian<uint16_t>(gpos, 2).value_or(0) < 1)
+					return result;
+				const auto variationsOffset = static_cast<size_t>(ReadBigEndian<uint32_t>(gpos, 10).value_or(0));
+				if (!variationsOffset || variationsOffset >= m_length)
+					return result;
+
+				// FeatureVariations { uint16 major, minor; uint32 recordCount; { Offset32 conditionSetOffset; Offset32 featureTableSubstitutionOffset; }[] }
+				const auto variations = gpos.subspan(variationsOffset);
+				const auto recordCount = ReadBigEndian<uint32_t>(variations, 4).value_or(0);
+				for (size_t i = 0; i < recordCount; i++) {
+					const auto conditionSetOffset = ReadBigEndian<uint32_t>(variations, 8 + 8 * i);
+					const auto substitutionOffset = ReadBigEndian<uint32_t>(variations, 12 + 8 * i);
+					if (!conditionSetOffset || !substitutionOffset)
+						return result;
+
+					// ConditionSet { uint16 conditionCount; Offset32 conditionOffsets[]; }; an empty or absent set always matches.
+					auto matches = true;
+					if (*conditionSetOffset) {
+						const auto conditionCount = ReadBigEndian<uint16_t>(variations, *conditionSetOffset).value_or(0);
+						for (size_t j = 0; j < conditionCount && matches; j++) {
+							const auto conditionOffset = ReadBigEndian<uint32_t>(variations, *conditionSetOffset + 2 + 4 * j);
+							if (!conditionOffset) {
+								matches = false;
+								break;
+							}
+
+							// ConditionFormat1 { uint16 format = 1; uint16 axisIndex; F2DOT14 filterRangeMinValue, filterRangeMaxValue; }
+							const auto conditionTableOffset = static_cast<size_t>(*conditionSetOffset) + *conditionOffset;
+							const auto format = ReadBigEndian<uint16_t>(variations, conditionTableOffset);
+							const auto axisIndex = ReadBigEndian<uint16_t>(variations, conditionTableOffset + 2);
+							const auto minValue = ReadBigEndian<int16_t>(variations, conditionTableOffset + 4);
+							const auto maxValue = ReadBigEndian<int16_t>(variations, conditionTableOffset + 6);
+							if (format != 1 || !axisIndex || !minValue || !maxValue) {
+								matches = false;
+								break;
+							}
+							const auto coordinate = *axisIndex < normalizedCoordinates.size() ? normalizedCoordinates[*axisIndex] : 0.f;
+							matches = *minValue / 16384.f <= coordinate && coordinate <= *maxValue / 16384.f;
+						}
+					}
+					if (!matches)
+						continue;
+
+					// FeatureTableSubstitution { uint16 major, minor; uint16 count; { uint16 featureIndex; Offset32 alternateFeatureOffset; }[] }
+					const auto substitutionCount = ReadBigEndian<uint16_t>(variations, *substitutionOffset + 4).value_or(0);
+					for (size_t j = 0; j < substitutionCount; j++) {
+						const auto recordOffset = static_cast<size_t>(*substitutionOffset) + 6 + 6 * j;
+						const auto featureIndex = ReadBigEndian<uint16_t>(variations, recordOffset);
+						const auto featureOffset = ReadBigEndian<uint32_t>(variations, recordOffset + 2);
+						if (!featureIndex || !featureOffset)
+							break;
+
+						// FeatureTable { Offset16 featureParamsOffset; uint16 lookupIndexCount; uint16 lookupListIndices[]; }
+						const auto featureTableOffset = static_cast<size_t>(*substitutionOffset) + *featureOffset;
+						auto& lookups = result[*featureIndex];
+						const auto lookupCount = ReadBigEndian<uint16_t>(variations, featureTableOffset + 2).value_or(0);
+						for (size_t k = 0; k < lookupCount; k++) {
+							if (const auto lookupIndex = ReadBigEndian<uint16_t>(variations, featureTableOffset + 4 + 2 * k))
+								lookups.push_back(*lookupIndex);
+						}
+					}
+					break;
+				}
+
+				return result;
+			}
+
+			[[nodiscard]] FeatureList::View GetFeatureListView() const {
+				const auto featureListOffset = static_cast<size_t>(*m_obj->HeaderV1_0.FeatureListOffset);
+				if (!featureListOffset || featureListOffset >= m_length)
+					return {};
+				return { m_bytes + featureListOffset, m_length - featureListOffset };
+			}
+
+			// SinglePos subtable, format 1 (one ValueRecord for all covered glyphs) or format 2 (one ValueRecord per covered glyph).
+			class SinglePositioningSubtable {
+				std::span<const char> m_data;
+				CoverageTable::View m_coverage;
+				uint16_t m_format = 0;
+				uint16_t m_valueFormat = 0;
+				size_t m_valueCount = 0;
+				size_t m_recordSize = 0;
+
+			public:
+				explicit SinglePositioningSubtable(std::span<const char> data) {
+					if (data.size() < 6)
+						return;
+
+					const auto read16 = [&data](size_t offset) -> uint16_t { return **reinterpret_cast<const BE<uint16_t>*>(data.data() + offset); };
+					const auto format = read16(0);
+					const auto coverageOffset = static_cast<size_t>(read16(2));
+					const auto valueFormat = read16(4);
+					const auto recordSize = sizeof(uint16_t) * std::popcount(static_cast<uint32_t>(valueFormat));
+					size_t valueCount;
+					switch (format) {
+						case 1:
+							valueCount = 1;
+							if (data.size() < 6 + recordSize)
+								return;
+							break;
+						case 2:
+							if (data.size() < 8)
+								return;
+							valueCount = read16(6);
+							if (data.size() < 8 + recordSize * valueCount)
+								return;
+							break;
+						default:
+							return;
+					}
+
+					if (coverageOffset >= data.size())
+						return;
+					CoverageTable::View coverage(data.subspan(coverageOffset));
+					if (!coverage)
+						return;
+
+					m_data = data;
+					m_coverage = coverage;
+					m_format = format;
+					m_valueFormat = valueFormat;
+					m_valueCount = valueCount;
+					m_recordSize = recordSize;
+				}
+
+				explicit operator bool() const {
+					return m_format != 0;
+				}
+
+				// Returns the ValueRecord applied to the glyph, or nullptr if this subtable does not cover the glyph.
+				[[nodiscard]] const char* GetValueRecord(uint16_t glyph) const {
+					const auto coverageIndex = m_coverage.GetCoverageIndex(glyph);
+					if (coverageIndex == (std::numeric_limits<size_t>::max)())
+						return nullptr;
+					if (m_format == 1)
+						return m_data.data() + 6;
+					if (coverageIndex >= m_valueCount)
+						return nullptr;
+					return m_data.data() + 8 + m_recordSize * coverageIndex;
+				}
+
+				// desiredRecord must have exactly one bit set.
+				[[nodiscard]] double ReadValue(const char* pRecord, ValueFormatFlags desiredRecord, const ValueContext& context) const {
+					return ReadValueRecordField(m_data, pRecord, m_valueFormat, desiredRecord, context);
+				}
+			};
+
+			// Replaces an extension subtable with the subtable it points to.
+			// Returns whether the resulting subtable is of the desired lookup type.
+			static bool ResolveExtension(LookupType lookupType, LookupType desiredType, std::span<const char>& subtableSpan) {
+				if (lookupType == desiredType)
+					return true;
+				if (lookupType != LookupType::ExtensionPositioning || subtableSpan.size() < sizeof(ExtensionPositioningSubtable::Format1))
+					return false;
+
+				const auto& table = *reinterpret_cast<const ExtensionPositioningSubtable::Format1*>(subtableSpan.data());
+				if (*table.PosFormat != 1 || *table.ExtensionLookupType != desiredType || *table.ExtensionOffset >= subtableSpan.size())
+					return false;
+
+				subtableSpan = subtableSpan.subspan(*table.ExtensionOffset);
+				return true;
+			}
+
+			struct PairAdjustmentSubtableRef {
+				std::span<const char> Data;
+				PairAdjustmentPositioningSubtable::Format1::View Format1;
+				PairAdjustmentPositioningSubtable::Format2::View Format2;
+				CoverageTable::View Coverage;
+
+				// Format2 only: glyphs that are mapped from a codepoint, grouped by their class in ClassDef2.
+				// Class 0 contains the mapped glyphs that are not listed in ClassDef2.
+				std::map<uint16_t, std::vector<uint16_t>> Class2Glyphs;
+			};
+
+			static void ApplyPairAdjustmentLookup(
+				const LookupTable::View& lookupTable,
+				const std::vector<std::set<char32_t>>& glyphToCharMap,
+				const std::vector<uint16_t>& mappedGlyphs,
+				std::unordered_map<uint32_t, double>& glyphPairs,
+				const ValueContext& context
+			) {
+				std::vector<PairAdjustmentSubtableRef> subtables;
+				for (size_t subtableIndex = 0, i_ = *lookupTable->Header.SubtableCount; subtableIndex < i_; subtableIndex++) {
+					auto subtableSpan = lookupTable.SubtableSpan(subtableIndex);
+					if (!ResolveExtension(*lookupTable->Header.LookupType, LookupType::PairAdjustment, subtableSpan))
+						continue;
+
+					PairAdjustmentSubtableRef ref;
+					ref.Data = subtableSpan;
+					if (PairAdjustmentPositioningSubtable::Format1::View v(subtableSpan); v) {
+						ref.Format1 = v;
+						ref.Coverage = v.CoverageTableView();
+					} else if (PairAdjustmentPositioningSubtable::Format2::View v2(subtableSpan); v2) {
+						ref.Format2 = v2;
+						ref.Coverage = v2.CoverageTableView();
+
+						const auto classDef2 = v2.GetClassTableDefinition2();
+						for (const auto glyph : mappedGlyphs)
+							ref.Class2Glyphs[classDef2.GetClass(glyph)].push_back(glyph);
+					} else {
+						continue;
+					}
+
+					if (ref.Coverage)
+						subtables.emplace_back(std::move(ref));
+				}
+
+				if (subtables.empty())
+					return;
+
+				std::unordered_set<uint16_t> claimedRightGlyphs;
+				for (const auto glyph1 : mappedGlyphs) {
+					claimedRightGlyphs.clear();
+
+					for (const auto& subtable : subtables) {
+						const auto coverageIndex = subtable.Coverage.GetCoverageIndex(glyph1);
+						if (coverageIndex == (std::numeric_limits<size_t>::max)())
+							continue;
+
+						if (const auto& v = subtable.Format1) {
+							if (coverageIndex >= *v->Header.PairSetCount)
+								continue;
+
+							const auto pairSetView = v.PairSetView(coverageIndex);
+							if (!pairSetView)
+								continue;
+
+							// Device offsets in ValueRecords of PairPosFormat1 are relative to the PairSet table.
+							const auto pairSetData = subtable.Data.subspan(*v->PairSetOffsets[coverageIndex]);
+
+							for (size_t pairIndex = 0, j_ = *pairSetView->Count; pairIndex < j_; pairIndex++) {
+								const auto glyph2 = pairSetView.GetSecondGlyph(pairIndex);
+								if (!claimedRightGlyphs.insert(glyph2).second)
+									continue;
+
+								if (glyph2 >= glyphToCharMap.size() || glyphToCharMap[glyph2].empty())
+									continue;
+
+								// PairValueRecord { uint16 secondGlyph; ValueRecord valueRecord1; ValueRecord valueRecord2; }
+								const auto valueFormat1 = (*v->Header.ValueFormat1).Value;
+								const auto valueFormat2 = (*v->Header.ValueFormat2).Value;
+								const auto pRecord1 = reinterpret_cast<const char*>(pairSetView.GetPairValueRecord(pairIndex) + 1);
+								const auto pRecord2 = pRecord1 + sizeof(uint16_t) * std::popcount(static_cast<uint32_t>(valueFormat1));
+								const auto val = ReadValueRecordField(pairSetData, pRecord1, valueFormat1, { .AdvanceX = 1 }, context)
+									+ ReadValueRecordField(pairSetData, pRecord2, valueFormat2, { .PlacementX = 1 }, context);
+								if (val != 0)
+									glyphPairs[(static_cast<uint32_t>(glyph1) << 16) | glyph2] += val;
+							}
+
+						} else {
+							const auto& v2 = subtable.Format2;
+							const auto class1 = v2.GetClassTableDefinition1().GetClass(glyph1);
+							if (class1 >= *v2->Header.Class1Count)
+								continue;
+
+							// Once the left glyph is covered, a Format2 subtable applies to every right glyph.
+							for (const auto& [class2, glyphs2] : subtable.Class2Glyphs) {
+								if (class2 >= *v2->Header.Class2Count)
+									continue;
+
+								// Class2Record { ValueRecord valueRecord1; ValueRecord valueRecord2; }
+								const auto valueFormat1 = (*v2->Header.ValueFormat1).Value;
+								const auto valueFormat2 = (*v2->Header.ValueFormat2).Value;
+								const auto pRecord1 = reinterpret_cast<const char*>(v2.GetPairValueRecord(class1, class2));
+								const auto pRecord2 = pRecord1 + sizeof(uint16_t) * std::popcount(static_cast<uint32_t>(valueFormat1));
+								const auto val = ReadValueRecordField(subtable.Data, pRecord1, valueFormat1, { .AdvanceX = 1 }, context)
+									+ ReadValueRecordField(subtable.Data, pRecord2, valueFormat2, { .PlacementX = 1 }, context);
+								if (val == 0)
+									continue;
+
+								for (const auto glyph2 : glyphs2) {
+									if (!claimedRightGlyphs.contains(glyph2))
+										glyphPairs[(static_cast<uint32_t>(glyph1) << 16) | glyph2] += val;
+								}
+							}
+							break;
+						}
+					}
+				}
+			}
+
+		public:
 		};
 	};
 
