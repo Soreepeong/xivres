@@ -586,6 +586,17 @@ const xivres::sqpack::generator::entry_info* xivres::sqpack::generator::data_vie
 	return *it;
 }
 
+std::span<const xivres::sqpack::generator::entry_info* const> xivres::sqpack::generator::data_view_stream::entries_in(uint64_t offset, uint64_t length) const {
+	auto first = entry_at_or_before(offset);
+	if (first == m_entries.end())
+		first = m_entries.begin();
+	else if ((*first)->locator().offset() + (*first)->entry_size() <= offset)
+		++first;
+
+	const auto last = std::ranges::lower_bound(first, m_entries.end(), offset + length, {}, [](const entry_info* e) { return e->locator().offset(); });
+	return {std::to_address(first), static_cast<size_t>(last - first)};
+}
+
 bool xivres::sqpack::generator::data_view_stream::reads_original(uint64_t offset, uint64_t length) const {
 	if (!m_original || offset < m_header.size() || length > m_originalSize || offset > m_originalSize - length)
 		return false;
