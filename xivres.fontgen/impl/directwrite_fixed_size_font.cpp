@@ -3,6 +3,8 @@
 
 #include "../include/xivres.fontgen/directwrite_fixed_size_font.h"
 
+#include <harfbuzz/hb.h>
+
 static HRESULT success_or_throw(HRESULT hr, std::initializer_list<HRESULT> acceptables = {}) {
 	if (SUCCEEDED(hr))
 		return hr;
@@ -172,47 +174,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(IDWrit
 	info->Matrix = {matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f};
 
 	m_dwrite = face_from_info_t(*info);
-	m_dwrite.Face->GetMetrics(&info->Metrics);
-
-	{
-		uint32_t rangeCount;
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
-		std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
-
-		for (const auto& range : ranges)
-			for (uint32_t i = range.first; i <= range.last; ++i)
-				info->Characters.insert(static_cast<char32_t>(i));
-	}
-	{
-		dwrite_font_table kernDataRef(m_dwrite.Face, util::truetype::Kern::DirectoryTableTag.NativeValue);
-		dwrite_font_table gposDataRef(m_dwrite.Face, util::truetype::Gpos::DirectoryTableTag.NativeValue);
-		dwrite_font_table cmapDataRef(m_dwrite.Face, util::truetype::Cmap::DirectoryTableTag.NativeValue);
-		util::truetype::Kern::View kern(kernDataRef.get_span<char>());
-		util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
-		util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
-		if (cmap && (kern || gpos)) {
-			const auto cmapVector = cmap.GetGlyphToCharMap();
-
-			if (kern)
-				info->KerningPairs = kern.Parse(cmapVector);
-
-			if (gpos) {
-				const auto pairs = gpos.ExtractAdvanceX(cmapVector);
-				// do not overwrite
-				info->KerningPairs.insert(pairs.begin(), pairs.end());
-			}
-
-			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end();) {
-				it->second = info->scale_from_font_unit(it->second);
-				if (it->second)
-					++it;
-				else
-					it = info->KerningPairs.erase(it);
-			}
-		}
-	}
-
+	load_font_data(*info, m_dwrite);
 	m_info = std::move(info);
 }
 
@@ -229,47 +191,7 @@ xivres::fontgen::directwrite_fixed_size_font::directwrite_fixed_size_font(std::s
 	info->Matrix = {matrix.M11, matrix.M12, matrix.M21, matrix.M22, 0.f, 0.f};
 
 	m_dwrite = face_from_info_t(*info);
-	m_dwrite.Face->GetMetrics(&info->Metrics);
-
-	{
-		uint32_t rangeCount;
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
-		std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
-		success_or_throw(m_dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
-
-		for (const auto& range : ranges)
-			for (uint32_t i = range.first; i <= range.last; ++i)
-				info->Characters.insert(static_cast<char32_t>(i));
-	}
-	{
-		dwrite_font_table kernDataRef(m_dwrite.Face, util::truetype::Kern::DirectoryTableTag.NativeValue);
-		dwrite_font_table gposDataRef(m_dwrite.Face, util::truetype::Gpos::DirectoryTableTag.NativeValue);
-		dwrite_font_table cmapDataRef(m_dwrite.Face, util::truetype::Cmap::DirectoryTableTag.NativeValue);
-		util::truetype::Kern::View kern(kernDataRef.get_span<char>());
-		util::truetype::Gpos::View gpos(gposDataRef.get_span<char>());
-		util::truetype::Cmap::View cmap(cmapDataRef.get_span<char>());
-		if (cmap && (kern || gpos)) {
-			const auto cmapVector = cmap.GetGlyphToCharMap();
-
-			if (kern)
-				info->KerningPairs = kern.Parse(cmapVector);
-
-			if (gpos) {
-				const auto pairs = gpos.ExtractAdvanceX(cmapVector);
-				// do not overwrite
-				info->KerningPairs.insert(pairs.begin(), pairs.end());
-			}
-
-			for (auto it = info->KerningPairs.begin(); it != info->KerningPairs.end();) {
-				it->second = info->scale_from_font_unit(it->second);
-				if (it->second)
-					++it;
-				else
-					it = info->KerningPairs.erase(it);
-			}
-		}
-	}
-
+	load_font_data(*info, m_dwrite);
 	m_info = std::move(info);
 }
 
@@ -294,12 +216,13 @@ const std::set<char32_t>& xivres::fontgen::directwrite_fixed_size_font::all_code
 	return m_info->Characters;
 }
 
+// Vertical metrics are subject to the vertical scale of the transformation, as the glyphs are.
 int xivres::fontgen::directwrite_fixed_size_font::line_height() const {
-	return m_info->scale_from_font_unit(m_info->Metrics.ascent + m_info->Metrics.descent + m_info->Metrics.lineGap);
+	return m_info->scale_from_font_unit(static_cast<float>(m_info->Metrics.ascent + m_info->Metrics.descent + m_info->Metrics.lineGap) * std::abs(m_info->Matrix.m22));
 }
 
 int xivres::fontgen::directwrite_fixed_size_font::ascent() const {
-	return m_info->scale_from_font_unit(m_info->Metrics.ascent);
+	return m_info->scale_from_font_unit(static_cast<float>(m_info->Metrics.ascent) * std::abs(m_info->Matrix.m22));
 }
 
 float xivres::fontgen::directwrite_fixed_size_font::font_size() const {
@@ -366,13 +289,14 @@ xivres::fontgen::directwrite_fixed_size_font& xivres::fontgen::directwrite_fixed
 bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util::b8g8r8a8* pBuf, int drawX, int drawY, int destWidth, int destHeight, util::b8g8r8a8 fgColor, util::b8g8r8a8 bgColor) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	glyph_metrics gm;
-	if (!try_get_glyph_metrics(codepoint, gm, analysis))
+	glyph_adjustment adjustment;
+	if (!try_get_glyph_metrics(codepoint, gm, analysis, adjustment))
 		return false;
 
 	auto src = gm;
 	src.translate(-src.X1, -src.Y1);
 	auto dest = gm;
-	dest.translate(drawX, drawY + ascent());
+	dest.translate(drawX + adjustment.PlacementX, drawY + ascent() + adjustment.PlacementY);
 	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
 	if (src.is_effectively_empty() || dest.is_effectively_empty())
 		return true;
@@ -394,13 +318,14 @@ bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, util
 bool xivres::fontgen::directwrite_fixed_size_font::draw(char32_t codepoint, uint8_t* pBuf, size_t stride, int drawX, int drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
 	glyph_metrics gm;
-	if (!try_get_glyph_metrics(codepoint, gm, analysis))
+	glyph_adjustment adjustment;
+	if (!try_get_glyph_metrics(codepoint, gm, analysis, adjustment))
 		return false;
 
 	auto src = gm;
 	src.translate(-src.X1, -src.Y1);
 	auto dest = gm;
-	dest.translate(drawX, drawY + ascent());
+	dest.translate(drawX + adjustment.PlacementX, drawY + ascent() + adjustment.PlacementY);
 	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
 	if (src.is_effectively_empty() || dest.is_effectively_empty())
 		return true;
@@ -426,6 +351,11 @@ std::shared_ptr<xivres::fontgen::fixed_size_font> xivres::fontgen::directwrite_f
 
 const xivres::fontgen::fixed_size_font* xivres::fontgen::directwrite_fixed_size_font::get_base_font(char32_t codepoint) const {
 	return this;
+}
+
+std::optional<float> xivres::fontgen::directwrite_fixed_size_font::get_baseline(uint32_t baselineTag) const {
+	const auto it = m_info->Baselines.find(baselineTag);
+	return it == m_info->Baselines.end() ? std::nullopt : std::optional(it->second);
 }
 
 xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen::directwrite_fixed_size_font::face_from_info_t(const info& info) {
@@ -454,6 +384,36 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen:
 		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
 	}
 
+	// Variable fonts: start from the instance of the font, and apply the requested axis values.
+	// Unless requested otherwise, the optical size follows the font size.
+	std::vector<DWRITE_FONT_AXIS_VALUE> axisValues;
+	if (IDWriteFontFace5Ptr face5; SUCCEEDED(res.Face.QueryInterface(decltype(face5)::GetIID(), &face5)) && face5->HasVariations()) {
+		IDWriteFontResourcePtr resource;
+		success_or_throw(face5->GetFontResource(&resource));
+
+		axisValues.resize(face5->GetFontAxisValueCount());
+		success_or_throw(face5->GetFontAxisValues(axisValues.data(), static_cast<UINT32>(axisValues.size())));
+		std::vector<DWRITE_FONT_AXIS_RANGE> axisRanges(resource->GetFontAxisCount());
+		success_or_throw(resource->GetFontAxisRanges(axisRanges.data(), static_cast<UINT32>(axisRanges.size())));
+
+		for (auto& axisValue : axisValues) {
+			if (const auto it = info.Params.Variations.find(static_cast<uint32_t>(axisValue.axisTag)); it != info.Params.Variations.end())
+				axisValue.value = it->second;
+			else if (axisValue.axisTag == DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE)
+				axisValue.value = info.Size;
+
+			for (const auto& range : axisRanges) {
+				if (range.axisTag == axisValue.axisTag)
+					axisValue.value = std::clamp(axisValue.value, range.minValue, range.maxValue);
+			}
+		}
+
+		IDWriteFontFace5Ptr instanceFace;
+		success_or_throw(resource->CreateFontFace(res.Font->GetSimulations(), axisValues.data(), static_cast<UINT32>(axisValues.size()), &instanceFace));
+		res.Face = instanceFace;
+		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
+	}
+
 	IDWriteLocalizedStringsPtr familyNames;
 	success_or_throw(res.Family->GetFamilyNames(&familyNames));
 	uint32_t index;
@@ -471,15 +431,119 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen:
 		res.Font->GetStyle(),
 		res.Font->GetStretch(),
 		info.Size,
-		L"en-us",
+		info.Params.Language.empty() ? L"en-us" : util::unicode::convert<std::wstring>(info.Params.Language).c_str(),
 		&res.Format));
+	if (IDWriteTextFormat3Ptr format3; !axisValues.empty() && SUCCEEDED(res.Format.QueryInterface(decltype(format3)::GetIID(), &format3)))
+		success_or_throw(format3->SetFontAxisValues(axisValues.data(), static_cast<UINT32>(axisValues.size())));
 	success_or_throw(res.Factory->CreateTypography(&res.Typography));
 	for (const auto& feature : info.Params.Features)
 		success_or_throw(res.Typography->AddFontFeature(feature));
 	return res;
 }
 
-bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const {
+// Creates a HarfBuzz face that reads the tables of the DirectWrite font face.
+static hb_face_t* create_harfbuzz_face(IDWriteFontFace* pFace) {
+	struct table_context {
+		IDWriteFontFacePtr Face;
+		void* Context;
+	};
+
+	return hb_face_create_for_tables([](hb_face_t*, hb_tag_t tag, void* userData) -> hb_blob_t* {
+		const auto pFace = static_cast<IDWriteFontFace*>(userData);
+		const void* pData;
+		UINT32 size;
+		void* pContext;
+		BOOL exists;
+		// HarfBuzz tags are big endian integers, and DirectWrite tags keep the bytes in file order.
+		if (FAILED(pFace->TryGetFontTable(_byteswap_ulong(tag), &pData, &size, &pContext, &exists)) || !exists)
+			return nullptr;
+
+		return hb_blob_create(static_cast<const char*>(pData), size, HB_MEMORY_MODE_READONLY, new table_context{ pFace, pContext }, [](void* p) {
+			const auto pTableContext = static_cast<table_context*>(p);
+			pTableContext->Face->ReleaseFontTable(pTableContext->Context);
+			delete pTableContext;
+		});
+	}, pFace, nullptr);
+}
+void xivres::fontgen::directwrite_fixed_size_font::load_font_data(info& info, const dwrite_interfaces& dwrite) {
+	dwrite.Face->GetMetrics(&info.Metrics);
+
+	uint32_t rangeCount;
+	success_or_throw(dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
+	std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
+	success_or_throw(dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
+
+	for (const auto& range : ranges)
+		for (uint32_t i = range.first; i <= range.last; ++i)
+			info.Characters.insert(static_cast<char32_t>(i));
+
+	// Baselines are subject to the vertical scale of the transformation, as the glyphs are.
+	if (dwrite_font_table baseDataRef(dwrite.Face, util::truetype::Base::DirectoryTableTag.NativeValue); baseDataRef) {
+		const auto scale = static_cast<double>(info.Size) * info.Matrix.m22 / info.Metrics.designUnitsPerEm;
+		for (const auto& [tag, value] : read_baselines(baseDataRef.get_span<char>()))
+			info.Baselines.emplace(tag, static_cast<float>(value * scale));
+	}
+
+	dwrite_font_table kernDataRef(dwrite.Face, util::truetype::Kern::DirectoryTableTag.NativeValue);
+	dwrite_font_table gposDataRef(dwrite.Face, util::truetype::Gpos::DirectoryTableTag.NativeValue);
+	if (!kernDataRef && !gposDataRef)
+		return;
+
+	// Positioning is keyed by the glyphs that are actually drawn, which may be substituted by the selected features.
+	std::vector<std::set<char32_t>> glyphToCharMap(65536);
+	if (info.Params.Features.empty() && info.Params.Language.empty()) {
+		const std::vector<UINT32> codepoints(info.Characters.begin(), info.Characters.end());
+		std::vector<UINT16> glyphIndices(codepoints.size());
+		success_or_throw(dwrite.Face->GetGlyphIndices(codepoints.data(), static_cast<UINT32>(codepoints.size()), glyphIndices.data()));
+		for (size_t i = 0; i < codepoints.size(); i++) {
+			if (glyphIndices[i])
+				glyphToCharMap[glyphIndices[i]].insert(static_cast<char32_t>(codepoints[i]));
+		}
+	} else {
+		for (const auto c : info.Characters) {
+			if (const auto glyphIndex = resolve_glyph_index(dwrite, c))
+				glyphToCharMap[glyphIndex].insert(c);
+		}
+	}
+
+	std::map<uint32_t, float> designCoordinates;
+	if (IDWriteFontFace5Ptr face5; SUCCEEDED(dwrite.Face->QueryInterface(IID_PPV_ARGS(&face5))) && face5->HasVariations()) {
+		std::vector<DWRITE_FONT_AXIS_VALUE> axisValues(face5->GetFontAxisValueCount());
+		success_or_throw(face5->GetFontAxisValues(axisValues.data(), static_cast<UINT32>(axisValues.size())));
+		for (const auto& axisValue : axisValues)
+			designCoordinates.emplace(static_cast<uint32_t>(axisValue.axisTag), axisValue.value);
+	}
+
+	dwrite_font_table gdefDataRef(dwrite.Face, util::truetype::Gdef::DirectoryTableTag.NativeValue);
+	dwrite_font_table fvarDataRef(dwrite.Face, util::truetype::Fvar::DirectoryTableTag.NativeValue);
+	dwrite_font_table avarDataRef(dwrite.Face, util::truetype::Avar::DirectoryTableTag.NativeValue);
+	opentype_positioning_params params{
+		.Gpos = gposDataRef.get_span<char>(),
+		.Kern = kernDataRef.get_span<char>(),
+		.Gdef = gdefDataRef.get_span<char>(),
+		.Fvar = fvarDataRef.get_span<char>(),
+		.Avar = avarDataRef.get_span<char>(),
+		.DesignCoordinates = std::move(designCoordinates),
+		.Language = info.Params.Language,
+		.Size = info.Size,
+		.UnitsPerEm = info.Metrics.designUnitsPerEm,
+		.ScaleX = info.Matrix.m11,
+		.ScaleY = info.Matrix.m22,
+	};
+	for (const auto& feature : info.Params.Features) {
+		if (feature.parameter)
+			params.FeatureTags.insert(static_cast<uint32_t>(feature.nameTag));
+	}
+
+	const auto hbFace = std::unique_ptr<hb_face_t, decltype(&hb_face_destroy)>(create_harfbuzz_face(dwrite.Face), &hb_face_destroy);
+	params.HarfBuzzFace = hbFace.get();
+
+	auto positioning = extract_opentype_positioning(params, glyphToCharMap);
+	info.KerningPairs = std::move(positioning.KerningPairs);
+	info.GlyphAdjustments = std::move(positioning.GlyphAdjustments);
+}
+
+uint16_t xivres::fontgen::directwrite_fixed_size_font::resolve_glyph_index(const dwrite_interfaces& dwrite, char32_t codepoint) {
 	try {
 		wchar_t buf[3]{};
 		UINT32 buflen;
@@ -491,12 +555,12 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 			buf[1] = static_cast<wchar_t>(0xDC00 + ((codepoint - 0x10000) & 0x3FF));
 			buflen = 2;
 		} else {
-			return false;
+			return 0;
 		}
 
 		IDWriteTextLayoutPtr layout;
-		success_or_throw(m_dwrite.Factory->CreateTextLayout(buf, buflen, m_dwrite.Format, 9999999, 9999999, &layout));
-		success_or_throw(layout->SetTypography(m_dwrite.Typography, {.startPosition = 0, .length = buflen}));
+		success_or_throw(dwrite.Factory->CreateTextLayout(buf, buflen, dwrite.Format, 9999999, 9999999, &layout));
+		success_or_throw(layout->SetTypography(dwrite.Typography, {.startPosition = 0, .length = buflen}));
 
 		class DummyRenderer final : public IDWriteTextRenderer {
 		public:
@@ -558,10 +622,21 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 			}
 		} dummyRenderer;
 		success_or_throw(layout->Draw(nullptr, &dummyRenderer, 0, 0));
-		
-		const auto glyphIndex = dummyRenderer.GlyphIndex;
+
+		return dummyRenderer.GlyphIndex;
+	} catch (...) {
+		return 0;
+	}
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis, glyph_adjustment& adjustment) const {
+	try {
+		const auto glyphIndex = resolve_glyph_index(m_dwrite, codepoint);
 		if (!glyphIndex)
 			return false;
+
+		const auto it = m_info->GlyphAdjustments.find(glyphIndex);
+		adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
 
 		DWRITE_GLYPH_METRICS dgm;
 		success_or_throw(m_dwrite.Face->GetGdiCompatibleGlyphMetrics(
@@ -599,7 +674,7 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 
 		success_or_throw(analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_ALIASED_1x1, gm.as_mutable_rect_pointer()));
 
-		gm.AdvanceX = m_info->scale_from_font_unit(static_cast<float>(dgm.advanceWidth) * m_info->Matrix.m11);
+		gm.AdvanceX = m_info->scale_from_font_unit(static_cast<float>(dgm.advanceWidth) * m_info->Matrix.m11) + adjustment.AdvanceX;
 
 		return true;
 	} catch (...) {
@@ -609,10 +684,11 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 
 bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm) const {
 	IDWriteGlyphRunAnalysisPtr analysis;
-	if (!try_get_glyph_metrics(codepoint, gm, analysis))
+	glyph_adjustment adjustment;
+	if (!try_get_glyph_metrics(codepoint, gm, analysis, adjustment))
 		return false;
 
-	gm.translate(0, ascent());
+	gm.translate(adjustment.PlacementX, ascent() + adjustment.PlacementY);
 	return true;
 }
 

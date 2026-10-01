@@ -60,6 +60,9 @@
     <ClInclude Include="include\xivres.fontgen\merged_fixed_size_font.h">
       <Filter>Headers\fixed_size_font</Filter>
     </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\opentype_positioning.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="include\xivres.fontgen\fixed_size_font.h">
       <Filter>Headers\fixed_size_font</Filter>
     </ClInclude>
@@ -90,6 +93,9 @@
       <Filter>Impls</Filter>
     </ClCompile>
     <ClCompile Include="impl\merged_fixed_size_font.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\opentype_positioning.cpp">
       <Filter>Impls</Filter>
     </ClCompile>
     <ClCompile Include="impl\text_measurer.cpp">

@@ -14,6 +14,7 @@
 #include <mutex>
 
 #include "fixed_size_font.h"
+#include "opentype_positioning.h"
 
 #include "util.truetype.h"
 
@@ -27,6 +28,15 @@ namespace xivres::fontgen {
 			FT_Render_Mode RenderMode = FT_RENDER_MODE_LIGHT;
 			std::vector<hb_feature_t> Features;
 
+			// BCP 47 language tag of the text, such as "ja" or "zh-Hant"; empty if unspecified.
+			std::string Language;
+
+			// Design coordinates of variable fonts, keyed by axis tags in DWRITE_FONT_AXIS_TAG byte order.
+			// Axes not listed stay at the instance of the face index; 'opsz' follows the font size unless listed.
+			std::map<uint32_t, float> Variations;
+
+			[[nodiscard]] bool requires_shaping() const;
+
 			[[nodiscard]] std::wstring get_load_flags_string() const;
 
 			[[nodiscard]] std::wstring get_render_mode_string() const;
@@ -38,6 +48,8 @@ namespace xivres::fontgen {
 				std::vector<uint8_t> Data;
 				std::set<char32_t> Characters;
 				std::map<std::pair<char32_t, char32_t>, int> KerningPairs;
+				std::unordered_map<uint16_t, glyph_adjustment> GlyphAdjustments;
+				std::map<uint32_t, float> Baselines;
 				std::vector<uint8_t> GammaTable;
 				FT_Matrix Matrix;
 				create_struct Params{};
@@ -72,14 +84,24 @@ namespace xivres::fontgen {
 
 			[[nodiscard]] float font_size() const;
 
+			[[nodiscard]] const FT_Matrix& matrix() const;
+
 			[[nodiscard]] std::span<const uint8_t> gamma_table() const;
 
 			[[nodiscard]] const std::set<char32_t>& all_characters() const;
 
 			[[nodiscard]] const std::map<std::pair<char32_t, char32_t>, int>& all_kerning_pairs() const;
 
+			[[nodiscard]] glyph_adjustment get_glyph_adjustment(uint32_t glyphIndex) const;
+
+			[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const;
+
 		private:
 			static FT_Face create_face(FT_Library library, const info& info);
+
+			static int resolve_glyph_index(FT_Face face, hb_font_t* hbFont, char32_t codepoint, const create_struct& params);
+
+			static std::map<uint32_t, float> get_design_coordinates(FT_Library library, FT_Face face);
 		};
 
 		freetype_face_wrapper m_face;
@@ -121,8 +143,10 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
+		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
+
 	private:
-		[[nodiscard]] glyph_metrics freetype_glyph_to_metrics(FT_Glyph glyph, int x = 0, int y = 0) const;
+		[[nodiscard]] glyph_metrics freetype_glyph_to_metrics(uint32_t glyphIndex, FT_Glyph glyph, int x = 0, int y = 0) const;
 	};
 }
 

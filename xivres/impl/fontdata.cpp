@@ -222,7 +222,7 @@ void xivres::fontdata::stream::add_glyph(char32_t c, uint16_t textureIndex, uint
 			throw std::runtime_error("The game supports up to 65535 characters.");
 		auto entry = glyph_entry();
 		entry.Utf8Value = val;
-		entry.ShiftJisValue = util::unicode::u32_to_sjisuint16(val);
+		entry.ShiftJisValue = util::unicode::u32_to_sjisuint16(c);
 		it = m_fontTableEntries.insert(it, entry);
 		m_fcsv.KerningHeaderOffset += sizeof entry;
 		m_fthd.FontTableEntryCount += 1;

@@ -1,5 +1,9 @@
 #include "../include/xivres.fontgen/merged_fixed_size_font.h"
 
+#include <cmath>
+
+#include "../include/xivres.fontgen/util.truetype.h"
+
 int xivres::fontgen::merged_fixed_size_font::get_vertical_adjustment(const info& info, const xivres::fontgen::fixed_size_font& font) {
 	switch (info.Alignment) {
 		case vertical_alignment::Top:
@@ -10,9 +14,36 @@ int xivres::fontgen::merged_fixed_size_font::get_vertical_adjustment(const info&
 			return 0 + info.Ascent - font.ascent();
 		case vertical_alignment::Bottom:
 			return 0 + info.LineHeight - font.line_height();
+		case vertical_alignment::RomanBaseline:
+			return static_cast<int>(std::lround(info.RomanBaselineY - get_roman_baseline_y(font)));
+		case vertical_alignment::IdeographicCenter:
+			return static_cast<int>(std::lround(info.IdeographicCenterY - get_ideographic_center_y(font)));
 		default:
 			throw std::runtime_error("Invalid alignment value set");
 	}
+}
+
+float xivres::fontgen::merged_fixed_size_font::get_roman_baseline_y(const fixed_size_font& font) {
+	return static_cast<float>(font.ascent()) - font.get_baseline(util::truetype::Base::RomanBaselineTag.NativeValue).value_or(0.f);
+}
+
+float xivres::fontgen::merged_fixed_size_font::get_ideographic_center_y(const fixed_size_font& font) {
+	using util::truetype::Base;
+	const auto bottom = font.get_baseline(Base::IdeographicFaceBottomTag.NativeValue);
+	const auto top = font.get_baseline(Base::IdeographicFaceTopTag.NativeValue);
+	if (bottom && top)
+		return static_cast<float>(font.ascent()) - (*bottom + *top) / 2;
+
+	const auto emBottom = font.get_baseline(Base::IdeographicEmBoxBottomTag.NativeValue);
+	const auto emTop = font.get_baseline(Base::IdeographicEmBoxTopTag.NativeValue);
+	if (emBottom && emTop)
+		return static_cast<float>(font.ascent()) - (*emBottom + *emTop) / 2;
+
+	return static_cast<float>(font.line_height()) / 2;
+}
+
+std::optional<float> xivres::fontgen::merged_fixed_size_font::get_baseline(uint32_t baselineTag) const {
+	return m_fonts.empty() ? std::nullopt : m_fonts.front()->get_baseline(baselineTag);
 }
 
 const xivres::fontgen::fixed_size_font* xivres::fontgen::merged_fixed_size_font::get_base_font(char32_t codepoint) const {
@@ -127,6 +158,8 @@ xivres::fontgen::merged_fixed_size_font::merged_fixed_size_font(std::vector<std:
 	info->Size = fonts.front().first->font_size();
 	info->Ascent = fonts.front().first->ascent();
 	info->LineHeight = fonts.front().first->line_height();
+	info->RomanBaselineY = get_roman_baseline_y(*fonts.front().first);
+	info->IdeographicCenterY = get_ideographic_center_y(*fonts.front().first);
 
 	for (size_t i = 0; i < fonts.size(); i++) {
 		auto& [font, mergeMode] = fonts[i];

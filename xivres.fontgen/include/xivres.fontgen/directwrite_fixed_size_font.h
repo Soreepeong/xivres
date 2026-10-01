@@ -6,6 +6,7 @@
 #include <dwrite_3.h>
 #include <filesystem>
 #include "fixed_size_font.h"
+#include "opentype_positioning.h"
 #include "util.truetype.h"
 #include "xivres/util.bitmap_copy.h"
 
@@ -18,12 +19,15 @@ _COM_SMARTPTR_TYPEDEF(IDWriteFontCollection, __uuidof(IDWriteFontCollection));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFace, __uuidof(IDWriteFontFace));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFace1, __uuidof(IDWriteFontFace1));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFace3, __uuidof(IDWriteFontFace3));
+_COM_SMARTPTR_TYPEDEF(IDWriteFontFace5, __uuidof(IDWriteFontFace5));
+_COM_SMARTPTR_TYPEDEF(IDWriteFontResource, __uuidof(IDWriteFontResource));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFaceReference, __uuidof(IDWriteFontFaceReference));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFamily, __uuidof(IDWriteFontFamily));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFile, __uuidof(IDWriteFontFile));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFileLoader, __uuidof(IDWriteFontFileLoader));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFileStream, __uuidof(IDWriteFontFileStream));
 _COM_SMARTPTR_TYPEDEF(IDWriteTextFormat, __uuidof(IDWriteTextFormat));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextFormat3, __uuidof(IDWriteTextFormat3));
 _COM_SMARTPTR_TYPEDEF(IDWriteTextLayout, __uuidof(IDWriteTextLayout));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontSetBuilder, __uuidof(IDWriteFontSetBuilder));
 _COM_SMARTPTR_TYPEDEF(IDWriteGdiInterop, __uuidof(IDWriteGdiInterop));
@@ -42,6 +46,13 @@ namespace xivres::fontgen {
 			DWRITE_GRID_FIT_MODE GridFitMode = DWRITE_GRID_FIT_MODE_ENABLED;
 			std::vector<DWRITE_FONT_FEATURE> Features{};
 
+			// BCP 47 language tag of the text, such as "ja" or "zh-Hant"; empty if unspecified.
+			std::string Language;
+
+			// Design coordinates of variable fonts, keyed by axis tags in DWRITE_FONT_AXIS_TAG byte order.
+			// Axes not listed stay at the instance of the font; 'opsz' follows the font size unless listed.
+			std::map<uint32_t, float> Variations;
+
 			[[nodiscard]] const wchar_t* get_measuring_mode_string() const;
 
 			[[nodiscard]] const wchar_t* get_rendering_mode_string() const;
@@ -56,6 +67,8 @@ namespace xivres::fontgen {
 			std::shared_ptr<stream> Stream;
 			std::set<char32_t> Characters;
 			std::map<std::pair<char32_t, char32_t>, int> KerningPairs;
+			std::unordered_map<uint16_t, glyph_adjustment> GlyphAdjustments;
+			std::map<uint32_t, float> Baselines;
 			std::vector<uint8_t> GammaTable;
 			DWRITE_FONT_METRICS1 Metrics;
 			DWRITE_MATRIX Matrix;
@@ -120,10 +133,17 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] const fixed_size_font* get_base_font(char32_t codepoint) const override;
 
+		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
+
 	private:
 		[[nodiscard]] static dwrite_interfaces face_from_info_t(const info& info);
 
-		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis) const;
+		static void load_font_data(info& info, const dwrite_interfaces& dwrite);
+
+		// Returns the glyph that DirectWrite lays out for the codepoint with the selected features, or 0 if none.
+		[[nodiscard]] static uint16_t resolve_glyph_index(const dwrite_interfaces& dwrite, char32_t codepoint);
+
+		[[nodiscard]] bool try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis, glyph_adjustment& adjustment) const;
 	};
 }
 

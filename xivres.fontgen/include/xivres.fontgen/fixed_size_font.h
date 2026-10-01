@@ -2,6 +2,7 @@
 #define XIVRES_FONTGENERATOR_IFIXEDSIZEFONT_H_
 
 #include <map>
+#include <optional>
 #include <set>
 
 #include "xivres/texture.mipmap_stream.h"
@@ -136,6 +137,12 @@ namespace xivres::fontgen {
 		[[nodiscard]] virtual std::shared_ptr<fixed_size_font> get_threadsafe_view() const = 0;
 
 		[[nodiscard]] virtual const fixed_size_font* get_base_font(char32_t codepoint) const = 0;
+
+		// Returns the position of a baseline listed in the BASE table, such as 'romn' or 'ideo', in pixels above the origin of the glyphs.
+		// baselineTag is in DWRITE_FONT_FEATURE_TAG byte order.
+		[[nodiscard]] virtual std::optional<float> get_baseline(uint32_t baselineTag) const {
+			return std::nullopt;
+		}
 	};
 
 	class default_abstract_fixed_size_font : public fixed_size_font {
