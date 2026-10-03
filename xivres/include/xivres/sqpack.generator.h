@@ -93,8 +93,11 @@ namespace xivres::sqpack {
 			[[nodiscard]] std::streamsize size() const override { return static_cast<std::streamsize>(m_size); }
 
 			[[nodiscard]] uint64_t original_size() const { return m_originalSize; }
+			[[nodiscard]] uint64_t header_size() const { return m_header.size(); }
 			[[nodiscard]] bool reads_original(uint64_t offset, uint64_t length) const;
 			[[nodiscard]] const entry_info* entry_at(uint64_t offset) const;
+
+			[[nodiscard]] std::span<const entry_info* const> entries_in(uint64_t offset, uint64_t length) const;
 
 		private:
 			[[nodiscard]] std::span<entry_info*>::iterator entry_at_or_before(uint64_t offset) const;
