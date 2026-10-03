@@ -275,7 +275,7 @@ freetype_bitmap_wrapper::freetype_bitmap_wrapper(FT_Library library)
 
 std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::load_glyph(uint32_t glyphIndex, bool render) const {
 	if (m_face->glyph->glyph_index != glyphIndex)
-		success_or_throw(FT_Load_Glyph(m_face, glyphIndex, m_info->Params.LoadFlags));
+		success_or_throw(FT_Load_Glyph(m_face, glyphIndex, m_info->LoadFlags));
 
 	FT_Glyph glyph;
 	success_or_throw(FT_Get_Glyph(m_face->glyph, &glyph));
@@ -491,6 +491,8 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 		FT_LOAD_NO_AUTOHINT);
 
 	m_face = create_face(m_library.get(), *info);
+	info->LoadFlags = get_load_flags(m_face, info->Params);
+
 	FT_UInt glyphIndex;
 	for (char32_t c = FT_Get_First_Char(m_face, &glyphIndex); glyphIndex; c = FT_Get_Next_Char(m_face, c, &glyphIndex))
 		info->Characters.insert(c);
@@ -548,6 +550,34 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 	}
 
 	m_info = std::move(info);
+}
+
+int xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::get_load_flags(FT_Face face, const create_struct& params) {
+	auto flags = params.LoadFlags;
+	if (flags & FT_LOAD_NO_HINTING)
+		return flags;
+
+	switch (params.RenderMode) {
+		case FT_RENDER_MODE_MONO:
+			return flags | FT_LOAD_TARGET_MONO;
+
+		case FT_RENDER_MODE_LIGHT: {
+			if (flags & FT_LOAD_NO_AUTOHINT)
+				return flags;
+			const auto hasTable = [face](FT_ULong tag) {
+				FT_ULong length = 0;
+				return FT_Load_Sfnt_Table(face, tag, 0, nullptr, &length) == FT_Err_Ok && length != 0;
+			};
+			const auto hasTrueTypeInstructions = hasTable(FT_MAKE_TAG('g', 'l', 'y', 'f'))
+				&& (hasTable(FT_MAKE_TAG('f', 'p', 'g', 'm')) || hasTable(FT_MAKE_TAG('p', 'r', 'e', 'p')));
+			if ((flags & FT_LOAD_FORCE_AUTOHINT) || !hasTrueTypeInstructions)
+				flags |= FT_LOAD_TARGET_LIGHT;
+			return flags;
+		}
+
+		default:
+			return flags;
+	}
 }
 
 xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_wrapper()

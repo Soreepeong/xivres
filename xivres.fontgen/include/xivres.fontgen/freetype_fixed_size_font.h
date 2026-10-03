@@ -53,6 +53,7 @@ namespace xivres::fontgen {
 				std::vector<uint8_t> GammaTable;
 				FT_Matrix Matrix;
 				create_struct Params{};
+				int LoadFlags = FT_LOAD_DEFAULT;
 				int FaceIndex = 0;
 				float Size = 0.f;
 			};
@@ -98,6 +99,8 @@ namespace xivres::fontgen {
 
 		private:
 			static FT_Face create_face(FT_Library library, const info& info);
+
+			static int get_load_flags(FT_Face face, const create_struct& params);
 
 			static int resolve_glyph_index(FT_Face face, hb_font_t* hbFont, char32_t codepoint, const create_struct& params);
 
