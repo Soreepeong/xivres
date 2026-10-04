@@ -54,8 +54,14 @@ std::shared_ptr<const xivres::packed_stream> xivres::sqpack::generator::entry_in
 }
 
 std::shared_ptr<const xivres::packed_stream> xivres::sqpack::generator::entry_info::current_stream() const {
-	const auto lock = std::scoped_lock(m_streamMtx);
-	return m_stream ? m_stream : m_baseStream;
+	auto current = [this] {
+		const auto lock = std::scoped_lock(m_streamMtx);
+		return m_stream ? m_stream : m_baseStream;
+	}();
+
+	if (current && std::cmp_greater(current->size(), m_entrySize))
+		return nullptr;
+	return current;
 }
 
 void xivres::sqpack::generator::entry_info::finalize_entry_size() {
