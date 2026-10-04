@@ -493,10 +493,14 @@ static hb_face_t* create_harfbuzz_face(IDWriteFontFace* pFace) {
 void xivres::fontgen::directwrite_fixed_size_font::load_font_data(info& info, const dwrite_interfaces& dwrite) {
 	dwrite.Face->GetMetrics(&info.Metrics);
 
-	uint32_t rangeCount;
-	success_or_throw(dwrite.Face1->GetUnicodeRanges(0, nullptr, &rangeCount), {E_NOT_SUFFICIENT_BUFFER});
-	std::vector<DWRITE_UNICODE_RANGE> ranges(rangeCount);
-	success_or_throw(dwrite.Face1->GetUnicodeRanges(rangeCount, &ranges[0], &rangeCount));
+	std::vector<DWRITE_UNICODE_RANGE> ranges;
+	for (uint32_t rangeCount = 0;;) {
+		ranges.resize(rangeCount);
+		if (success_or_throw(dwrite.Face1->GetUnicodeRanges(rangeCount, ranges.data(), &rangeCount), {E_NOT_SUFFICIENT_BUFFER}) == E_NOT_SUFFICIENT_BUFFER)
+			continue;
+		ranges.resize(rangeCount);
+		break;
+	}
 
 	for (const auto& range : ranges)
 		for (uint32_t i = range.first; i <= range.last; ++i)

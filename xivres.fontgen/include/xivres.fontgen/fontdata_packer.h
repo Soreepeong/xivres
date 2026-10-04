@@ -104,7 +104,7 @@ namespace xivres::fontgen {
 		void request_cancel();
 
 		void wait() {
-			void(std::lock_guard(m_runningMtx));
+			void(std::scoped_lock(m_runningMtx));
 		}
 
 		template <class TRep, class TPeriod>

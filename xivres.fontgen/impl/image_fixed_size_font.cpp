@@ -454,7 +454,7 @@ std::shared_ptr<const xivres::fontgen::image_fixed_size_font::rendered_glyph> xi
 		return nullptr;
 
 	{
-		const auto lock = std::lock_guard(m_info->GlyphsMtx);
+		const auto lock = std::scoped_lock(m_info->GlyphsMtx);
 		if (const auto cached = m_info->Glyphs.find(codepoint); cached != m_info->Glyphs.end())
 			return cached->second;
 	}
@@ -467,7 +467,7 @@ std::shared_ptr<const xivres::fontgen::image_fixed_size_font::rendered_glyph> xi
 		glyph = std::make_shared<rendered_glyph>();
 	}
 
-	const auto lock = std::lock_guard(m_info->GlyphsMtx);
+	const auto lock = std::scoped_lock(m_info->GlyphsMtx);
 	return m_info->Glyphs.emplace(codepoint, std::move(glyph)).first->second;
 }
 

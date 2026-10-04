@@ -84,7 +84,7 @@ void xivres::fontgen::fontdata_packer::compile() {
 	std::condition_variable cv;
 	m_workerThread = std::thread([this, &cv]() {
 		{
-			const auto lock = std::lock_guard(m_runningMtx);
+			const auto lock = std::scoped_lock(m_runningMtx);
 			cv.notify_all();
 			try {
 				m_status = progress_status::prepare_source_fonts;
@@ -283,9 +283,9 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::
 				++m_nCurrentProgress;
 				const auto& info = *(*pSuccesses)[i];
 
-				auto pooledBaseFont = *m_threadSafeBaseFonts[info.BaseFont];
+				auto pooledBaseFont = *m_threadSafeBaseFonts.at(info.BaseFont);
 				if (!pooledBaseFont)
-					pooledBaseFont.emplace(m_baseFonts[info.BaseFont]->get_threadsafe_view());
+					pooledBaseFont.emplace(m_baseFonts.at(info.BaseFont)->get_threadsafe_view());
 				const auto& baseFont = **pooledBaseFont;
 
 				baseFont.draw(
@@ -316,7 +316,7 @@ void xivres::fontgen::fontdata_packer::measure_glyphs() {
 			try {
 				measure_glyphs_task(task, nBase, divideUnit);
 			} catch (...) {
-				const auto lock = std::lock_guard(errorMtx);
+				const auto lock = std::scoped_lock(errorMtx);
 				if (!error)
 					error = std::current_exception();
 				m_bCancelRequested = true;
@@ -336,9 +336,9 @@ void xivres::fontgen::fontdata_packer::measure_glyphs_task(util::thread_pool::ba
 
 		auto& info = m_targetPlans[i];
 
-		auto pooledBaseFont = *m_threadSafeBaseFonts[info.BaseFont];
+		auto pooledBaseFont = *m_threadSafeBaseFonts.at(info.BaseFont);
 		if (!pooledBaseFont)
-			pooledBaseFont.emplace(m_baseFonts[info.BaseFont]->get_threadsafe_view());
+			pooledBaseFont.emplace(m_baseFonts.at(info.BaseFont)->get_threadsafe_view());
 		const auto& baseFont = **pooledBaseFont;
 
 		glyph_metrics gm;
@@ -363,8 +363,11 @@ void xivres::fontgen::fontdata_packer::measure_glyphs_task(util::thread_pool::ba
 				throw std::runtime_error("Font reported to have a codepoint but it's failing to report glyph metrics");
 			if (gm.X1 < 0)
 				throw std::runtime_error("Glyphs for target fonts cannot have negative LSB");
-			if (gm.height() != *info.BaseEntry.BoundingHeight)
-				throw std::runtime_error("Target font has a glyph with different bounding height from the source");
+			if (gm.height() != *info.BaseEntry.BoundingHeight) {
+				throw std::runtime_error(std::format(
+					"Target font has a glyph with different bounding height from the source (U+{:04X}: {} in the target, {} in the source)",
+					static_cast<uint32_t>(info.Codepoint), gm.height(), *info.BaseEntry.BoundingHeight));
+			}
 
 			if (gm.Y1 > 0)
 				target.Entry.TextureOffsetY = util::range_check_cast<uint16_t>(gm.Y1);
@@ -419,6 +422,9 @@ void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {
 				pInfo->Codepoint = pInfo->BaseFont->uniqid_to_glyph(uniqid);
 				if (!m_baseFonts[pInfo->BaseFont])
 					m_baseFonts[pInfo->BaseFont] = pInfo->BaseFont->get_threadsafe_view();
+
+				// allocate slot in the map in advance
+				(void) m_threadSafeBaseFonts[pInfo->BaseFont];
 				pInfo->UnicodeBlock = &block;
 				pInfo->BaseEntry.codepoint(pInfo->Codepoint);
 			}

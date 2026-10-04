@@ -124,7 +124,7 @@ const xivres::fontgen::fixed_size_font* xivres::fontgen::wrapping_fixed_size_fon
 	auto& cache = *m_scaledFontCache;
 	auto scale = 0;
 	{
-		const auto lock = std::lock_guard(cache.Mutex);
+		const auto lock = std::scoped_lock(cache.Mutex);
 		if (const auto it = cache.GlyphScales.find(codepoint); it != cache.GlyphScales.end()) {
 			scale = it->second;
 		} else {
@@ -168,7 +168,7 @@ const xivres::fontgen::fixed_size_font* xivres::fontgen::wrapping_fixed_size_fon
 
 	auto& font = m_scaledFonts[scale];
 	if (!font) {
-		const auto lock = std::lock_guard(cache.Mutex);
+		const auto lock = std::scoped_lock(cache.Mutex);
 		font = cache.Fonts.at(scale)->get_threadsafe_view();
 	}
 	return font->try_get_glyph_metrics(codepoint, scaledGm) ? font.get() : nullptr;
@@ -229,8 +229,9 @@ const xivres::fontgen::fixed_size_font* xivres::fontgen::wrapping_fixed_size_fon
 	if (!m_info->Codepoints.contains(codepoint))
 		return nullptr;
 
-	// Squeezed glyphs are not the glyphs of the base font, so this font draws them into the texture itself.
-	if (glyph_metrics gm; m_font->try_get_glyph_metrics(translate_codepoint(codepoint), gm) && place(translate_codepoint(codepoint), gm).SqueezedWidth)
+	// Squeezed glyphs are not the glyphs of the base font, so this font draws them into the texture itself. Only a
+	// maximum width squeezes glyphs; measuring glyphs otherwise would cost as much as drawing them, for every glyph.
+	if (glyph_metrics gm; m_info->Monospaced && m_info->HasMaxAdvance && m_font->try_get_glyph_metrics(translate_codepoint(codepoint), gm) && place(translate_codepoint(codepoint), gm).SqueezedWidth)
 		return this;
 
 	return m_font->get_base_font(codepoint);
@@ -324,6 +325,13 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 		if (mapped < U' ')
 			continue;
 
+		// Measuring a glyph costs about as much as drawing it, so only the glyphs that the metrics matter for are measured:
+		// those whose kerning monospacing may drop, and those whose negative bearings kerning may make up for.
+		const auto& block = util::unicode::blocks::block_for(mapped);
+		const auto mayCompensate = block.NegativeLsbGroup != util::unicode::blocks::None && !(block.Purpose & util::unicode::blocks::UsedWithCombining);
+		if (!mayCompensate && !(m_info->Monospaced && m_info->DropKerning))
+			continue;
+
 		glyph_metrics gm;
 		if (!m_font->try_get_glyph_metrics(mapped, gm))
 			continue;
@@ -332,18 +340,8 @@ const std::map<std::pair<char32_t, char32_t>, int>& xivres::fontgen::wrapping_fi
 		if (p.Monospaced && m_info->DropKerning)
 			kerningDroppedGlyphs.insert(mapped);
 
-		if (p.NegativeLsbCompensation < 0) {
-			do {
-				const auto& block = util::unicode::blocks::block_for(mapped);
-				if (block.NegativeLsbGroup == util::unicode::blocks::None)
-					break;
-
-				if (block.Purpose & util::unicode::blocks::UsedWithCombining)
-					break;
-
-				negativeLsbChars[block.NegativeLsbGroup][mapped] = p.NegativeLsbCompensation;
-			} while (false);
-		}
+		if (p.NegativeLsbCompensation < 0 && mayCompensate)
+			negativeLsbChars[block.NegativeLsbGroup][mapped] = p.NegativeLsbCompensation;
 	}
 
 	// Kerning follows the glyphs actually drawn: a codepoint replaced with another takes the kerning of the replacement.
@@ -411,7 +409,7 @@ const void* xivres::fontgen::wrapping_fixed_size_font::get_base_font_glyph_uniqi
 	if (it == m_info->Codepoints.end())
 		return nullptr;
 
-	if (glyph_metrics gm; m_font->try_get_glyph_metrics(codepoint, gm) && place(codepoint, gm).SqueezedWidth)
+	if (glyph_metrics gm; m_info->Monospaced && m_info->HasMaxAdvance && m_font->try_get_glyph_metrics(codepoint, gm) && place(codepoint, gm).SqueezedWidth)
 		return &*it;
 
 	return m_font->get_base_font_glyph_uniqid(codepoint);

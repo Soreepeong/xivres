@@ -738,6 +738,7 @@ std::shared_ptr<xivres::fontgen::fixed_size_font> xivres::fontgen::glyph_merging
 	auto info = std::make_shared<struct info>(*m_info);
 	info->BaseFont = m_info->BaseFont->get_threadsafe_view();
 	res->m_info = std::move(info);
+	res->m_glyphs = m_glyphs;
 	return res;
 }
 
@@ -804,23 +805,28 @@ std::optional<std::string> xivres::fontgen::glyph_merging_fixed_size_font::get_s
 	return res;
 }
 
-const xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph* xivres::fontgen::glyph_merging_fixed_size_font::get_rendered_glyph(char32_t codepoint) const {
-	if (const auto it = m_glyphs.find(codepoint); it != m_glyphs.end())
-		return &it->second;
-
+std::shared_ptr<const xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph> xivres::fontgen::glyph_merging_fixed_size_font::get_rendered_glyph(char32_t codepoint) const {
 	const auto it = m_info->MappingIndices.find(codepoint);
 	if (it == m_info->MappingIndices.end())
 		return nullptr;
 
-	const auto& mapping = m_info->Params.Mappings[it->second.first];
-	rendered_glyph glyph;
-	try {
-		glyph = render(codepoint, mapping, mapping.Texts[it->second.second]);
-	} catch (const std::exception&) {
-		// An unusable text font or custom shape leaves the glyph empty.
-		glyph = {};
+	{
+		const auto lock = std::scoped_lock(m_glyphs->Mutex);
+		if (const auto cached = m_glyphs->Glyphs.find(codepoint); cached != m_glyphs->Glyphs.end())
+			return cached->second;
 	}
-	return &m_glyphs.emplace(codepoint, std::move(glyph)).first->second;
+
+	// drawing does not need lock
+	const auto& mapping = m_info->Params.Mappings[it->second.first];
+	std::shared_ptr<const rendered_glyph> glyph;
+	try {
+		glyph = std::make_shared<rendered_glyph>(render(codepoint, mapping, mapping.Texts[it->second.second]));
+	} catch (const std::exception&) {
+		glyph = std::make_shared<rendered_glyph>();  // use empty
+	}
+
+	const auto lock = std::scoped_lock(m_glyphs->Mutex);
+	return m_glyphs->Glyphs.emplace(codepoint, std::move(glyph)).first->second;
 }
 
 const xivres::fontgen::fixed_size_font& xivres::fontgen::glyph_merging_fixed_size_font::get_text_font(float size, float condense) const {

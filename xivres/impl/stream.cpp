@@ -140,7 +140,7 @@ struct xivres::file_stream::data {
 	public:
 		PooledObject(const file_stream& parent)
 			: m_parent(parent) {
-			const auto lock = std::lock_guard(parent.m_mutex);
+			const auto lock = std::scoped_lock(parent.m_mutex);
 			if (parent.m_streams.empty())
 				m_stream = std::ifstream(parent.m_path, std::ios::binary);
 			else {
@@ -150,7 +150,7 @@ struct xivres::file_stream::data {
 		}
 
 		~PooledObject() {
-			const auto lock = std::lock_guard(m_parent.m_mutex);
+			const auto lock = std::scoped_lock(m_parent.m_mutex);
 			m_parent.m_streams.emplace_back(std::move(m_stream));
 		}
 
