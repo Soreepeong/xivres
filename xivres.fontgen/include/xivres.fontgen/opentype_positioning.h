@@ -33,6 +33,9 @@ namespace xivres::fontgen {
 		// Features enabled in addition to 'kern', in DWRITE_FONT_FEATURE_TAG byte order.
 		std::set<uint32_t> FeatureTags;
 
+		// Features turned off, in DWRITE_FONT_FEATURE_TAG byte order. Turning off 'kern' leaves out pair kerning entirely.
+		std::set<uint32_t> DisabledFeatureTags;
+
 		// BCP 47 language tag of the text, such as "ja" or "zh-Hant"; empty if unspecified.
 		std::string Language;
 
@@ -57,7 +60,7 @@ namespace xivres::fontgen {
 
 	// Extracts what the FDT format can represent of the font's glyph positioning:
 	// pair kerning from GPOS 'kern' (or the legacy kern table if GPOS has no 'kern' feature),
-	// and single glyph adjustments from GPOS 'kern' and the enabled features.
+	// and single glyph adjustments from GPOS 'kern' and the enabled features; 'kern' contributes nothing if turned off.
 	// glyphToCharMap maps each glyph ID that is drawn to the codepoints drawn with it.
 	[[nodiscard]] opentype_positioning extract_opentype_positioning(const opentype_positioning_params& params, const std::vector<std::set<char32_t>>& glyphToCharMap);
 

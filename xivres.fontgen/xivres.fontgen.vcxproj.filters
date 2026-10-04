@@ -57,6 +57,12 @@
     <ClInclude Include="include\xivres.fontgen\wrapping_fixed_size_font.h">
       <Filter>Headers\fixed_size_font</Filter>
     </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\image_fixed_size_font.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres.fontgen\glyph_merging_fixed_size_font.h">
+      <Filter>Headers\fixed_size_font</Filter>
+    </ClInclude>
     <ClInclude Include="include\xivres.fontgen\merged_fixed_size_font.h">
       <Filter>Headers\fixed_size_font</Filter>
     </ClInclude>
@@ -102,6 +108,12 @@
       <Filter>Impls</Filter>
     </ClCompile>
     <ClCompile Include="impl\wrapping_fixed_size_font.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\image_fixed_size_font.cpp">
+      <Filter>Impls</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\glyph_merging_fixed_size_font.cpp">
       <Filter>Impls</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,5 +1,42 @@
 #include "../include/xivres.fontgen/fixed_size_font.h"
 
+void xivres::fontgen::glyph_outline::move_to(point p) {
+	if (!Verbs.empty() && Verbs.back() != verb::Close)
+		close();
+	Verbs.push_back(verb::MoveTo);
+	Points.push_back(p);
+}
+
+void xivres::fontgen::glyph_outline::line_to(point p) {
+	Verbs.push_back(verb::LineTo);
+	Points.push_back(p);
+}
+
+void xivres::fontgen::glyph_outline::quad_to(point c, point p) {
+	Verbs.push_back(verb::QuadTo);
+	Points.push_back(c);
+	Points.push_back(p);
+}
+
+void xivres::fontgen::glyph_outline::cubic_to(point c1, point c2, point p) {
+	Verbs.push_back(verb::CubicTo);
+	Points.push_back(c1);
+	Points.push_back(c2);
+	Points.push_back(p);
+}
+
+void xivres::fontgen::glyph_outline::close() {
+	if (!Verbs.empty() && Verbs.back() != verb::Close)
+		Verbs.push_back(verb::Close);
+}
+
+void xivres::fontgen::glyph_outline::translate(float dx, float dy) {
+	for (auto& p : Points) {
+		p.X += dx;
+		p.Y += dy;
+	}
+}
+
 void xivres::fontgen::glyph_metrics::adjust_to_intersection(glyph_metrics& r, MetricType srcWidth, MetricType srcHeight, MetricType destWidth, MetricType destHeight) {
 	if (X1 < 0) {
 		r.X1 -= X1;
@@ -126,11 +163,11 @@ const std::set<char32_t>& xivres::fontgen::empty_fixed_size_font::all_codepoints
 }
 
 int xivres::fontgen::empty_fixed_size_font::line_height() const {
-	return m_fontDef.LineHeight;
+	return static_cast<int>(std::lround(m_fontDef.LineHeight));
 }
 
 int xivres::fontgen::empty_fixed_size_font::ascent() const {
-	return m_fontDef.Ascent;
+	return static_cast<int>(std::lround(m_fontDef.Ascent));
 }
 
 float xivres::fontgen::empty_fixed_size_font::font_size() const {

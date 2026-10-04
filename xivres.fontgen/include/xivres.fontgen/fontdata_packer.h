@@ -66,6 +66,9 @@ namespace xivres::fontgen {
 
 		void measure_glyphs();
 
+		// Measures every divideUnit-th glyph from nBase.
+		void measure_glyphs_task(util::thread_pool::base_task& task, size_t nBase, size_t divideUnit);
+
 		void draw_layoutted_glyphs(util::thread_pool::task_waiter<>& waiter, size_t planeIndex, std::vector<target_plan*> successfulPlans);
 
 		void layout_glyphs();

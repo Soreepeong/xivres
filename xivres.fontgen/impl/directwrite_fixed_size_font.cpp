@@ -1,5 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <d2d1.h>
 
 #include "../include/xivres.fontgen/directwrite_fixed_size_font.h"
 
@@ -384,6 +385,20 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen:
 		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
 	}
 
+	// The face of the font comes with the simulations of the font; the face is made again from the file for others.
+	const auto simulations = info.Params.Simulations.value_or(res.Font->GetSimulations());
+	if (simulations != res.Face->GetSimulations()) {
+		IDWriteFontFile* pFontFileTmp;
+		uint32_t nFiles = 1;
+		success_or_throw(res.Face->GetFiles(&nFiles, &pFontFileTmp));
+		IDWriteFontFilePtr file(pFontFileTmp, false);
+
+		IDWriteFontFacePtr face;
+		success_or_throw(res.Factory->CreateFontFace(res.Face->GetType(), 1, &pFontFileTmp, res.Face->GetIndex(), simulations, &face));
+		res.Face = face;
+		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
+	}
+
 	// Variable fonts: start from the instance of the font, and apply the requested axis values.
 	// Unless requested otherwise, the optical size follows the font size.
 	std::vector<DWRITE_FONT_AXIS_VALUE> axisValues;
@@ -409,7 +424,7 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen:
 		}
 
 		IDWriteFontFace5Ptr instanceFace;
-		success_or_throw(resource->CreateFontFace(res.Font->GetSimulations(), axisValues.data(), static_cast<UINT32>(axisValues.size()), &instanceFace));
+		success_or_throw(resource->CreateFontFace(simulations, axisValues.data(), static_cast<UINT32>(axisValues.size()), &instanceFace));
 		res.Face = instanceFace;
 		success_or_throw(res.Face.QueryInterface(decltype(res.Face1)::GetIID(), &res.Face1));
 	}
@@ -424,11 +439,21 @@ xivres::fontgen::directwrite_fixed_size_font::dwrite_interfaces xivres::fontgen:
 	std::wstring familyName(length + 1, L'\0');
 	success_or_throw(familyNames->GetString(index, familyName.data(), length + 1));
 	familyName.resize(length);
+
+	// Layouts match the font again by these properties; ask for what makes DirectWrite apply the same simulations.
+	auto weight = res.Font->GetWeight();
+	auto style = res.Font->GetStyle();
+	if (info.Params.Simulations) {
+		if ((simulations & DWRITE_FONT_SIMULATIONS_BOLD) && !(res.Font->GetSimulations() & DWRITE_FONT_SIMULATIONS_BOLD))
+			weight = (std::max)(weight, DWRITE_FONT_WEIGHT_BOLD);
+		if ((simulations & DWRITE_FONT_SIMULATIONS_OBLIQUE) && style == DWRITE_FONT_STYLE_NORMAL)
+			style = DWRITE_FONT_STYLE_OBLIQUE;
+	}
 	success_or_throw(res.Factory->CreateTextFormat(
 		familyName.c_str(),
 		res.Collection,
-		res.Font->GetWeight(),
-		res.Font->GetStyle(),
+		weight,
+		style,
 		res.Font->GetStretch(),
 		info.Size,
 		info.Params.Language.empty() ? L"en-us" : util::unicode::convert<std::wstring>(info.Params.Language).c_str(),
@@ -533,6 +558,8 @@ void xivres::fontgen::directwrite_fixed_size_font::load_font_data(info& info, co
 	for (const auto& feature : info.Params.Features) {
 		if (feature.parameter)
 			params.FeatureTags.insert(static_cast<uint32_t>(feature.nameTag));
+		else
+			params.DisabledFeatureTags.insert(static_cast<uint32_t>(feature.nameTag));
 	}
 
 	const auto hbFace = std::unique_ptr<hb_face_t, decltype(&hb_face_destroy)>(create_harfbuzz_face(dwrite.Face), &hb_face_destroy);
@@ -630,14 +657,22 @@ uint16_t xivres::fontgen::directwrite_fixed_size_font::resolve_glyph_index(const
 }
 
 bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_t codepoint, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis, glyph_adjustment& adjustment) const {
+	const auto glyphIndex = resolve_glyph_index(m_dwrite, codepoint);
+	if (!glyphIndex)
+		return false;
+
+	const auto it = m_info->GlyphAdjustments.find(glyphIndex);
+	adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
+
+	if (!try_get_glyph_index_metrics(glyphIndex, gm, analysis))
+		return false;
+
+	gm.AdvanceX += adjustment.AdvanceX;
+	return true;
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_index_metrics(uint16_t glyphIndex, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis, float originX, float originY) const {
 	try {
-		const auto glyphIndex = resolve_glyph_index(m_dwrite, codepoint);
-		if (!glyphIndex)
-			return false;
-
-		const auto it = m_info->GlyphAdjustments.find(glyphIndex);
-		adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
-
 		DWRITE_GLYPH_METRICS dgm;
 		success_or_throw(m_dwrite.Face->GetGdiCompatibleGlyphMetrics(
 			m_info->Size, 1.0f, &m_info->Matrix,
@@ -661,9 +696,13 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 		if (renderMode == DWRITE_RENDERING_MODE_DEFAULT)
 			success_or_throw(m_dwrite.Face->GetRecommendedRenderingMode(m_info->Size, 1.f, m_info->Params.MeasureMode, nullptr, &renderMode));
 
+		// The origin is given in pixels, after the transformation; the baseline origin of the run would be transformed too.
+		auto matrix = m_info->Matrix;
+		matrix.dx = originX;
+		matrix.dy = originY;
 		success_or_throw(m_dwrite.Factory3->CreateGlyphRunAnalysis(
 			&run,
-			&m_info->Matrix,
+			&matrix,
 			renderMode,
 			m_info->Params.MeasureMode,
 			m_info->Params.GridFitMode,
@@ -674,7 +713,7 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 
 		success_or_throw(analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_ALIASED_1x1, gm.as_mutable_rect_pointer()));
 
-		gm.AdvanceX = m_info->scale_from_font_unit(static_cast<float>(dgm.advanceWidth) * m_info->Matrix.m11) + adjustment.AdvanceX;
+		gm.AdvanceX = m_info->scale_from_font_unit(static_cast<float>(dgm.advanceWidth) * m_info->Matrix.m11);
 
 		return true;
 	} catch (...) {
@@ -690,6 +729,276 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_metrics(char32_
 
 	gm.translate(adjustment.PlacementX, ascent() + adjustment.PlacementY);
 	return true;
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_index_metrics(uint32_t glyphIndex, float originX, float originY, glyph_metrics& gm) const {
+	if (!glyphIndex || glyphIndex >= m_dwrite.Face->GetGlyphCount())
+		return false;
+
+	IDWriteGlyphRunAnalysisPtr analysis;
+	return try_get_glyph_index_metrics(static_cast<uint16_t>(glyphIndex), gm, analysis, originX, originY);
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_index_ink_extent(uint32_t glyphIndex, float& x1, float& x2) const {
+	if (!glyphIndex || glyphIndex >= m_dwrite.Face->GetGlyphCount())
+		return false;
+
+	const auto index = static_cast<uint16_t>(glyphIndex);
+	DWRITE_GLYPH_METRICS dgm;
+	if (FAILED(m_dwrite.Face->GetDesignGlyphMetrics(&index, 1, &dgm, FALSE)))
+		return false;
+
+	// The side bearings are of the outline, which the matrix scales horizontally.
+	const auto scale = m_info->Size / static_cast<float>(m_info->Metrics.designUnitsPerEm) * m_info->Matrix.m11;
+	x1 = static_cast<float>(dgm.leftSideBearing) * scale;
+	x2 = (static_cast<float>(dgm.advanceWidth) - static_cast<float>(dgm.rightSideBearing)) * scale;
+	if (x1 > x2)
+		std::swap(x1, x2);
+	return true;
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::draw_glyph_index(uint32_t glyphIndex, uint8_t* pBuf, size_t stride, float drawX, float drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
+	if (!glyphIndex || glyphIndex >= m_dwrite.Face->GetGlyphCount())
+		return false;
+
+	// The glyph is rasterized at its origin, which may be between pixels.
+	IDWriteGlyphRunAnalysisPtr analysis;
+	glyph_metrics gm;
+	if (!try_get_glyph_index_metrics(static_cast<uint16_t>(glyphIndex), gm, analysis, drawX, drawY))
+		return false;
+
+	auto src = gm;
+	src.translate(-src.X1, -src.Y1);
+	auto dest = gm;
+	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
+	if (src.is_effectively_empty() || dest.is_effectively_empty())
+		return true;
+
+	m_drawBuffer.resize(gm.area());
+	success_or_throw(analysis->CreateAlphaTexture(DWRITE_TEXTURE_ALIASED_1x1, gm.as_const_rect_pointer(), &m_drawBuffer[0], static_cast<uint32_t>(m_drawBuffer.size())));
+
+	util::bitmap_copy::to_l8()
+		.from(&m_drawBuffer[0], gm.width(), gm.height(), 1, util::bitmap_vertical_direction::TopRowFirst)
+		.to(pBuf, destWidth, destHeight, stride, util::bitmap_vertical_direction::TopRowFirst)
+		.fore_color(fgColor)
+		.fore_opacity(fgOpacity)
+		.back_color(bgColor)
+		.back_opacity(bgOpacity)
+		.gamma_table(m_info->GammaTable)
+		.copy(src.X1, src.Y1, src.X2, src.Y2, dest.X1, dest.Y1);
+	return true;
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
+	const auto glyphIndex = resolve_glyph_index(m_dwrite, codepoint);
+	if (!glyphIndex)
+		return false;
+
+	// Receives the outline in pixels relative to the origin on the baseline, with y growing downwards, and places it as
+	// draw does: transformed by the matrix, and moved by the adjustments of the features and the ascent.
+	class OutlineSink final : public IDWriteGeometrySink {
+	public:
+		glyph_outline& Outline;
+		DWRITE_MATRIX Matrix;
+
+		OutlineSink(glyph_outline& outline, const DWRITE_MATRIX& matrix)
+			: Outline(outline)
+			, Matrix(matrix) {}
+
+		[[nodiscard]] glyph_outline::point Convert(const D2D1_POINT_2F& p) const {
+			return {p.x * Matrix.m11 + p.y * Matrix.m21 + Matrix.dx, p.x * Matrix.m12 + p.y * Matrix.m22 + Matrix.dy};
+		}
+
+		STDMETHOD(QueryInterface)(REFIID riid, void** ppv) override {
+			if (!ppv)
+				return E_INVALIDARG;
+			if (riid == __uuidof(IUnknown) || riid == __uuidof(IDWriteGeometrySink)) {
+				*ppv = this;
+				return S_OK;
+			}
+			*ppv = nullptr;
+			return E_NOINTERFACE;
+		}
+		ULONG __stdcall AddRef() override { return 1; }
+		ULONG __stdcall Release() override { return 0; }
+
+		STDMETHOD_(void, SetFillMode)(D2D1_FILL_MODE fillMode) override {
+			Outline.EvenOdd = fillMode == D2D1_FILL_MODE_ALTERNATE;
+		}
+		STDMETHOD_(void, SetSegmentFlags)(D2D1_PATH_SEGMENT vertexFlags) override {}
+		STDMETHOD_(void, BeginFigure)(D2D1_POINT_2F startPoint, D2D1_FIGURE_BEGIN figureBegin) override {
+			Outline.move_to(Convert(startPoint));
+		}
+		STDMETHOD_(void, AddLines)(const D2D1_POINT_2F* points, UINT32 pointsCount) override {
+			for (UINT32 i = 0; i < pointsCount; i++)
+				Outline.line_to(Convert(points[i]));
+		}
+		STDMETHOD_(void, AddBeziers)(const D2D1_BEZIER_SEGMENT* beziers, UINT32 beziersCount) override {
+			for (UINT32 i = 0; i < beziersCount; i++)
+				Outline.cubic_to(Convert(beziers[i].point1), Convert(beziers[i].point2), Convert(beziers[i].point3));
+		}
+		STDMETHOD_(void, EndFigure)(D2D1_FIGURE_END figureEnd) override {
+			Outline.close();
+		}
+		STDMETHOD(Close)() override { return S_OK; }
+	};
+
+	const auto it = m_info->GlyphAdjustments.find(glyphIndex);
+	const auto adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
+
+	auto matrix = m_info->Matrix;
+	matrix.dx = static_cast<float>(adjustment.PlacementX);
+	matrix.dy = static_cast<float>(ascent() + adjustment.PlacementY);
+
+	outline = {};
+	OutlineSink sink(outline, matrix);
+	if (FAILED(m_dwrite.Face->GetGlyphRunOutline(m_info->Size, &glyphIndex, nullptr, nullptr, 1, FALSE, FALSE, &sink)))
+		return false;
+	outline.close();
+	return true;
+}
+
+std::optional<xivres::fontgen::shaped_line> xivres::fontgen::directwrite_fixed_size_font::shape_line(std::u32string_view text, int letterSpacing) const {
+	try {
+		const auto text16 = util::unicode::convert<std::wstring>(text);
+
+		IDWriteTextLayoutPtr layout;
+		success_or_throw(m_dwrite.Factory->CreateTextLayout(text16.data(), static_cast<UINT32>(text16.size()), m_dwrite.Format, 9999999, 9999999, &layout));
+		success_or_throw(layout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
+
+		// A typography replaces the features that are on by default, instead of adding to them; keep those on, unless
+		// the features of the font say otherwise.
+		IDWriteTypographyPtr typography;
+		success_or_throw(m_dwrite.Factory->CreateTypography(&typography));
+		for (const auto tag : {
+			     DWRITE_FONT_FEATURE_TAG_STANDARD_LIGATURES,
+			     DWRITE_FONT_FEATURE_TAG_CONTEXTUAL_LIGATURES,
+			     DWRITE_FONT_FEATURE_TAG_CONTEXTUAL_ALTERNATES,
+			     DWRITE_FONT_FEATURE_TAG_KERNING,
+		     }) {
+			if (std::ranges::none_of(m_info->Params.Features, [tag](const DWRITE_FONT_FEATURE& f) { return f.nameTag == tag; }))
+				success_or_throw(typography->AddFontFeature({tag, 1}));
+		}
+		for (const auto& feature : m_info->Params.Features)
+			success_or_throw(typography->AddFontFeature(feature));
+		success_or_throw(layout->SetTypography(typography, {.startPosition = 0, .length = static_cast<UINT32>(text16.size())}));
+
+		// Glyphs from fallback fonts would not be of this font; characters that it does not have are drawn as .notdef.
+		if (IDWriteTextLayout2Ptr layout2; SUCCEEDED(layout.QueryInterface(decltype(layout2)::GetIID(), &layout2))) {
+			if (IDWriteFactory2Ptr factory2; SUCCEEDED(m_dwrite.Factory->QueryInterface(decltype(factory2)::GetIID(), reinterpret_cast<void**>(&factory2)))) {
+				IDWriteFontFallbackBuilderPtr builder;
+				IDWriteFontFallbackPtr fallback;
+				if (SUCCEEDED(factory2->CreateFontFallbackBuilder(&builder)) && SUCCEEDED(builder->CreateFontFallback(&fallback)))
+					layout2->SetFontFallback(fallback);
+			}
+		}
+
+		class ShapingRenderer final : public IDWriteTextRenderer {
+		public:
+			struct glyph {
+				uint16_t Index;
+				float X;
+				float Y;
+			};
+
+			std::vector<glyph> Glyphs;
+			std::optional<float> BaselineY;
+			float AdvanceWidth = 0;
+
+			STDMETHOD(QueryInterface)(REFIID riid, void** ppv) override {
+				if (!ppv)
+					return E_INVALIDARG;
+
+				if (riid == __uuidof(IUnknown)
+					|| riid == __uuidof(IDWritePixelSnapping)
+					|| riid == __uuidof(IDWriteTextRenderer)) {
+					this->AddRef();
+					*ppv = this;
+					return S_OK;
+				}
+
+				return E_NOINTERFACE;
+			}
+			ULONG __stdcall AddRef() override {
+				return 1;
+			}
+			ULONG __stdcall Release() override {
+				return 0;
+			}
+			STDMETHOD(IsPixelSnappingDisabled)(_In_opt_ void* clientDrawingContext, _Out_ BOOL* isDisabled) override {
+				*isDisabled = TRUE;
+				return S_OK;
+			}
+			STDMETHOD(GetCurrentTransform)(_In_opt_ void* clientDrawingContext, _Out_ DWRITE_MATRIX* transform) override {
+				*transform = {1, 0, 0, 1, 0, 0};
+				return S_OK;
+			}
+			STDMETHOD(GetPixelsPerDip)(_In_opt_ void* clientDrawingContext, _Out_ FLOAT* pixelsPerDip) override {
+				*pixelsPerDip = 1;
+				return S_OK;
+			}
+			STDMETHOD(DrawGlyphRun)(
+				_In_opt_ void* clientDrawingContext,
+				FLOAT baselineOriginX,
+				FLOAT baselineOriginY,
+				DWRITE_MEASURING_MODE measuringMode,
+				_In_ DWRITE_GLYPH_RUN const* glyphRun,
+				_In_ DWRITE_GLYPH_RUN_DESCRIPTION const* glyphRunDescription,
+				_In_opt_ IUnknown* clientDrawingEffect
+			) override {
+				if (!BaselineY)
+					BaselineY = baselineOriginY;
+
+				// Glyphs of right-to-left runs go leftwards from the origin of the run.
+				const auto rtl = (glyphRun->bidiLevel & 1) != 0;
+				auto pen = baselineOriginX;
+				for (UINT32 i = 0; i < glyphRun->glyphCount; i++) {
+					const auto advance = glyphRun->glyphAdvances ? glyphRun->glyphAdvances[i] : 0.f;
+					const auto offset = glyphRun->glyphOffsets ? glyphRun->glyphOffsets[i] : DWRITE_GLYPH_OFFSET{};
+					if (rtl)
+						pen -= advance;
+					Glyphs.push_back({
+						.Index = glyphRun->glyphIndices[i],
+						.X = pen + (rtl ? -offset.advanceOffset : offset.advanceOffset),
+						.Y = baselineOriginY - offset.ascenderOffset,
+					});
+					if (!rtl)
+						pen += advance;
+					AdvanceWidth += advance;
+				}
+				return S_OK;
+			}
+
+			STDMETHOD(DrawUnderline)(_In_opt_ void* clientDrawingContext, FLOAT baselineOriginX, FLOAT baselineOriginY, _In_ DWRITE_UNDERLINE const* underline, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+			STDMETHOD(DrawStrikethrough)(_In_opt_ void* clientDrawingContext, FLOAT baselineOriginX, FLOAT baselineOriginY, _In_ DWRITE_STRIKETHROUGH const* strikethrough, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+			STDMETHOD(DrawInlineObject)(_In_opt_ void* clientDrawingContext, FLOAT originX, FLOAT originY, _In_ IDWriteInlineObject* inlineObject, BOOL isSideways, BOOL isRightToLeft, _In_opt_ IUnknown* clientDrawingEffect) override {
+				return E_NOTIMPL;
+			}
+		} renderer;
+		success_or_throw(layout->Draw(nullptr, &renderer, 0, 0));
+
+		// The glyphs are transformed by the matrix as they are drawn, and so are their positions.
+		const auto& m = m_info->Matrix;
+		const auto baselineY = renderer.BaselineY.value_or(0.f);
+		shaped_line res;
+		for (size_t i = 0; i < renderer.Glyphs.size(); i++) {
+			const auto x = renderer.Glyphs[i].X, y = renderer.Glyphs[i].Y - baselineY;
+			res.Glyphs.push_back({
+				.GlyphIndex = renderer.Glyphs[i].Index,
+				.X = x * m.m11 + y * m.m21 + static_cast<float>(static_cast<int>(i) * letterSpacing),
+				.Y = x * m.m12 + y * m.m22,
+			});
+		}
+		res.AdvanceWidth = static_cast<int>(std::lround(renderer.AdvanceWidth * m.m11))
+			+ (renderer.Glyphs.empty() ? 0 : static_cast<int>(renderer.Glyphs.size() - 1) * letterSpacing);
+		return res;
+	} catch (...) {
+		return std::nullopt;
+	}
 }
 
 const wchar_t* xivres::fontgen::directwrite_fixed_size_font::create_struct::get_grid_fit_mode_string() const {

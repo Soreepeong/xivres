@@ -33,7 +33,7 @@ bool xivres::fontgen::fontdata_fixed_size_font::draw(char32_t codepoint, uint8_t
 	src.adjust_to_intersection(dest, mipmapStream.Width, mipmapStream.Height, destWidth, destHeight);
 	util::bitmap_copy::to_l8()
 		.from(&mipmapStream.as_span<uint8_t>()[planeIndex], mipmapStream.Width, mipmapStream.Height, 4, util::bitmap_vertical_direction::TopRowFirst)
-		.to(pBuf, destWidth, destHeight, 4, util::bitmap_vertical_direction::TopRowFirst)
+		.to(pBuf, destWidth, destHeight, stride, util::bitmap_vertical_direction::TopRowFirst)
 		.fore_color(fgColor)
 		.fore_opacity(fgOpacity)
 		.back_color(bgColor)

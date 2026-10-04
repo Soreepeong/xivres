@@ -13,7 +13,11 @@
 #pragma comment(lib, "dwrite.lib")
 
 _COM_SMARTPTR_TYPEDEF(IDWriteFactory, __uuidof(IDWriteFactory));
+_COM_SMARTPTR_TYPEDEF(IDWriteFactory2, __uuidof(IDWriteFactory2));
 _COM_SMARTPTR_TYPEDEF(IDWriteFactory3, __uuidof(IDWriteFactory3));
+_COM_SMARTPTR_TYPEDEF(IDWriteFontFallback, __uuidof(IDWriteFontFallback));
+_COM_SMARTPTR_TYPEDEF(IDWriteFontFallbackBuilder, __uuidof(IDWriteFontFallbackBuilder));
+_COM_SMARTPTR_TYPEDEF(IDWriteTextLayout2, __uuidof(IDWriteTextLayout2));
 _COM_SMARTPTR_TYPEDEF(IDWriteFont, __uuidof(IDWriteFont));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontCollection, __uuidof(IDWriteFontCollection));
 _COM_SMARTPTR_TYPEDEF(IDWriteFontFace, __uuidof(IDWriteFontFace));
@@ -52,6 +56,10 @@ namespace xivres::fontgen {
 			// Design coordinates of variable fonts, keyed by axis tags in DWRITE_FONT_AXIS_TAG byte order.
 			// Axes not listed stay at the instance of the font; 'opsz' follows the font size unless listed.
 			std::map<uint32_t, float> Variations;
+
+			// Simulations of the face, such as the bold simulation for a font that has no bold face. If unset, those of
+			// the font are used, which DirectWrite picks when it matches a font in a family for requested properties.
+			std::optional<DWRITE_FONT_SIMULATIONS> Simulations;
 
 			[[nodiscard]] const wchar_t* get_measuring_mode_string() const;
 
@@ -135,7 +143,21 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
 
+		[[nodiscard]] std::optional<shaped_line> shape_line(std::u32string_view text, int letterSpacing) const override;
+
+		[[nodiscard]] bool try_get_glyph_index_metrics(uint32_t glyphIndex, float originX, float originY, glyph_metrics& gm) const override;
+
+		[[nodiscard]] bool try_get_glyph_index_ink_extent(uint32_t glyphIndex, float& x1, float& x2) const override;
+
+		bool draw_glyph_index(uint32_t glyphIndex, uint8_t* pBuf, size_t stride, float drawX, float drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const override;
+
+		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
+
 	private:
+		// Gets the pixels that a glyph covers with its origin on the baseline at (originX, originY), without the
+		// adjustments of the features.
+		[[nodiscard]] bool try_get_glyph_index_metrics(uint16_t glyphIndex, glyph_metrics& gm, IDWriteGlyphRunAnalysisPtr& analysis, float originX = 0, float originY = 0) const;
+
 		[[nodiscard]] static dwrite_interfaces face_from_info_t(const info& info);
 
 		static void load_font_data(info& info, const dwrite_interfaces& dwrite);

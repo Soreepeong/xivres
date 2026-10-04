@@ -43,6 +43,8 @@
     <ClInclude Include="include\xivres.fontgen\text_measurer.h" />
     <ClInclude Include="include\xivres.fontgen\util.truetype.h" />
     <ClInclude Include="include\xivres.fontgen\wrapping_fixed_size_font.h" />
+    <ClInclude Include="include\xivres.fontgen\glyph_merging_fixed_size_font.h" />
+    <ClInclude Include="include\xivres.fontgen\image_fixed_size_font.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="impl\directwrite_fixed_size_font.cpp" />
@@ -54,6 +56,8 @@
     <ClCompile Include="impl\opentype_positioning.cpp" />
     <ClCompile Include="impl\text_measurer.cpp" />
     <ClCompile Include="impl\wrapping_fixed_size_font.cpp" />
+    <ClCompile Include="impl\glyph_merging_fixed_size_font.cpp" />
+    <ClCompile Include="impl\image_fixed_size_font.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

@@ -1,5 +1,7 @@
 #include "../include/xivres.fontgen/fontdata_packer.h"
 
+#include <format>
+
 #include "xivres/util.bitmap_copy.h"
 
 #ifdef min
@@ -304,68 +306,98 @@ void xivres::fontgen::fontdata_packer::draw_layoutted_glyphs(util::thread_pool::
 void xivres::fontgen::fontdata_packer::measure_glyphs() {
 	util::thread_pool::task_waiter waiter;
 
+	// The waiter does not pass on what the tasks throw, so the first error is kept here and thrown after all tasks end.
+	std::mutex errorMtx;
+	std::exception_ptr error;
+
 	const auto divideUnit = (std::max<size_t>)(1, static_cast<size_t>(std::sqrt(static_cast<double>(m_targetPlans.size()))));
 	for (size_t nBase = 0; nBase < divideUnit; nBase++) {
-		waiter.submit([this, divideUnit, nBase](auto& task) {
-			for (size_t i = nBase; i < m_targetPlans.size() && !m_bCancelRequested; i += divideUnit) {
-				++m_nCurrentProgress;
-				task.throw_if_cancelled();
-
-				auto& info = m_targetPlans[i];
-
-				auto pooledBaseFont = *m_threadSafeBaseFonts[info.BaseFont];
-				if (!pooledBaseFont)
-					pooledBaseFont.emplace(m_baseFonts[info.BaseFont]->get_threadsafe_view());
-				const auto& baseFont = **pooledBaseFont;
-
-				glyph_metrics gm;
-				if (!baseFont.try_get_glyph_metrics(info.Codepoint, gm))
-					throw std::runtime_error("Base font reported to have a codepoint but it's failing to report glyph metrics");
-
-				info.CurrentOffsetX = util::range_check_cast<int16_t>((std::min<int>)(0, gm.X1));
-				info.BaseEntry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - info.CurrentOffsetX);
-
-				info.PadUp = info.PadDown = 0;
-				info.BaseEntry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
-				info.BaseEntry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());
-
-				for (auto& target : info.Targets) {
-					auto pooledSourceFont = **m_threadSafeSourceFonts[target.SourceFontIndex];
-					if (!pooledSourceFont)
-						pooledSourceFont.emplace(m_sourceFonts[target.SourceFontIndex]->get_threadsafe_view());
-
-					auto& sourceFont = **pooledSourceFont;
-
-					if (!sourceFont.try_get_glyph_metrics(info.Codepoint, gm))
-						throw std::runtime_error("Font reported to have a codepoint but it's failing to report glyph metrics");
-					if (gm.X1 < 0)
-						throw std::runtime_error("Glyphs for target fonts cannot have negative LSB");
-					if (gm.height() != *info.BaseEntry.BoundingHeight)
-						throw std::runtime_error("Target font has a glyph with different bounding height from the source");
-
-					if (gm.Y1 > 0)
-						target.Entry.TextureOffsetY = util::range_check_cast<uint16_t>(gm.Y1);
-					else
-						target.Entry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
-					target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<int>)(gm.Y2, static_cast<int>(target.Font.line_height())) - (std::min)(0, gm.Y1));
-					target.Entry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - (std::min)(0, gm.X1));
-					target.Entry.NextOffsetX = util::range_check_cast<int8_t>(gm.AdvanceX - target.Entry.BoundingWidth);
-
-					if (*info.BaseEntry.BoundingWidth < *target.Entry.BoundingWidth) {
-						info.CurrentOffsetX = util::range_check_cast<int16_t>(info.CurrentOffsetX - *target.Entry.BoundingWidth + *info.BaseEntry.BoundingWidth);
-						info.BaseEntry.BoundingWidth = *target.Entry.BoundingWidth;
-					}
-
-					if (gm.Y1 > info.PadUp)
-						info.PadUp = util::range_check_cast<int8_t>(gm.Y1);
-					if (info.PadDown + info.PadUp + *info.BaseEntry.BoundingHeight < target.Entry.BoundingHeight)
-						info.PadDown = util::range_check_cast<int8_t>(target.Entry.BoundingHeight - info.PadUp - *info.BaseEntry.BoundingHeight);
-				}
+		waiter.submit([this, divideUnit, nBase, &errorMtx, &error](auto& task) {
+			try {
+				measure_glyphs_task(task, nBase, divideUnit);
+			} catch (...) {
+				const auto lock = std::lock_guard(errorMtx);
+				if (!error)
+					error = std::current_exception();
+				m_bCancelRequested = true;
 			}
 		});
 	}
 
 	waiter.wait_all();
+	if (error)
+		std::rethrow_exception(error);
+}
+
+void xivres::fontgen::fontdata_packer::measure_glyphs_task(util::thread_pool::base_task& task, size_t nBase, size_t divideUnit) {
+	for (size_t i = nBase; i < m_targetPlans.size() && !m_bCancelRequested; i += divideUnit) {
+		++m_nCurrentProgress;
+		task.throw_if_cancelled();
+
+		auto& info = m_targetPlans[i];
+
+		auto pooledBaseFont = *m_threadSafeBaseFonts[info.BaseFont];
+		if (!pooledBaseFont)
+			pooledBaseFont.emplace(m_baseFonts[info.BaseFont]->get_threadsafe_view());
+		const auto& baseFont = **pooledBaseFont;
+
+		glyph_metrics gm;
+		if (!baseFont.try_get_glyph_metrics(info.Codepoint, gm))
+			throw std::runtime_error("Base font reported to have a codepoint but it's failing to report glyph metrics");
+
+		info.CurrentOffsetX = util::range_check_cast<int16_t>((std::min<int>)(0, gm.X1));
+		info.BaseEntry.BoundingWidth = util::range_check_cast<uint8_t>(gm.X2 - info.CurrentOffsetX);
+
+		info.PadUp = info.PadDown = 0;
+		info.BaseEntry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
+		info.BaseEntry.BoundingHeight = util::range_check_cast<uint8_t>(gm.height());
+
+		for (auto& target : info.Targets) {
+			auto pooledSourceFont = **m_threadSafeSourceFonts[target.SourceFontIndex];
+			if (!pooledSourceFont)
+				pooledSourceFont.emplace(m_sourceFonts[target.SourceFontIndex]->get_threadsafe_view());
+
+			auto& sourceFont = **pooledSourceFont;
+
+			if (!sourceFont.try_get_glyph_metrics(info.Codepoint, gm))
+				throw std::runtime_error("Font reported to have a codepoint but it's failing to report glyph metrics");
+			if (gm.X1 < 0)
+				throw std::runtime_error("Glyphs for target fonts cannot have negative LSB");
+			if (gm.height() != *info.BaseEntry.BoundingHeight)
+				throw std::runtime_error("Target font has a glyph with different bounding height from the source");
+
+			if (gm.Y1 > 0)
+				target.Entry.TextureOffsetY = util::range_check_cast<uint16_t>(gm.Y1);
+			else
+				target.Entry.CurrentOffsetY = util::range_check_cast<int8_t>(gm.Y1);
+			target.Entry.BoundingHeight = util::range_check_cast<uint8_t>((std::max<int>)(gm.Y2, static_cast<int>(target.Font.line_height())) - (std::min)(0, gm.Y1));
+			if (gm.X2 - (std::min)(0, gm.X1) > (std::numeric_limits<uint8_t>::max)()) {
+				throw std::runtime_error(std::format(
+					"The glyph of U+{:04X} is {} pixels wide, which is more than the font data can store (255).",
+					static_cast<uint32_t>(target.Entry.codepoint()), gm.X2 - (std::min)(0, gm.X1)));
+			}
+			target.Entry.BoundingWidth = static_cast<uint8_t>(gm.X2 - (std::min)(0, gm.X1));
+
+			// The font data stores the advance as the difference from the bounding width in a signed byte.
+			if (const auto nextOffsetX = gm.AdvanceX - *target.Entry.BoundingWidth; nextOffsetX < (std::numeric_limits<int8_t>::min)() || nextOffsetX > (std::numeric_limits<int8_t>::max)()) {
+				throw std::runtime_error(std::format(
+					"The glyph of U+{:04X} advances {} pixels but is {} pixels wide; the advance must be within -128 to 127 pixels of the width. "
+					"Reduce the letter spacing or the monospacing width of the element that has it.",
+					static_cast<uint32_t>(target.Entry.codepoint()), gm.AdvanceX, *target.Entry.BoundingWidth));
+			}
+			target.Entry.NextOffsetX = static_cast<int8_t>(gm.AdvanceX - *target.Entry.BoundingWidth);
+
+			if (*info.BaseEntry.BoundingWidth < *target.Entry.BoundingWidth) {
+				info.CurrentOffsetX = util::range_check_cast<int16_t>(info.CurrentOffsetX - *target.Entry.BoundingWidth + *info.BaseEntry.BoundingWidth);
+				info.BaseEntry.BoundingWidth = *target.Entry.BoundingWidth;
+			}
+
+			if (gm.Y1 > info.PadUp)
+				info.PadUp = util::range_check_cast<int8_t>(gm.Y1);
+			if (info.PadDown + info.PadUp + *info.BaseEntry.BoundingHeight < target.Entry.BoundingHeight)
+				info.PadDown = util::range_check_cast<int8_t>(target.Entry.BoundingHeight - info.PadUp - *info.BaseEntry.BoundingHeight);
+		}
+	}
 }
 
 void xivres::fontgen::fontdata_packer::prepare_target_codepoints() {

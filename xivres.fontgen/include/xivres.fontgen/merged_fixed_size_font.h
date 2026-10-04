@@ -83,6 +83,8 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
 
+		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
+
 	private:
 		[[nodiscard]] static int get_vertical_adjustment(const info& info, const fixed_size_font& font);
 

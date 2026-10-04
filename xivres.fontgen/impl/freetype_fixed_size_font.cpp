@@ -6,8 +6,10 @@
 
 #include "xivres/util.bitmap_copy.h"
 
+#include FT_BBOX_H
 #include FT_BITMAP_H
 #include FT_MULTIPLE_MASTERS_H
+#include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
 
 #include <functional>
@@ -82,6 +84,154 @@ xivres::fontgen::glyph_metrics xivres::fontgen::freetype_fixed_size_font::freety
 	res.Y2 = res.Y1 + static_cast<int>(cbox.yMax - cbox.yMin);
 	res.AdvanceX = static_cast<int>(std::lround(static_cast<double>(glyph->advance.x) / 0x10000)) + adjustment.AdvanceX;  // 16.16 fixed point
 	return res;
+}
+
+xivres::fontgen::glyph_metrics xivres::fontgen::freetype_fixed_size_font::freetype_glyph_to_shaped_metrics(uint32_t glyphIndex, FT_Glyph glyph, int x, int y) const {
+	const auto adjustment = m_face.get_glyph_adjustment(glyphIndex);
+	auto res = freetype_glyph_to_metrics(glyphIndex, glyph, x, y - ascent());
+	res.translate(-adjustment.PlacementX, -adjustment.PlacementY);
+	res.AdvanceX -= adjustment.AdvanceX;
+	return res;
+}
+
+std::optional<xivres::fontgen::shaped_line> xivres::fontgen::freetype_fixed_size_font::shape_line(std::u32string_view text, int letterSpacing) const {
+	return m_face.shape_line(text, letterSpacing);
+}
+
+xivres::fontgen::freetype_fixed_size_font::glyph_ptr_t xivres::fontgen::freetype_fixed_size_font::load_positioned_glyph(uint32_t glyphIndex, float originX, float originY, bool render, int& x, int& y) const {
+	auto glyph = m_face.load_glyph(glyphIndex, false);
+	x = static_cast<int>(std::floor(originX));
+	y = static_cast<int>(std::floor(originY));
+
+	// Outlines can be moved by fractions of pixels; bitmaps are at the nearest pixel instead. y grows upwards here.
+	if (glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+		FT_Vector delta{
+			.x = static_cast<FT_Pos>(std::lround((originX - static_cast<float>(x)) * 64)),
+			.y = -static_cast<FT_Pos>(std::lround((originY - static_cast<float>(y)) * 64)),
+		};
+		FT_Glyph_Transform(glyph.get(), nullptr, &delta);
+	} else {
+		x = static_cast<int>(std::lround(originX));
+		y = static_cast<int>(std::lround(originY));
+	}
+
+	if (render) {
+		auto raw = glyph.release();
+		if (const auto error = FT_Glyph_To_Bitmap(&raw, m_face.render_mode(), nullptr, true)) {
+			FT_Done_Glyph(raw);
+			success_or_throw(error);
+		}
+		glyph.reset(raw);
+	}
+	return glyph;
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_index_metrics(uint32_t glyphIndex, float originX, float originY, glyph_metrics& gm) const {
+	if (!glyphIndex || glyphIndex >= static_cast<uint32_t>(m_face->num_glyphs))
+		return false;
+
+	int x, y;
+	const auto glyph = load_positioned_glyph(glyphIndex, originX, originY, false, x, y);
+	gm = freetype_glyph_to_shaped_metrics(glyphIndex, glyph.get(), x, y);
+	return true;
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_index_ink_extent(uint32_t glyphIndex, float& x1, float& x2) const {
+	if (!glyphIndex || glyphIndex >= static_cast<uint32_t>(m_face->num_glyphs))
+		return false;
+
+	const auto glyph = m_face.load_glyph(glyphIndex, false);
+	FT_BBox box;
+	if (glyph->format == FT_GLYPH_FORMAT_OUTLINE)
+		FT_Outline_Get_BBox(&reinterpret_cast<FT_OutlineGlyph>(glyph.get())->outline, &box);
+	else
+		FT_Glyph_Get_CBox(glyph.get(), FT_GLYPH_BBOX_SUBPIXELS, &box);
+	x1 = static_cast<float>(box.xMin) / 64;
+	x2 = static_cast<float>(box.xMax) / 64;
+	return true;
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::draw_glyph_index(uint32_t glyphIndex, uint8_t* pBuf, size_t stride, float drawX, float drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
+	if (!glyphIndex || glyphIndex >= static_cast<uint32_t>(m_face->num_glyphs))
+		return false;
+
+	int x, y;
+	auto glyph = load_positioned_glyph(glyphIndex, drawX, drawY, true, x, y);
+	auto bitmapGlyph = reinterpret_cast<FT_BitmapGlyph>(glyph.get());
+	auto dest = freetype_glyph_to_shaped_metrics(glyphIndex, glyph.get(), x, y);
+	auto src = dest;
+	src.translate(-src.X1, -src.Y1);
+	src.adjust_to_intersection(dest, src.width(), src.height(), destWidth, destHeight);
+	if (src.is_effectively_empty() || dest.is_effectively_empty())
+		return true;
+
+	freetype_bitmap_wrapper bitmapWrapper(m_face.library());
+	bitmapWrapper.convert_from(bitmapGlyph->bitmap, 1);
+
+	util::bitmap_copy::to_l8()
+		.from(bitmapWrapper->buffer, bitmapWrapper->pitch, bitmapWrapper->rows, 1, util::bitmap_vertical_direction::TopRowFirst)
+		.to(pBuf, destWidth, destHeight, stride, util::bitmap_vertical_direction::TopRowFirst)
+		.fore_color(fgColor)
+		.fore_opacity(fgOpacity)
+		.back_color(bgColor)
+		.back_opacity(bgOpacity)
+		.gamma_table(m_face.gamma_table())
+		.copy(src.X1, src.Y1, src.X2, src.Y2, dest.X1, dest.Y1);
+	return true;
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
+	const auto glyphIndex = m_face.get_char_index(codepoint);
+	if (!glyphIndex)
+		return false;
+
+	const auto glyph = m_face.load_unhinted_glyph(glyphIndex);
+	if (glyph->format != FT_GLYPH_FORMAT_OUTLINE)
+		return false;
+
+	// The outline is in 26.6 fixed point pixels from the origin, with y growing upwards.
+	struct context {
+		glyph_outline& Outline;
+		float OffsetX;
+		float BaselineY;
+
+		[[nodiscard]] glyph_outline::point convert(const FT_Vector* v) const {
+			return {OffsetX + static_cast<float>(v->x) / 64.f, BaselineY - static_cast<float>(v->y) / 64.f};
+		}
+	};
+
+	const auto adjustment = m_face.get_glyph_adjustment(glyphIndex);
+	outline = {};
+	context ctx{outline, static_cast<float>(adjustment.PlacementX), static_cast<float>(ascent() + adjustment.PlacementY)};
+	static constexpr FT_Outline_Funcs Funcs{
+		.move_to = [](const FT_Vector* to, void* user) {
+			const auto& c = *static_cast<context*>(user);
+			c.Outline.move_to(c.convert(to));
+			return 0;
+		},
+		.line_to = [](const FT_Vector* to, void* user) {
+			const auto& c = *static_cast<context*>(user);
+			c.Outline.line_to(c.convert(to));
+			return 0;
+		},
+		.conic_to = [](const FT_Vector* control, const FT_Vector* to, void* user) {
+			const auto& c = *static_cast<context*>(user);
+			c.Outline.quad_to(c.convert(control), c.convert(to));
+			return 0;
+		},
+		.cubic_to = [](const FT_Vector* control1, const FT_Vector* control2, const FT_Vector* to, void* user) {
+			const auto& c = *static_cast<context*>(user);
+			c.Outline.cubic_to(c.convert(control1), c.convert(control2), c.convert(to));
+			return 0;
+		},
+		.shift = 0,
+		.delta = 0,
+	};
+	auto& ftOutline = reinterpret_cast<FT_OutlineGlyph>(glyph.get())->outline;
+	success_or_throw(FT_Outline_Decompose(&ftOutline, &Funcs, &ctx));
+	outline.close();
+	outline.EvenOdd = (ftOutline.flags & FT_OUTLINE_EVEN_ODD_FILL) != 0;
+	return true;
 }
 
 const xivres::fontgen::fixed_size_font* xivres::fontgen::freetype_fixed_size_font::get_base_font(char32_t codepoint) const {
@@ -281,6 +431,12 @@ std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivre
 	success_or_throw(FT_Get_Glyph(m_face->glyph, &glyph));
 	auto uniqueGlyphPtr = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)>(glyph, FT_Done_Glyph);
 
+	// The copy is emboldened, not the slot, which is reused for the next load of the same glyph.
+	if (const auto strength = m_info->EmboldenStrength; strength && glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+		success_or_throw(FT_Outline_EmboldenXY(&reinterpret_cast<FT_OutlineGlyph>(glyph)->outline, strength, strength));
+		glyph->advance.x += strength * 1024;  // 26.6 to 16.16 fixed point
+	}
+
 	FT_Vector zeroDelta{};
 	FT_Glyph_Transform(glyph, &m_info->Matrix, &zeroDelta); // failing this is acceptable
 
@@ -291,6 +447,24 @@ std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivre
 	}
 
 	return std::move(uniqueGlyphPtr);
+}
+
+std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::load_unhinted_glyph(uint32_t glyphIndex) const {
+	const auto flags = (m_info->LoadFlags & ~(FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_(0xF))) | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP;
+	const auto loadError = FT_Load_Glyph(m_face, glyphIndex, flags);
+
+	FT_Glyph glyph = nullptr;
+	const auto getError = loadError ? loadError : FT_Get_Glyph(m_face->glyph, &glyph);
+
+	// load_glyph reuses the glyph in the slot by its index, which must not be this one loaded with other flags.
+	if (FT_Load_Glyph(m_face, glyphIndex, m_info->LoadFlags))
+		m_face->glyph->glyph_index = 0;
+	success_or_throw(getError);
+
+	auto uniqueGlyphPtr = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)>(glyph, FT_Done_Glyph);
+	FT_Vector zeroDelta{};
+	FT_Glyph_Transform(glyph, &m_info->Matrix, &zeroDelta);
+	return uniqueGlyphPtr;
 }
 
 FT_Face xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::create_face(FT_Library library, const info& info) {
@@ -331,6 +505,56 @@ std::optional<float> xivres::fontgen::freetype_fixed_size_font::freetype_face_wr
 	return it == m_info->Baselines.end() ? std::nullopt : std::optional(it->second);
 }
 
+xivres::fontgen::shaped_line xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::shape_line(std::u32string_view text, int letterSpacing) const {
+	const auto blob = std::unique_ptr<hb_blob_t, decltype(&hb_blob_destroy)>(
+		hb_blob_create(reinterpret_cast<const char*>(m_info->Data.data()), static_cast<unsigned>(m_info->Data.size()), HB_MEMORY_MODE_READONLY, nullptr, nullptr),
+		&hb_blob_destroy);
+	const auto face = std::unique_ptr<hb_face_t, decltype(&hb_face_destroy)>(hb_face_create(blob.get(), static_cast<unsigned>(m_info->FaceIndex) & 0xFFFF), &hb_face_destroy);
+	const auto font = std::unique_ptr<hb_font_t, decltype(&hb_font_destroy)>(hb_font_create(face.get()), &hb_font_destroy);
+
+	// Positions are in 26.6 fixed point pixels, at the instance of the face.
+	const auto scale = static_cast<int>(std::lround(m_info->Size * 64));
+	hb_font_set_scale(font.get(), scale, scale);
+	if (const auto coordinates = get_design_coordinates(m_library.get(), m_face); !coordinates.empty()) {
+		std::vector<hb_variation_t> variations;
+		for (const auto& [tag, value] : coordinates)
+			variations.push_back({.tag = _byteswap_ulong(tag), .value = value});
+		hb_font_set_variations(font.get(), variations.data(), static_cast<unsigned>(variations.size()));
+	}
+
+	const auto buffer = std::unique_ptr<hb_buffer_t, decltype(&hb_buffer_destroy)>(hb_buffer_create(), &hb_buffer_destroy);
+	hb_buffer_add_utf32(buffer.get(), reinterpret_cast<const uint32_t*>(text.data()), static_cast<int>(text.size()), 0, static_cast<int>(text.size()));
+	if (!m_info->Params.Language.empty())
+		hb_buffer_set_language(buffer.get(), hb_language_from_string(m_info->Params.Language.c_str(), static_cast<int>(m_info->Params.Language.size())));
+	hb_buffer_guess_segment_properties(buffer.get());
+	hb_shape(font.get(), buffer.get(), m_info->Params.Features.data(), static_cast<unsigned>(m_info->Params.Features.size()));
+
+	unsigned count = 0;
+	const auto* infos = hb_buffer_get_glyph_infos(buffer.get(), &count);
+	const auto* positions = hb_buffer_get_glyph_positions(buffer.get(), &count);
+
+	// The glyphs are transformed by the matrix as they are drawn, and so are their positions; y grows upwards here.
+	const auto& m = m_info->Matrix;
+	const auto transformX = [&m](double x, double y) { return (m.xx * x + m.xy * y) / 0x10000 / 64; };
+	const auto transformY = [&m](double x, double y) { return (m.yx * x + m.yy * y) / 0x10000 / 64; };
+
+	shaped_line res;
+	double penX = 0, penY = 0;
+	for (unsigned i = 0; i < count; i++) {
+		const auto x = penX + positions[i].x_offset, y = penY + positions[i].y_offset;
+		res.Glyphs.push_back({
+			.GlyphIndex = infos[i].codepoint,
+			.X = static_cast<float>(transformX(x, y)) + static_cast<float>(static_cast<int>(i) * letterSpacing),
+			.Y = -static_cast<float>(transformY(x, y)),
+		});
+		// Emboldened glyphs advance further, as they do when drawn one by one.
+		penX += positions[i].x_advance + m_info->EmboldenStrength;
+		penY += positions[i].y_advance;
+	}
+	res.AdvanceWidth = static_cast<int>(std::lround(transformX(penX, penY))) + (count ? static_cast<int>(count - 1) * letterSpacing : 0);
+	return res;
+}
+
 std::optional<float> xivres::fontgen::freetype_fixed_size_font::get_baseline(uint32_t baselineTag) const {
 	return m_face.get_baseline(baselineTag);
 }
@@ -360,6 +584,10 @@ float xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::font_siz
 
 const FT_Matrix& xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::matrix() const {
 	return m_info->Matrix;
+}
+
+FT_Render_Mode xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::render_mode() const {
+	return m_info->Params.RenderMode;
 }
 
 FT_Library xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::library() const {
@@ -489,6 +717,9 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 		FT_LOAD_NO_BITMAP |
 		FT_LOAD_FORCE_AUTOHINT |
 		FT_LOAD_NO_AUTOHINT);
+	info->EmboldenStrength = static_cast<FT_Pos>(std::lround(createStruct.Embolden * size * 64));
+	if (info->EmboldenStrength)
+		info->Params.LoadFlags |= FT_LOAD_NO_BITMAP;
 
 	m_face = create_face(m_library.get(), *info);
 	info->LoadFlags = get_load_flags(m_face, info->Params);
@@ -529,6 +760,8 @@ xivres::fontgen::freetype_fixed_size_font::freetype_face_wrapper::freetype_face_
 		for (const auto& feature : info->Params.Features) {
 			if (feature.value)
 				params.FeatureTags.insert(_byteswap_ulong(feature.tag));
+			else
+				params.DisabledFeatureTags.insert(_byteswap_ulong(feature.tag));
 		}
 
 		const auto hbBlob = std::unique_ptr<hb_blob_t, decltype(&hb_blob_destroy)>(

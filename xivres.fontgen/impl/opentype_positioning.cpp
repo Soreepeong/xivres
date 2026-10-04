@@ -113,6 +113,8 @@ namespace {
 		}
 		for (const auto tag : params.FeatureTags)
 			features.push_back({ _byteswap_ulong(tag), 1, HB_FEATURE_GLOBAL_START, HB_FEATURE_GLOBAL_END });
+		for (const auto tag : params.DisabledFeatureTags)
+			features.push_back({ _byteswap_ulong(tag), 0, HB_FEATURE_GLOBAL_START, HB_FEATURE_GLOBAL_END });
 
 		const auto buffer = std::unique_ptr<hb_buffer_t, decltype(&hb_buffer_destroy)>(hb_buffer_create(), &hb_buffer_destroy);
 		const auto getSingle = [&singleAdjustments](uint16_t glyph) {
@@ -201,17 +203,19 @@ xivres::fontgen::opentype_positioning xivres::fontgen::extract_opentype_position
 	}
 
 	// Single adjustments, in font units.
+	const auto kernDisabled = params.DisabledFeatureTags.contains(Gpos::KerningFeatureTag.NativeValue);
 	std::map<uint16_t, Gpos::View::SingleAdjustment> singleAdjustments;
 	if (gpos) {
 		auto featureTags = params.FeatureTags;
-		featureTags.insert(Gpos::KerningFeatureTag.NativeValue);
+		if (!kernDisabled)
+			featureTags.insert(Gpos::KerningFeatureTag.NativeValue);
 		script_lookup_selector lookups(gpos, featureTags, language, normalizedCoordinates);
 
 		for (const auto& [script, scriptGlyphs] : glyphsByScript)
 			singleAdjustments.merge(gpos.ExtractSingleAdjustments(lookups.get(script), scriptGlyphs, valueContext));
 	}
 
-	if (gpos || kern) {
+	if ((gpos || kern) && !kernDisabled) {
 		const std::set featureTags{ Gpos::KerningFeatureTag.NativeValue };
 		script_lookup_selector lookups(gpos, featureTags, language, normalizedCoordinates);
 

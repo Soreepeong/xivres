@@ -4,6 +4,8 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string_view>
+#include <vector>
 
 #include "xivres/texture.mipmap_stream.h"
 #include "xivres/util.pixel_formats.h"
@@ -99,6 +101,54 @@ namespace xivres::fontgen {
 		void SetIdentity();
 	};
 
+	// A glyph of a line of text that has been shaped as a whole, by its index in the font.
+	struct shaped_glyph {
+		uint32_t GlyphIndex = 0;
+
+		// Origin of the glyph relative to the origin of the line on the baseline, in fractional pixels, with y growing
+		// downwards.
+		float X = 0;
+		float Y = 0;
+	};
+
+	struct shaped_line {
+		std::vector<shaped_glyph> Glyphs;
+		int AdvanceWidth = 0;
+	};
+
+	// Outline of a glyph in fractional pixels, in the space of glyph_metrics: x from the pen position, and y from the top
+	// of the line growing downwards, so that the baseline is at y = ascent().
+	struct glyph_outline {
+		enum class verb : uint8_t {
+			MoveTo,  // one point
+			LineTo,  // one point
+			QuadTo,  // a control point and the end point
+			CubicTo,  // two control points and the end point
+			Close,  // no point
+		};
+
+		struct point {
+			float X = 0;
+			float Y = 0;
+		};
+
+		std::vector<verb> Verbs;
+		std::vector<point> Points;
+
+		// Whether the contours are filled by the even-odd rule instead of the nonzero rule.
+		bool EvenOdd = false;
+
+		void move_to(point p);
+		void line_to(point p);
+		void quad_to(point c, point p);
+		void cubic_to(point c1, point c2, point p);
+		void close();
+
+		void translate(float dx, float dy);
+
+		[[nodiscard]] bool empty() const { return Verbs.empty(); }
+	};
+
 	class fixed_size_font {
 	public:
 		fixed_size_font() = default;
@@ -143,6 +193,35 @@ namespace xivres::fontgen {
 		[[nodiscard]] virtual std::optional<float> get_baseline(uint32_t baselineTag) const {
 			return std::nullopt;
 		}
+
+		// Shapes a line of text as a whole, with the OpenType features of the font that span characters, such as
+		// ligatures, contextual alternates, contextual kerning, and mark positioning, which glyphs drawn per codepoint
+		// cannot have. letterSpacing is added after each glyph but the last. Returns nothing if the font cannot shape.
+		[[nodiscard]] virtual std::optional<shaped_line> shape_line(std::u32string_view text, int letterSpacing) const {
+			return std::nullopt;
+		}
+
+		// Gets the pixels that a glyph covers when drawn by its index with its origin on the baseline at (originX, originY),
+		// without the adjustments of the features, which shaping applies instead.
+		[[nodiscard]] virtual bool try_get_glyph_index_metrics(uint32_t glyphIndex, float originX, float originY, glyph_metrics& gm) const {
+			return false;
+		}
+
+		// Gets the horizontal extent of the ink of a glyph relative to its origin, in fractional pixels.
+		[[nodiscard]] virtual bool try_get_glyph_index_ink_extent(uint32_t glyphIndex, float& x1, float& x2) const {
+			return false;
+		}
+
+		// Draws a glyph by its index, with its origin on the baseline at (drawX, drawY).
+		virtual bool draw_glyph_index(uint32_t glyphIndex, uint8_t* pBuf, size_t stride, float drawX, float drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const {
+			return false;
+		}
+
+		// Gets the unhinted outline of the glyph of a codepoint, placed where draw would put its pixels. Returns false if
+		// the glyph has no outline, such as one that is drawn from a bitmap; an empty outline means that it draws nothing.
+		[[nodiscard]] virtual bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
+			return false;
+		}
 	};
 
 	class default_abstract_fixed_size_font : public fixed_size_font {
@@ -163,8 +242,9 @@ namespace xivres::fontgen {
 	class empty_fixed_size_font : public fixed_size_font {
 	public:
 		struct create_struct {
-			int Ascent = 0;
-			int LineHeight = 0;
+			// In pixels, rounded when the metrics are read, so that scaling them back and forth keeps them.
+			float Ascent = 0.f;
+			float LineHeight = 0.f;
 		};
 
 	private:

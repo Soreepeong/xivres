@@ -35,6 +35,11 @@ namespace xivres::fontgen {
 			// Axes not listed stay at the instance of the face index; 'opsz' follows the font size unless listed.
 			std::map<uint32_t, float> Variations;
 
+			// Emboldening in ems, applied to the outlines before the transformation; negative values make glyphs thinner.
+			// As with the bold simulation of DirectWrite, glyphs grow rightwards and upwards by this much, and advance
+			// further by as much. Embedded bitmaps are not used while emboldening, as they cannot be emboldened alike.
+			float Embolden = 0.f;
+
 			[[nodiscard]] bool requires_shaping() const;
 
 			[[nodiscard]] std::wstring get_load_flags_string() const;
@@ -54,6 +59,9 @@ namespace xivres::fontgen {
 				FT_Matrix Matrix;
 				create_struct Params{};
 				int LoadFlags = FT_LOAD_DEFAULT;
+
+				// Emboldening in 26.6 fixed point pixels.
+				FT_Pos EmboldenStrength = 0;
 				int FaceIndex = 0;
 				float Size = 0.f;
 			};
@@ -81,11 +89,16 @@ namespace xivres::fontgen {
 
 			[[nodiscard]] std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> load_glyph(uint32_t glyphIndex, bool render) const;
 
+			// Loads the outline of a glyph without hinting, transformed by the matrix.
+			[[nodiscard]] std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)> load_unhinted_glyph(uint32_t glyphIndex) const;
+
 			[[nodiscard]] FT_Library library() const;
 
 			[[nodiscard]] float font_size() const;
 
 			[[nodiscard]] const FT_Matrix& matrix() const;
+
+			[[nodiscard]] FT_Render_Mode render_mode() const;
 
 			[[nodiscard]] std::span<const uint8_t> gamma_table() const;
 
@@ -96,6 +109,9 @@ namespace xivres::fontgen {
 			[[nodiscard]] glyph_adjustment get_glyph_adjustment(uint32_t glyphIndex) const;
 
 			[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const;
+
+			// Shapes with the OpenType functions of HarfBuzz, which leave the glyph slot of the face alone.
+			[[nodiscard]] shaped_line shape_line(std::u32string_view text, int letterSpacing) const;
 
 		private:
 			static FT_Face create_face(FT_Library library, const info& info);
@@ -148,8 +164,26 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
 
+		[[nodiscard]] std::optional<shaped_line> shape_line(std::u32string_view text, int letterSpacing) const override;
+
+		[[nodiscard]] bool try_get_glyph_index_metrics(uint32_t glyphIndex, float originX, float originY, glyph_metrics& gm) const override;
+
+		[[nodiscard]] bool try_get_glyph_index_ink_extent(uint32_t glyphIndex, float& x1, float& x2) const override;
+
+		bool draw_glyph_index(uint32_t glyphIndex, uint8_t* pBuf, size_t stride, float drawX, float drawY, int destWidth, int destHeight, uint8_t fgColor, uint8_t bgColor, uint8_t fgOpacity, uint8_t bgOpacity) const override;
+
+		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
+
 	private:
+		using glyph_ptr_t = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)>;
+
 		[[nodiscard]] glyph_metrics freetype_glyph_to_metrics(uint32_t glyphIndex, FT_Glyph glyph, int x = 0, int y = 0) const;
+
+		// Loads a glyph moved by the fractional part of its origin, and returns the integral part of the origin.
+		[[nodiscard]] glyph_ptr_t load_positioned_glyph(uint32_t glyphIndex, float originX, float originY, bool render, int& x, int& y) const;
+
+		// Metrics relative to the origin on the baseline at (x, y), without the adjustments of the features.
+		[[nodiscard]] glyph_metrics freetype_glyph_to_shaped_metrics(uint32_t glyphIndex, FT_Glyph glyph, int x = 0, int y = 0) const;
 	};
 }
 

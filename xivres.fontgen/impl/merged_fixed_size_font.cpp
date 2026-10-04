@@ -110,6 +110,19 @@ bool xivres::fontgen::merged_fixed_size_font::try_get_glyph_metrics(char32_t cod
 	return false;
 }
 
+bool xivres::fontgen::merged_fixed_size_font::try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
+	const auto it = m_info->UsedFontIndices.find(codepoint);
+	if (it == m_info->UsedFontIndices.end())
+		return false;
+
+	const auto& font = *m_fonts[it->second];
+	if (!font.try_get_glyph_outline(codepoint, outline))
+		return false;
+
+	outline.translate(0, static_cast<float>(get_vertical_adjustment(*m_info, font)));
+	return true;
+}
+
 char32_t xivres::fontgen::merged_fixed_size_font::uniqid_to_glyph(const void* pc) const {
 	for (const auto& font : m_fonts) {
 		if (const auto r = font->uniqid_to_glyph(pc))
