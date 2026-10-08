@@ -131,12 +131,18 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] std::optional<float> get_baseline(uint32_t baselineTag) const override;
 
+		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
+
 		[[nodiscard]] static float get_shape_advance(glyph_merge_shape shape);
 
 		[[nodiscard]] std::optional<std::string> get_shape_path_data(char32_t codepoint) const;
 
 	private:
+		struct arrangement;
+
 		[[nodiscard]] std::shared_ptr<const rendered_glyph> get_rendered_glyph(char32_t codepoint) const;
+
+		[[nodiscard]] arrangement arrange(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const;
 
 		[[nodiscard]] rendered_glyph render(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const;
 

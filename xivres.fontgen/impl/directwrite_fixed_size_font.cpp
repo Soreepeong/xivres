@@ -798,8 +798,15 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_outline(char32_
 	if (!glyphIndex)
 		return false;
 
-	// Receives the outline in pixels relative to the origin on the baseline, with y growing downwards, and places it as
-	// draw does: transformed by the matrix, and moved by the adjustments of the features and the ascent.
+	const auto it = m_info->GlyphAdjustments.find(glyphIndex);
+	const auto adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
+	return try_get_glyph_index_outline(glyphIndex, static_cast<float>(adjustment.PlacementX), static_cast<float>(ascent() + adjustment.PlacementY), outline);
+}
+
+bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_index_outline(uint32_t glyphIndex, float originX, float originY, glyph_outline& outline) const {
+	if (!glyphIndex || glyphIndex >= m_dwrite.Face->GetGlyphCount())
+		return false;
+
 	class OutlineSink final : public IDWriteGeometrySink {
 	public:
 		glyph_outline& Outline;
@@ -847,16 +854,14 @@ bool xivres::fontgen::directwrite_fixed_size_font::try_get_glyph_outline(char32_
 		STDMETHOD(Close)() override { return S_OK; }
 	};
 
-	const auto it = m_info->GlyphAdjustments.find(glyphIndex);
-	const auto adjustment = it == m_info->GlyphAdjustments.end() ? glyph_adjustment{} : it->second;
-
 	auto matrix = m_info->Matrix;
-	matrix.dx = static_cast<float>(adjustment.PlacementX);
-	matrix.dy = static_cast<float>(ascent() + adjustment.PlacementY);
+	matrix.dx = originX;
+	matrix.dy = originY;
 
+	const auto index = static_cast<uint16_t>(glyphIndex);
 	outline = {};
 	OutlineSink sink(outline, matrix);
-	if (FAILED(m_dwrite.Face->GetGlyphRunOutline(m_info->Size, &glyphIndex, nullptr, nullptr, 1, FALSE, FALSE, &sink)))
+	if (FAILED(m_dwrite.Face->GetGlyphRunOutline(m_info->Size, &index, nullptr, nullptr, 1, FALSE, FALSE, &sink)))
 		return false;
 	outline.close();
 	return true;

@@ -185,6 +185,14 @@ bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_outline(char32_t c
 	if (!glyphIndex)
 		return false;
 
+	const auto adjustment = m_face.get_glyph_adjustment(glyphIndex);
+	return try_get_glyph_index_outline(glyphIndex, static_cast<float>(adjustment.PlacementX), static_cast<float>(ascent() + adjustment.PlacementY), outline);
+}
+
+bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_index_outline(uint32_t glyphIndex, float originX, float originY, glyph_outline& outline) const {
+	if (!glyphIndex || glyphIndex >= static_cast<uint32_t>(m_face->num_glyphs))
+		return false;
+
 	const auto glyph = m_face.load_unhinted_glyph(glyphIndex);
 	if (glyph->format != FT_GLYPH_FORMAT_OUTLINE)
 		return false;
@@ -200,9 +208,8 @@ bool xivres::fontgen::freetype_fixed_size_font::try_get_glyph_outline(char32_t c
 		}
 	};
 
-	const auto adjustment = m_face.get_glyph_adjustment(glyphIndex);
 	outline = {};
-	context ctx{outline, static_cast<float>(adjustment.PlacementX), static_cast<float>(ascent() + adjustment.PlacementY)};
+	context ctx{outline, originX, originY};
 	static constexpr FT_Outline_Funcs Funcs{
 		.move_to = [](const FT_Vector* to, void* user) {
 			const auto& c = *static_cast<context*>(user);

@@ -222,6 +222,12 @@ namespace xivres::fontgen {
 		[[nodiscard]] virtual bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
 			return false;
 		}
+
+		// Gets the unhinted outline of a glyph by its index, placed as draw_glyph_index draws it with its origin on the
+		// baseline at (originX, originY), without the adjustments of the features. Returns false as try_get_glyph_outline does.
+		[[nodiscard]] virtual bool try_get_glyph_index_outline(uint32_t glyphIndex, float originX, float originY, glyph_outline& outline) const {
+			return false;
+		}
 	};
 
 	class default_abstract_fixed_size_font : public fixed_size_font {

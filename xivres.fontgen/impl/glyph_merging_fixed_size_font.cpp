@@ -6,6 +6,7 @@
 #include <numbers>
 #include <stdexcept>
 
+#include <clipper2/clipper.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
@@ -621,7 +622,159 @@ namespace {
 		res.LastBaseline = font.ascent() + static_cast<int>(laidOutLines.size() - 1) * lineAdvance;
 		return res;
 	}
+
+	// Shapes that are drawn into pixels instead of from a path: the glyph of the element, or a whole SVG document. Alpha
+	// is empty for the glyph of the element, which the base font draws.
+	struct raster_shape {
+		xivres::fontgen::glyph_metrics Box;
+		std::vector<uint8_t> Alpha;
+	};
+
+	using xivres::fontgen::glyph_outline;
+
+	// Converts a path in the coordinates of shapes to an outline in pixels, with the baseline at baselineY.
+	glyph_outline path_to_outline(const path& p, float scale, float baselineY) {
+		const auto convert = [&](const point& pt) {
+			return glyph_outline::point{pt.x * scale, baselineY - (ShapeBaselineY - pt.y) * scale};
+		};
+
+		glyph_outline res;
+		size_t begin = 0;
+		for (const auto end : p.ContourEnds) {
+			// Contours close by themselves, so curves at the end of one go back to its first point.
+			const auto at = [&](size_t i) { return convert(p.Points[i <= end ? i : begin]); };
+			res.move_to(at(begin));
+			for (auto i = begin + 1; i <= end;) {
+				switch (p.Tags[i]) {
+					case FT_CURVE_TAG_CONIC:
+						res.quad_to(at(i), at(i + 1));
+						i += 2;
+						break;
+					case FT_CURVE_TAG_CUBIC:
+						res.cubic_to(at(i), at(i + 1), at(i + 2));
+						i += 3;
+						break;
+					default:
+						res.line_to(at(i));
+						i++;
+						break;
+				}
+			}
+			res.close();
+			begin = end + 1;
+		}
+		return res;
+	}
+
+	// Decimal places that the coordinates in pixels are kept at while combining outlines.
+	constexpr int CombinePrecision = 4;
+
+	// Flattened curves stray from the outlines by up to an em divided by this.
+	constexpr float FlatteningUnitsPerEm = 4000.f;
+
+	// Flattens the contours of an outline into polygons, splitting curves into lines that stray from them by up to tolerance.
+	Clipper2Lib::PathsD flatten(const glyph_outline& outline, float tolerance) {
+		Clipper2Lib::PathsD res;
+		glyph_outline::point cur{};
+		const auto add = [&](glyph_outline::point p) {
+			if (res.empty())
+				res.emplace_back();
+			res.back().emplace_back(p.X, p.Y);
+			cur = p;
+		};
+
+		// Lines through n evenly spaced points of a curve stray from it by up to the largest second derivative / (8 n^2).
+		const auto segmentCount = [tolerance](float ddx, float ddy) {
+			return std::clamp(static_cast<int>(std::ceil(std::sqrt(std::hypot(ddx, ddy) / (8 * tolerance)))), 1, 256);
+		};
+
+		size_t i = 0;
+		for (const auto verb : outline.Verbs) {
+			switch (verb) {
+				case glyph_outline::verb::MoveTo:
+					res.emplace_back();
+					add(outline.Points[i++]);
+					break;
+
+				case glyph_outline::verb::LineTo:
+					add(outline.Points[i++]);
+					break;
+
+				case glyph_outline::verb::QuadTo: {
+					const auto p0 = cur, c = outline.Points[i], p1 = outline.Points[i + 1];
+					i += 2;
+					const auto n = segmentCount(2 * (p0.X - 2 * c.X + p1.X), 2 * (p0.Y - 2 * c.Y + p1.Y));
+					for (int k = 1; k <= n; k++) {
+						const auto t = static_cast<float>(k) / static_cast<float>(n), u = 1 - t;
+						add({u * u * p0.X + 2 * u * t * c.X + t * t * p1.X, u * u * p0.Y + 2 * u * t * c.Y + t * t * p1.Y});
+					}
+					break;
+				}
+
+				case glyph_outline::verb::CubicTo: {
+					const auto p0 = cur, c1 = outline.Points[i], c2 = outline.Points[i + 1], p1 = outline.Points[i + 2];
+					i += 3;
+					const auto n = (std::max)(
+						segmentCount(6 * (p0.X - 2 * c1.X + c2.X), 6 * (p0.Y - 2 * c1.Y + c2.Y)),
+						segmentCount(6 * (c1.X - 2 * c2.X + p1.X), 6 * (c1.Y - 2 * c2.Y + p1.Y)));
+					for (int k = 1; k <= n; k++) {
+						const auto t = static_cast<float>(k) / static_cast<float>(n), u = 1 - t;
+						const auto a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+						add({a * p0.X + b * c1.X + c * c2.X + d * p1.X, a * p0.Y + b * c1.Y + c * c2.Y + d * p1.Y});
+					}
+					break;
+				}
+
+				case glyph_outline::verb::Close:
+					break;
+			}
+		}
+		return res;
+	}
+
+	// Flattens an outline into polygons that do not overlap, so that they fill alike by any fill rule.
+	Clipper2Lib::PathsD flatten_to_regions(const glyph_outline& outline, float tolerance) {
+		return Clipper2Lib::Union(flatten(outline, tolerance), outline.EvenOdd ? Clipper2Lib::FillRule::EvenOdd : Clipper2Lib::FillRule::NonZero, CombinePrecision);
+	}
+
+	glyph_outline polygons_to_outline(const Clipper2Lib::PathsD& polygons) {
+		glyph_outline res;
+		for (const auto& polygon : polygons) {
+			if (polygon.size() < 3)
+				continue;
+			res.move_to({static_cast<float>(polygon[0].x), static_cast<float>(polygon[0].y)});
+			for (size_t i = 1; i < polygon.size(); i++)
+				res.line_to({static_cast<float>(polygon[i].x), static_cast<float>(polygon[i].y)});
+			res.close();
+		}
+		return res;
+	}
+
+	void append_outline(glyph_outline& to, const glyph_outline& from) {
+		to.Verbs.insert(to.Verbs.end(), from.Verbs.begin(), from.Verbs.end());
+		to.Points.insert(to.Points.end(), from.Points.begin(), from.Points.end());
+		to.close();
+	}
 }
+
+struct xivres::fontgen::glyph_merging_fixed_size_font::arrangement {
+	float Scale = 0.f;
+	float BaselineY = 0.f;
+	shape_definition Shape;
+	std::optional<raster_shape> RasterShape;
+	bool HasShape = false;
+	bool HasArea = false;
+
+	const fixed_size_font* TextFont = nullptr;
+	text_layout Layout;
+
+	// Position of the top left corner of the text block, relative to the origin of the glyph; shaped glyphs may be drawn
+	// between pixels horizontally.
+	float TextX = 0.f;
+	int TextY = 0;
+
+	int Advance = 0;
+};
 
 xivres::fontgen::glyph_merging_fixed_size_font::glyph_merging_fixed_size_font(std::shared_ptr<const fixed_size_font> baseFont, glyph_merge_params params, text_font_factory textFontFactory) {
 	auto info = std::make_shared<struct info>();
@@ -750,6 +903,75 @@ std::optional<float> xivres::fontgen::glyph_merging_fixed_size_font::get_baselin
 	return m_info->BaseFont->get_baseline(baselineTag);
 }
 
+bool xivres::fontgen::glyph_merging_fixed_size_font::try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const {
+	const auto it = m_info->MappingIndices.find(codepoint);
+	if (it == m_info->MappingIndices.end())
+		return false;
+
+	const auto& mapping = m_info->Params.Mappings[it->second.first];
+	try {
+		const auto a = arrange(codepoint, mapping, mapping.Texts[it->second.second]);
+
+		// The shape, from its path, or from the outline of the glyph of the element; whole SVG documents have no outlines.
+		glyph_outline shapeOutline;
+		if (a.RasterShape) {
+			if (!a.RasterShape->Alpha.empty() || !m_info->BaseFont->try_get_glyph_outline(codepoint, shapeOutline))
+				return false;
+		} else if (a.HasShape) {
+			shapeOutline = path_to_outline(a.Shape.Path, a.Scale, a.BaselineY);
+		}
+
+		// The glyphs of the text, placed as render draws them.
+		std::vector<glyph_outline> textOutlines;
+		for (const auto& g : a.Layout.Glyphs) {
+			auto& o = textOutlines.emplace_back();
+			if (g.GlyphIndex) {
+				if (!a.TextFont->try_get_glyph_index_outline(g.GlyphIndex, a.TextX + g.X, static_cast<float>(a.TextY) + g.Y, o))
+					return false;
+			} else {
+				if (!a.TextFont->try_get_glyph_outline(g.Codepoint, o))
+					return false;
+				o.translate(static_cast<float>(std::lround(a.TextX + g.X)), static_cast<float>(a.TextY + static_cast<int>(std::lround(g.Y))));
+			}
+		}
+
+		// Glyphs of a font wind alike, so that text alone fills where glyphs overlap without combining them, and keeps its
+		// curves.
+		if (!a.HasShape && std::ranges::none_of(textOutlines, &glyph_outline::EvenOdd)) {
+			outline = {};
+			for (const auto& o : textOutlines)
+				append_outline(outline, o);
+			return true;
+		}
+
+		const auto tolerance = (std::max)(font_size(), 1.f) / FlatteningUnitsPerEm;
+		Clipper2Lib::PathsD text;
+		for (const auto& o : textOutlines) {
+			const auto regions = flatten_to_regions(o, tolerance);
+			text.insert(text.end(), regions.begin(), regions.end());
+		}
+
+		// Combined as render combines the coverage of the shape and the text.
+		constexpr auto NonZero = Clipper2Lib::FillRule::NonZero;
+		Clipper2Lib::PathsD combined;
+		if (!a.HasShape) {
+			combined = Clipper2Lib::Union(text, NonZero, CombinePrecision);
+		} else {
+			const auto shape = flatten_to_regions(shapeOutline, tolerance);
+			if (a.Shape.DrawsText)
+				combined = Clipper2Lib::Union(shape, text, NonZero, CombinePrecision);
+			else if (mapping.TextMode == glyph_merge_text_mode::Difference)
+				combined = Clipper2Lib::Xor(shape, text, NonZero, CombinePrecision);
+			else
+				combined = Clipper2Lib::Difference(shape, text, NonZero, CombinePrecision);
+		}
+		outline = polygons_to_outline(combined);
+		return true;
+	} catch (const std::exception&) {
+		return false;
+	}
+}
+
 float xivres::fontgen::glyph_merging_fixed_size_font::get_shape_advance(glyph_merge_shape shape) {
 	return make_shape(shape).Advance;
 }
@@ -840,7 +1062,7 @@ const xivres::fontgen::fixed_size_font& xivres::fontgen::glyph_merging_fixed_siz
 	return *font;
 }
 
-xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph xivres::fontgen::glyph_merging_fixed_size_font::render(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const {
+xivres::fontgen::glyph_merging_fixed_size_font::arrangement xivres::fontgen::glyph_merging_fixed_size_font::arrange(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const {
 	const auto& params = m_info->Params;
 	const auto size = m_info->BaseFont->font_size();
 	const auto scale = size / ShapeUnitsPerEm;
@@ -848,13 +1070,6 @@ xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph xivres::fontgen::
 
 	const auto characterCount = static_cast<size_t>(std::ranges::count_if(text, [](char32_t c) { return c != U' ' && c != U'\n' && c != U'\r'; }));
 	auto shape = make_shape(mapping.Shape, characterCount);
-
-	// Shapes that are drawn into pixels instead of from a path: the glyph of the element, or a whole SVG document. Alpha
-	// is empty for the glyph of the element, which the base font draws.
-	struct raster_shape {
-		glyph_metrics Box;
-		std::vector<uint8_t> Alpha;
-	};
 	std::optional<raster_shape> rasterShape;
 
 	// Text is fitted into the given area, or the middle of the bounds of the shape, given in the coordinates of shapes.
@@ -965,10 +1180,8 @@ xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph xivres::fontgen::
 	}
 
 	const auto& textFont = get_text_font(size * textScale, condense);
-	const auto layout = layout_text(textFont, lines, params, hasArea);
+	auto layout = layout_text(textFont, lines, params, hasArea);
 
-	// Position of the top left corner of the text block, relative to the origin of the glyph; shaped glyphs may be drawn
-	// between pixels horizontally.
 	float textX;
 	int textY;
 	auto advance = static_cast<int>(std::lround(shape.Advance * scale));
@@ -994,6 +1207,26 @@ xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph xivres::fontgen::
 		if (!hasShape)
 			advance = layout.AdvanceWidth;
 	}
+
+	return {
+		.Scale = scale,
+		.BaselineY = baselineY,
+		.Shape = std::move(shape),
+		.RasterShape = std::move(rasterShape),
+		.HasShape = hasShape,
+		.HasArea = hasArea,
+		.TextFont = &textFont,
+		.Layout = std::move(layout),
+		.TextX = textX,
+		.TextY = textY,
+		.Advance = advance,
+	};
+}
+
+xivres::fontgen::glyph_merging_fixed_size_font::rendered_glyph xivres::fontgen::glyph_merging_fixed_size_font::render(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const {
+	const auto a = arrange(codepoint, mapping, text);
+	const auto& [scale, baselineY, shape, rasterShape, hasShape, hasArea, pTextFont, layout, textX, textY, advance] = a;
+	const auto& textFont = *pTextFont;
 
 	// Bounds of the glyph: the shape, plus the text where it can be visible.
 	auto x1 = (std::numeric_limits<int>::max)(), y1 = (std::numeric_limits<int>::max)();
