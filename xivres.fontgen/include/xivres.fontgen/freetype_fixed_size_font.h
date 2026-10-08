@@ -174,6 +174,8 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
 
+		[[nodiscard]] bool try_get_glyph_index_outline(uint32_t glyphIndex, float originX, float originY, glyph_outline& outline) const override;
+
 	private:
 		using glyph_ptr_t = std::unique_ptr<std::remove_pointer_t<FT_Glyph>, decltype(&FT_Done_Glyph)>;
 

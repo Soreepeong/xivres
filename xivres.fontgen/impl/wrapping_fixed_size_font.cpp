@@ -429,12 +429,23 @@ bool xivres::fontgen::wrapping_fixed_size_font::try_get_glyph_outline(char32_t c
 	codepoint = translate_codepoint(codepoint);
 
 	glyph_metrics gm;
-	if (!m_font->try_get_glyph_metrics(codepoint, gm) || !m_font->try_get_glyph_outline(codepoint, outline))
+	if (!m_font->try_get_glyph_metrics(codepoint, gm))
 		return false;
 
-	// Moved as try_get_glyph_metrics moves the pixels.
-	const auto dx = gm.X1 + m_info->HorizontalOffset >= 0 ? m_info->HorizontalOffset : -gm.X1;
-	outline.translate(static_cast<float>(dx), static_cast<float>(m_info->BaselineShift));
+	const auto p = place(codepoint, gm);
+	if (p.ScaledFont) {
+		if (!p.ScaledFont->try_get_glyph_outline(codepoint, outline))
+			return false;
+	} else {
+		if (!m_font->try_get_glyph_outline(codepoint, outline))
+			return false;
+		if (p.SqueezedWidth && gm.width() > 0) {
+			const auto scaleX = static_cast<float>(p.SqueezedWidth) / static_cast<float>(gm.width());
+			for (auto& pt : outline.Points)
+				pt.X = static_cast<float>(gm.X1) + (pt.X - static_cast<float>(gm.X1)) * scaleX;
+		}
+	}
+	outline.translate(static_cast<float>(p.ShiftX), static_cast<float>(m_info->BaselineShift));
 	return true;
 }
 

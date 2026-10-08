@@ -153,6 +153,8 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
 
+		[[nodiscard]] bool try_get_glyph_index_outline(uint32_t glyphIndex, float originX, float originY, glyph_outline& outline) const override;
+
 	private:
 		// Gets the pixels that a glyph covers with its origin on the baseline at (originX, originY), without the
 		// adjustments of the features.
