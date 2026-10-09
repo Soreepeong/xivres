@@ -1,0 +1,1942 @@
+{
+	"comment": "Signatures of the game's code that font replacement hooks, shared by FontChanger.DalamudPlugin and XivAlexander. Each pattern (its parts concatenated) is a regex over the bytes of the game's .text section that must match exactly once; it must work the same in SRELL (dotall), .NET Regex (Singleline, over Latin-1 text) and Python re (bytes, re.S). A signature resolves (resolve) to the match's start (match), the start of the function containing it, by the unwind data (function), the position of its capture of type position (capture), or to nothing, its captures being all that is used (none). Captures are the regex's groups in order; a name given to several groups, in alternatives, is what the one that matched captured, and a group that didn't match captures nothing. An offset is a little-endian signed displacement (of the group's size, 1 or 4 bytes) of a field, named Structure.Field, or of a field relative to another, named Structure.Field-Structure.Other (the first minus the second); a size, a structure's size; a count, a number of elements; a rel32, a target relative to the end of the group; a position, an empty group's address.",
+	"signatures": {
+		"PickFont": {
+			"description": "GameFont* PickFont(GameFontSet* this, bool useCache): picks the font of a font set for its size. Holds since 5.55; the GameFontSet offsets after 0x200 are 8 less before 7.30.",
+			"resolve": "match",
+			"pattern": [
+				"[\\x81\\x83]\\xB9(....)\\x00",
+				".{0,11}?\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....)(?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....)",
+				"(?:(?:\\xEB.|\\xE9....)\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....))?",
+				".{0,40}?\\x84\\xD2(?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....)",
+				".{0,80}?[\\x48-\\x4F]\\x03[\\xC0\\xC9\\xD2\\xDB\\xE4\\xED\\xF6\\xFF]",
+				"[\\x48-\\x4F]\\x83\\x3C[\\xC0-\\xFF]\\x00(?:\\x74.|\\x0F\\x84....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C][\\xC0-\\xFF](.)",
+				".{0,40}?\\x66[\\x40-\\x4F]?\\x83[\\xF8-\\xFF]\\x08(?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				".{0,24}?[\\x40-\\x4F]?\\xF6[\\x80-\\x87](....)\\x08"
+			],
+			"captures": [
+				{
+					"name": "GameFontSet.DrawFlags",
+					"type": "offset",
+					"description": "uint: bit 31 picks by the requested size rather than the scaled one (0x158)."
+				},
+				{
+					"name": "GameFontSet.ScaledSizeY",
+					"type": "offset",
+					"description": "float (0x12C)."
+				},
+				{
+					"name": "GameFontSet.RequestedSizeY",
+					"type": "offset",
+					"description": "float (0x124)."
+				},
+				{
+					"name": "GameFontSet.PickScale",
+					"type": "offset",
+					"description": "float, since 7.30 (0x15C); the group doesn't capture before."
+				},
+				{
+					"name": "GameFontSet.CurrentFont",
+					"type": "offset",
+					"description": "GameFont*: the picked font (0x250 since 7.30, 0x248 before)."
+				},
+				{
+					"name": "GameFontSet.CurrentFontSize",
+					"type": "offset",
+					"description": "float: the size it was picked for (0x258 since 7.30, 0x250 before)."
+				},
+				{
+					"name": "GameFontSet.Slot.Size",
+					"type": "offset",
+					"description": "float, in the 16-byte slots {GameFont*, Size, Scale} at the set's start (8)."
+				},
+				{
+					"name": "GameFontSet.Flags",
+					"type": "offset",
+					"description": "byte: bit 3 is the alternate slot mode (0x268 since 7.30, 0x260 before)."
+				}
+			]
+		},
+		"GetGlyph": {
+			"description": "GameGlyph* GetGlyph(GameFontSet* unused, uint utf8, GameFont* font): finds a glyph, by direct index (glyphs up to 0xFF from DirectIndexFirst on), else in the glyph map (since 7.40, an unordered_map) or by binary search of the sorted glyph array (before). Returns null if there is none. Resolves to the function containing the match (the match starts at the flags test, a few bytes in). Holds since 2020.07 (5.3x); the GameFont offsets differ by era.",
+			"resolve": "function",
+			"pattern": [
+				"\\xF6[\\x80-\\x87](....)\\x04",
+				".{0,12}?(?:[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,8}?)?(?:\\x74.|\\x0F\\x84....)",
+				".{0,8}?[\\x40-\\x4F]?\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,12}?\\x81[\\xF8-\\xFF](?:\\xFF\\x00|\\x00\\x01)\\x00\\x00(?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				".{0,12}?(?:[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,8}?)?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x40-\\x7F].{0,8}?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x80-\\xBF]",
+				"(?:",
+				".{0,16}?[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,16}?\\xE8(....).{0,8}?[\\x48-\\x4F]\\x8B[\\x00-\\x3F][\\x48-\\x4F]\\x8B(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.)",
+				"|",
+				".{0,24}?[\\x40-\\x4F]?\\x8B[\\x80-\\xBF](....).{0,24}?\\x99.{0,4}?\\xD1[\\xF8-\\xFF].{0,16}?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x40-\\x7F].{0,8}?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x80-\\xBF]",
+				")"
+			],
+			"captures": [
+				{
+					"name": "GameFont.Flags",
+					"type": "offset",
+					"description": "byte: bit 2 means glyphs up to 0xFF are indexed directly (0xF2 since 7.40, 0xEA before, 0xCA in 5.3x)."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "GameGlyph*, 12 bytes each, loaded before the direct index test (before 7.40: 0xC8, 0xA8 in 5.3x)."
+				},
+				{
+					"name": "GameFont.DirectIndexFirst",
+					"type": "offset",
+					"description": "byte: the first directly indexed character (0xF3 since 7.40, 0xEB before, 0xCB in 5.3x)."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "The same, loaded for the direct index (since 7.40: 0xC8)."
+				},
+				{
+					"name": "GameFont.GlyphMap",
+					"type": "offset",
+					"description": "std::unordered_map<uint, GameGlyph*>* (0xD0); since 7.40 only."
+				},
+				{
+					"name": "GlyphMapFind",
+					"type": "rel32",
+					"description": "The glyph map's operator[]; since 7.40 only."
+				},
+				{
+					"name": "GlyphMap.Node.Value",
+					"type": "offset",
+					"description": "The value's offset in a map node (0x18); since 7.40 only."
+				},
+				{
+					"name": "GameFont.GlyphCount",
+					"type": "offset",
+					"description": "uint: the number of glyphs, sorted by key (0xA8, 0x88 in 5.3x); before 7.40 only."
+				}
+			]
+		},
+		"LayOutCharacter": {
+			"description": "bool LayOutCharacter(AtkFontAnalyzer* analyzer, byte** text, State* state): decodes the UTF-8 character at *text, gets its glyph with GetGlyph (analyzer+0x38 is the font set, +0x40 the font), or a substitute (U+3013, '-', U+3400) if it has none; kerning, the secondary font and CJK spacing; then advances *text. Resolves to the function containing the match. Holds since 2020.07 (5.3x). Since 7.40 the layout looks the substitutes up in the glyph map itself; before, a function of its own (FallbackGlyph) does. Before 7.00 the secondary font is handled by a function of its own too (SecondaryGlyph), so its offsets don't capture.",
+			"resolve": "function",
+			"pattern": [
+				"(?:\\x80[\\xF8-\\xFF]\\xE0|\\x3C\\xE0|\\x81[\\xF8-\\xFF]\\xE0\\x00\\x00\\x00|\\x3D\\xE0\\x00\\x00\\x00).{0,40}?(?:\\x80[\\xF8-\\xFF]\\xF0|\\x3C\\xF0|\\x81[\\xF8-\\xFF]\\xF0\\x00\\x00\\x00|\\x3D\\xF0\\x00\\x00\\x00).{0,60}?(?:\\x80[\\xF8-\\xFF]\\xF8|\\x3C\\xF8|\\x81[\\xF8-\\xFF]\\xF8\\x00\\x00\\x00|\\x3D\\xF8\\x00\\x00\\x00)",
+				".{0,80}?\\xE8(....)",
+				"(?:",
+				".{0,40}?(?:[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,24}?\\x93\\x80\\xE3\\x00|\\x93\\x80\\xE3\\x00.{0,24}?[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....))",
+				".{0,24}?\\xE8(....).{0,8}?[\\x48-\\x4F]\\x8B[\\x00-\\x3F][\\x48-\\x4F]\\x8B(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.)",
+				"(?:.{0,24}?[\\x40-\\x4F]?\\xF6[\\x80-\\x87](....)\\x04",
+				".{0,40}?[\\x40-\\x4F]?\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,24}?[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)",
+				"|.{0,24}?\\xBA\\x2D\\x00\\x00\\x00.{0,16}?\\xE8....)",
+				".{0,80}?\\x80\\x90\\xE3\\x00",
+				"|",
+				".{0,40}?\\xE8(....)(?:[\\x48-\\x4F]\\x8B[\\xC0-\\xFF])?[\\x48-\\x4F]\\x85\\xC0(?:\\x74.|\\x0F\\x84....)",
+				")",
+				"(?:",
+				".{0,200}?[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,16}?[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:[\\x70-\\x7F].|\\x0F[\\x80-\\x8F]....)",
+				".{0,24}?(?:\\xAB\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA.{0,16}?[\\x48-\\x4F]\\x2B[\\x80-\\xBF](....)|[\\x48-\\x4F]\\x2B[\\x80-\\xBF](....).{0,16}?\\xAB\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA)",
+				".{0,40}?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x40-\\x7F].{0,8}?[\\x48-\\x4F]\\x8D[\\x04-\\x3C][\\x80-\\xBF]",
+				".{0,24}?[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....).{0,40}?[\\x48-\\x4F]\\x89[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C]\\x24\\x20.{0,16}?\\xE8....",
+				".{0,24}?(?:[\\x40-\\x4F]?\\x0F\\xBE(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.).{0,8}?[\\x40-\\x4F]?\\x0F\\xB6(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.)|[\\x40-\\x4F]?\\x0F\\xB6(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.).{0,8}?[\\x40-\\x4F]?\\x0F\\xBE(?:[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C].|[\\x40-\\x43\\x45-\\x4B\\x4D-\\x53\\x55-\\x5B\\x5D-\\x63\\x65-\\x6B\\x6D-\\x73\\x75-\\x7B\\x7D-\\x7F])(.))",
+				".{0,40}?\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....)",
+				"|",
+				".{0,200}?[\\x48-\\x4F]\\x89[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C]\\x24\\x28.{0,8}?[\\x48-\\x4F]\\x89[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C]\\x24\\x20\\xE8(....)",
+				")",
+				".{0,200}?[\\x40-\\x4F]?\\x0F[\\xB6\\xBE][\\x80-\\xBF](....)",
+				".{0,24}?\\x50\\x7B\\x1C\\xFF"
+			],
+			"captures": [
+				{
+					"name": "GetGlyph",
+					"type": "rel32",
+					"description": "GetGlyph, as the GetGlyph signature finds it."
+				},
+				{
+					"name": "GameFont.GlyphMap",
+					"type": "offset",
+					"description": "(0xD0); since 7.40 only."
+				},
+				{
+					"name": "GameFont.GlyphMap",
+					"type": "offset",
+					"description": "The same (the other instruction order)."
+				},
+				{
+					"name": "GlyphMapFind",
+					"type": "rel32",
+					"description": "The glyph map's operator[]; since 7.40 only."
+				},
+				{
+					"name": "GlyphMap.Node.Value",
+					"type": "offset",
+					"description": "(0x18); since 7.40 only."
+				},
+				{
+					"name": "GameFont.Flags",
+					"type": "offset",
+					"description": "(0xF2); since 7.40 only."
+				},
+				{
+					"name": "GameFont.DirectIndexFirst",
+					"type": "offset",
+					"description": "(0xF3); since 7.40 only."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "(0xC8); since 7.40 only."
+				},
+				{
+					"name": "FallbackGlyph",
+					"type": "rel32",
+					"description": "GameGlyph* FallbackGlyph(GameFontSet* set, GameFont* font): U+3013, '-' or U+3400; before 7.40 only."
+				},
+				{
+					"name": "GameFont.Secondary",
+					"type": "offset",
+					"description": "GameFont*: the font for characters this one lacks (0xE0 since 7.40, 0xD8 before)."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "(0xC8), subtracted from the glyph for its index."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "The same (the other instruction order)."
+				},
+				{
+					"name": "GameFont.Kerning",
+					"type": "offset",
+					"description": "GameKerningEntry*, of the secondary font (0xD8 since 7.40, 0xD0 before)."
+				},
+				{
+					"name": "GameGlyph.OffsetX",
+					"type": "offset",
+					"description": "sbyte (0xA)."
+				},
+				{
+					"name": "GameGlyph.Width",
+					"type": "offset",
+					"description": "byte (8)."
+				},
+				{
+					"name": "GameGlyph.Width",
+					"type": "offset",
+					"description": "The same (the other instruction order)."
+				},
+				{
+					"name": "GameGlyph.OffsetX",
+					"type": "offset",
+					"description": "The same (the other instruction order)."
+				},
+				{
+					"name": "GameFont.SecondaryRatio",
+					"type": "offset",
+					"description": "float: the secondary font's scale (0xE8 since 7.40, 0xE0 before)."
+				},
+				{
+					"name": "SecondaryGlyph",
+					"type": "rel32",
+					"description": "Before 7.00 only."
+				},
+				{
+					"name": "GameFont.CjkSpacing",
+					"type": "offset",
+					"description": "sbyte: extra advance of CJK and Hangul characters (0xF5 since 7.40, 0xED before)."
+				}
+			]
+		},
+		"SplitWord": {
+			"description": "uint SplitWord(Wrapper* this, int width, int unused, byte* word, byte* measuredWord, bool lineStart): splits a word that doesn't fit on a line. The match starts at the function. Holds since 5.55 (offsets differ before 6.0).",
+			"resolve": "match",
+			"pattern": [
+				"\\x48\\x89\\x5C\\x24.(?:[\\x40\\x41]?[\\x50-\\x57]){1,6}\\x48\\x83\\xEC.",
+				".{0,16}?[\\x44\\x45]\\x8B[\\x88-\\x8B\\x8D-\\x8F](....)",
+				".{0,16}?[\\x44\\x45]\\x2B[\\x88-\\x8B\\x8D-\\x8F](....)",
+				".{0,24}?\\xE8(....)",
+				"(?:[\\x40-\\x4F]?\\x8B[\\xC0-\\xFF]\\x85\\xC0|\\x85\\xC0[\\x40-\\x4F]?\\x8B[\\xC0-\\xFF])(?:\\x79.|\\x0F\\x89....)",
+				".{0,400}?(?:[\\x48-\\x4F]\\x63|[\\x40-\\x4F]?\\x8B)[\\x80-\\xBF](....)",
+				".{0,24}?\\x83\\x3C[\\x80-\\xBF]\\x20"
+			],
+			"captures": [
+				{
+					"name": "Wrapper.MaxUnits",
+					"type": "offset",
+					"description": "int: the most units a line may hold (0x150 since 6.0)."
+				},
+				{
+					"name": "Wrapper.UsedUnits",
+					"type": "offset",
+					"description": "int: the units already on the line (0x154 since 6.0)."
+				},
+				{
+					"name": "FitUnits",
+					"type": "rel32",
+					"description": "int FitUnits(Wrapper* this, byte* measuredWord, int width, int maxUnits, int* bytes): how many units of a word fit."
+				},
+				{
+					"name": "Wrapper.ConsumedUnits",
+					"type": "offset",
+					"description": "int: the units of the current word already put on earlier lines; 0 on its first split (0x1578 since 6.0)."
+				}
+			]
+		},
+		"FreeFontCache": {
+			"description": "void FreeFontCache(AtkTextNode* node): frees the node's font cache. The match starts at the function. Holds since 7.00.",
+			"resolve": "match",
+			"pattern": [
+				"\\x48\\x85\\xC9(?:\\x74.|\\x0F\\x84....)",
+				".{2,24}?\\x0F\\xB7[\\x80-\\xBF](....)",
+				".{0,12}?\\x66\\x85[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				".{0,12}?[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,12}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,12}?(?:\\xB8\\x00\\x01\\x00\\x00\\x66[\\x39\\x3B][\\xC0-\\xFF]|\\x66\\x41?\\x81[\\xF8-\\xFF]\\x00\\x01)(?:\\x73.|\\x0F\\x83....)",
+				".{0,12}?[\\x48\\x49]\\xC1[\\xE0-\\xE7]\\x04[\\x48-\\x4F]\\x03[\\x80-\\xBF](....)",
+				".{0,64}?\\x66\\x41?\\x89[\\x80-\\xBF]\\1",
+				"(?:[\\x48\\x4C]\\x8B[\\x44-\\x7C]\\x24.|\\x48\\x83\\xC4.|\\x41?[\\x58-\\x5F])*?\\xC3"
+			],
+			"captures": [
+				{
+					"name": "AtkTextNode.FontCacheSlot",
+					"type": "offset",
+					"description": "ushort: the node's entry in the font manager's caches; 0 for none (0x168 since 7.40, 0x158 before)."
+				},
+				{
+					"name": "AtkStage.Instance",
+					"type": "rel32",
+					"description": "AtkStage*: the global of the instance."
+				},
+				{
+					"name": "AtkStage.AtkFontManager",
+					"type": "offset",
+					"description": "AtkFontManager* (0x10)."
+				},
+				{
+					"name": "AtkFontManager.FontCaches",
+					"type": "offset",
+					"description": "The font caches, 0x10 bytes each (0x88)."
+				}
+			]
+		},
+		"BuildFontCache": {
+			"description": "void BuildFontCache(AtkTextNode* node): frees the node's font cache and lays its text out into a new one, whose entries keep glyph pointers for later draws. The match starts at the function. Holds since 7.00.",
+			"resolve": "match",
+			"pattern": [
+				"\\x48\\x85\\xC9(?:\\x74.|\\x0F\\x84....)",
+				".{2,24}?\\x0F\\xB7[\\x80-\\xBF](....)",
+				".{0,12}?\\x66\\x85[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				".{0,12}?[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,12}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,12}?(?:\\xB8\\x00\\x01\\x00\\x00\\x66[\\x39\\x3B][\\xC0-\\xFF]|\\x66\\x41?\\x81[\\xF8-\\xFF]\\x00\\x01)(?:\\x73.|\\x0F\\x83....)",
+				".{0,12}?[\\x48\\x49]\\xC1[\\xE0-\\xE7]\\x04[\\x48-\\x4F]\\x03[\\x80-\\xBF](....)",
+				".{0,64}?\\x66\\x41?\\x89[\\x80-\\xBF]\\1",
+				"[\\x48\\x4C]\\x8B[\\x80-\\xBF](....)(?:[\\x40-\\x4F]?\\x38[\\x00-\\x3F]|\\x80[\\x38-\\x3F]\\x00)(?:\\x74.|\\x0F\\x84....)"
+			],
+			"captures": [
+				{
+					"name": "AtkTextNode.FontCacheSlot",
+					"type": "offset",
+					"description": "ushort: the node's entry in the font manager's caches; 0 for none (0x168 since 7.40, 0x158 before)."
+				},
+				{
+					"name": "AtkStage.Instance",
+					"type": "rel32",
+					"description": "AtkStage*: the global of the instance."
+				},
+				{
+					"name": "AtkStage.AtkFontManager",
+					"type": "offset",
+					"description": "AtkFontManager* (0x10)."
+				},
+				{
+					"name": "AtkFontManager.FontCaches",
+					"type": "offset",
+					"description": "The font caches, 0x10 bytes each (0x88)."
+				},
+				{
+					"name": "AtkTextNode.NodeText",
+					"type": "offset",
+					"description": "Utf8String: its string pointer (0xD0 since 7.40, 0xC0 before)."
+				}
+			]
+		},
+		"ToggleFontCache": {
+			"description": "void ToggleFontCache(AtkTextNode* node, bool use): sets the node's cache flag and builds or frees its cache. Holds since 7.00.",
+			"resolve": "match",
+			"pattern": [
+				"\\x48\\x85\\xC9(?:\\x74.|\\x0F\\x84....)",
+				".{0,20}?[\\x40-\\x4F]?\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,16}?\\x80[\\xE0-\\xE7]\\xBF",
+				".{0,16}?[\\x40-\\x4F]?\\x88[\\x80-\\xBF]\\1",
+				".{0,8}?[\\x40-\\x4F]?\\xF6[\\xC0-\\xC7]\\x40(?:\\x74.|\\x0F\\x84....)",
+				"\\xE8(....)(?:\\xEB.|\\xE9....)\\xE8(....)",
+				"\\x80[\\xA0-\\xA7\\x60-\\x67]\\1\\xEF"
+			],
+			"captures": [
+				{
+					"name": "AtkTextNode.FontCacheFlags",
+					"type": "offset",
+					"description": "byte: bit 6 asks for a font cache, bit 4 is a fixed font resolution (0x171 since 7.40, 0x161 in 7.30, 0x15B before)."
+				},
+				{
+					"name": "BuildFontCache",
+					"type": "rel32",
+					"description": "BuildFontCache, as its signature finds it."
+				},
+				{
+					"name": "FreeFontCache",
+					"type": "rel32",
+					"description": "FreeFontCache, as its signature finds it."
+				}
+			]
+		},
+		"FontAnalyzerVtables": {
+			"description": "In the constructor of AtkFontAnalyzer: the vtables of AtkFontAnalyzerRenderer and AtkFontAnalyzerRenderCount, the only analyzers that use a glyph's place in the atlas (the others, such as DrawSize, SearchPosition and BuildLink, only take its width). Holds since 7.00.",
+			"resolve": "match",
+			"pattern": [
+				"\\x48\\x8D\\x05(....)[\\x48\\x49]\\x89[\\x80-\\x83\\x85-\\x87](....)",
+				".{0,16}?\\x48\\x8D\\x05(....)",
+				".{0,120}?[\\x48\\x49]\\x89[\\x80-\\x83\\x85-\\x87](....)",
+				".{0,60}?\\x41\\xB8\\xA0\\x00\\x00\\x00.{0,40}?\\xE8....",
+				"\\xC7[\\x80-\\x83\\x85-\\x87](....)\\x03\\x00\\x00\\x00"
+			],
+			"captures": [
+				{
+					"name": "AtkFontAnalyzerRenderer.Vtable",
+					"type": "rel32",
+					"description": "The vtable of AtkFontAnalyzerRenderer."
+				},
+				{
+					"name": "AtkFontAnalyzer.Renderer",
+					"type": "offset",
+					"description": "AtkFontAnalyzerRenderer, embedded (0x118)."
+				},
+				{
+					"name": "AtkFontAnalyzerRenderCount.Vtable",
+					"type": "rel32",
+					"description": "The vtable of AtkFontAnalyzerRenderCount."
+				},
+				{
+					"name": "AtkFontAnalyzer.RenderCount",
+					"type": "offset",
+					"description": "AtkFontAnalyzerRenderCount, embedded (0x248)."
+				},
+				{
+					"name": "AtkFontAnalyzer.RenderCountMode",
+					"type": "offset",
+					"description": "int, set to 3 (RenderCount + 0x28, 0x270)."
+				}
+			]
+		},
+		"FontTables": {
+			"description": "Loads the fonts from fixed tables of 41 entries {u64 texture count, char* texture name format, char* FDT name}: the game's, or one of two lobby tables picked by an AtkModule setting (FUN_1406ADBF0 in 7.56h; AtkModule vf43 reads the same tables since 7.00). Holds since 6.00; 5.x has one lobby table.",
+			"resolve": "match",
+			"pattern": [
+				"\\x83[\\xF8-\\xFF]\\x01(?:\\x75.|\\x0F\\x85....)",
+				"\\x41?(?:\\x83[\\xB8-\\xBF](....)\\x01|\\x39[\\x80-\\xBF](....))",
+				"[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)[\\x48-\\x4F]\\x0F\\x45[\\xC0-\\xFF]",
+				"(?:\\xEB.|\\xE9....)[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,400}?[\\x4C\\x4D]\\x8B(?:\\x4C.|[\\x48-\\x4B\\x4D-\\x4F])(.)",
+				".{0,400}?(?:[\\x48\\x49]\\x83[\\xC0-\\xC7](.).{0,8}?)?",
+				"\\x41?\\x83[\\xF8-\\xFF](.)(?:\\x7C.|\\x0F\\x8C....)"
+			],
+			"captures": [
+				{
+					"name": "AtkModule.LobbyFontTable",
+					"type": "offset",
+					"description": "int: 1 picks lobby table A (0x280 since 7.40); this or the next captures."
+				},
+				{
+					"name": "AtkModule.LobbyFontTable",
+					"type": "offset",
+					"description": "The same, compared with a register."
+				},
+				{
+					"name": "LobbyTableA",
+					"type": "rel32",
+					"description": "The lobby's table when the setting is 1."
+				},
+				{
+					"name": "LobbyTableB",
+					"type": "rel32",
+					"description": "The lobby's other table."
+				},
+				{
+					"name": "GameTable",
+					"type": "rel32",
+					"description": "The game's table."
+				},
+				{
+					"name": "FontTableEntry.FdtName",
+					"type": "offset",
+					"description": "char* (0x10)."
+				},
+				{
+					"name": "FontTableEntry",
+					"type": "size",
+					"description": "0x18; doesn't capture before 6.30, where entries are indexed as i * 3 * 8."
+				},
+				{
+					"name": "FontTable.Count",
+					"type": "count",
+					"description": "The number of entries (41)."
+				}
+			]
+		},
+		"NamePlateAllocateBake": {
+			"description": "bool AllocateBake(BakePlateRenderer* this, NamePlateObject* obj): frees the object's region (looked up in the map keyed by its text node) and takes ((TextW + 8) * 2) x ((TextH + 4) * 2) in the render texture. The match starts at the function. Holds since 5.55 (2021.03.26); before 5.5 the renderer was laid out differently.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x4C]\\x8B[\\x81\\x89\\x91\\x99\\xA1\\xA9\\xB1\\xB9](....)",
+				".{0,8}?[\\x48\\x4C]\\x8B[\\x42\\x4A\\x52\\x5A\\x62\\x6A\\x72\\x7A](.)",
+				".{0,160}?[\\x48\\x49]\\x8D[\\x88-\\x8F](....).{0,8}?\\xE8.{4,24}?",
+				"[\\x40-\\x4F]?\\x0F\\xB7[\\x40-\\x7F](.)",
+				".{0,8}?[\\x40-\\x4F]?\\x0F\\xB7[\\x40-\\x7F](.)",
+				".{0,8}?\\x66[\\x40-\\x4F]?\\x83[\\xC0-\\xC7]\\x08",
+				".{0,8}?\\x66[\\x40-\\x4F]?\\x83[\\xC0-\\xC7]\\x04",
+				".{0,16}?\\x66[\\x40-\\x4F]?\\x03[\\xC0-\\xFF].{0,8}?\\x66[\\x40-\\x4F]?\\x03[\\xC0-\\xFF]"
+			],
+			"captures": [
+				{
+					"name": "BakePlateRenderer.BakeMap",
+					"type": "offset",
+					"description": "std::map<AtkResNode*, NamePlateObject*> (0x1F8)."
+				},
+				{
+					"name": "NamePlateObject.NameText",
+					"type": "offset",
+					"description": "AtkTextNode* (0x20)."
+				},
+				{
+					"name": "BakePlateRenderer.RenderTexture",
+					"type": "offset",
+					"description": "AtkRenderTexture (0x1E0)."
+				},
+				{
+					"name": "NamePlateObject.TextW",
+					"type": "offset",
+					"description": "short (0x64)."
+				},
+				{
+					"name": "NamePlateObject.TextH",
+					"type": "offset",
+					"description": "short (0x66)."
+				}
+			]
+		},
+		"NamePlateAllocateBakeCaller": {
+			"description": "AddonNamePlate's update loop calling AllocateBake for the plates that need baking. Gives the addon's and the object array's layout. Two eras: 5.55..6.58 (the loop walks the array) and 7.00+ (indices of the plates to bake).",
+			"resolve": "none",
+			"pattern": [
+				"(?:",
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)[\\x48-\\x4F]\\x03[\\xC0-\\xFF].{0,80}?[\\x48\\x49]\\x8D[\\x88-\\x8F](....)",
+				"[\\x40-\\x4F]?\\xC6[\\x40-\\x47](.)\\x00[\\x48-\\x4F]\\x8B[\\xD0-\\xD7]\\xE8(....)",
+				"[\\x48-\\x4F]\\x83[\\xC0-\\xC7](.)[\\x48-\\x4F]\\x81[\\xF8-\\xFF](....)",
+				"|",
+				"[\\x48\\x49]\\x8D[\\x88-\\x8F](....).{0,16}?(?:[\\x48-\\x4F]\\x6B[\\xC0-\\xFF](.)|[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....))",
+				".{0,8}?[\\x48-\\x4F]\\x03[\\x80-\\xBF](....).{0,8}?\\xE8(....)\\x84\\xC0(?:\\x74.|\\x0F\\x84....)",
+				"(?:[\\x40-\\x4F]?\\xC6[\\x40-\\x47](.)\\x00)?",
+				")"
+			],
+			"captures": [
+				{
+					"name": "AddonNamePlate.NamePlateObjectArray",
+					"type": "offset",
+					"description": "NamePlateObject* (0x460 until 6.58)."
+				},
+				{
+					"name": "AddonNamePlate.BakePlate",
+					"type": "offset",
+					"description": "BakePlateRenderer, embedded (0x220 until 6.58)."
+				},
+				{
+					"name": "NamePlateObject.NeedsToBeBaked",
+					"type": "offset",
+					"description": "bool (0x70 until 6.18h, 0x71 since 6.20)."
+				},
+				{
+					"name": "NamePlateAllocateBake",
+					"type": "rel32",
+					"description": "AllocateBake."
+				},
+				{
+					"name": "NamePlateObject",
+					"type": "size",
+					"description": "sizeof(NamePlateObject) (0x78)."
+				},
+				{
+					"name": "NamePlateObjectArray",
+					"type": "size",
+					"description": "count * sizeof(NamePlateObject) (0x1770: 50 objects)."
+				},
+				{
+					"name": "AddonNamePlate.BakePlate",
+					"type": "offset",
+					"description": "(0x230 in 7.00..7.05h2, 0x240 since 7.10)."
+				},
+				{
+					"name": "NamePlateObject",
+					"type": "size",
+					"description": "imm8 form (0x78)."
+				},
+				{
+					"name": "NamePlateObject",
+					"type": "size",
+					"description": "imm32 form (doesn't capture so far)."
+				},
+				{
+					"name": "AddonNamePlate.NamePlateObjectArray",
+					"type": "offset",
+					"description": "(0x470 in 7.00..7.05h2, 0x480 since 7.10)."
+				},
+				{
+					"name": "NamePlateAllocateBake",
+					"type": "rel32",
+					"description": "AllocateBake."
+				},
+				{
+					"name": "NamePlateObject.NeedsToBeBaked",
+					"type": "offset",
+					"description": "(0x71)."
+				}
+			]
+		},
+		"NamePlateObjectsLoop": {
+			"description": "AddonNamePlate's update: the loop over all plates' text nodes (first of two). Gives the object count since 7.00 (the AllocateBakeCaller gives it before).",
+			"resolve": "none",
+			"pattern": [
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)\\x33\\xD2[\\x48-\\x4F]\\x8B[\\x4C\\x54].(.)\\xE8....",
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF]\\1.{0,8}?\\xE8....",
+				"[\\x48\\x49]\\x83[\\xC0-\\xC7](.)[\\x48\\x49]\\x81[\\xF8-\\xFF](....)(?:\\x7C.|\\x0F\\x8C....)(?:\\xEB.|\\xE9....)"
+			],
+			"captures": [
+				{
+					"name": "AddonNamePlate.NamePlateObjectArray",
+					"type": "offset",
+					"description": "(0x480 since 7.10)."
+				},
+				{
+					"name": "NamePlateObject.NameText",
+					"type": "offset",
+					"description": "(0x20)."
+				},
+				{
+					"name": "NamePlateObject",
+					"type": "size",
+					"description": "(0x78)."
+				},
+				{
+					"name": "NamePlateObjectArray",
+					"type": "size",
+					"description": "count * sizeof (0x1770: 50)."
+				}
+			]
+		},
+		"NamePlateBakePlateDraw": {
+			"description": "void BakePlateRenderer.Draw(BakePlateRenderer* this, AtkResNode* node) (vf2): draws the baked region, bakes it, or draws live in live mode. The match starts at the function. Holds since 5.55 (2021.03.26). Fragile: NeedsToBeBaked is a literal 0x71 since 7.00, the only difference from a twin renderer in 7.30..7.31h.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x4C]\\x8B[\\x81\\x89\\x91\\x99\\xA1\\xA9\\xB1\\xB9](....)",
+				".{0,64}?[\\x40-\\x4F]?\\x80[\\xB8-\\xBB\\xBD-\\xBF](....)\\x00",
+				"(?:[\\x00-\\x7F\\x81-\\xFF]{0,40}?|.{0,32}?[\\x40-\\x4F]?\\x80[\\x78-\\x7F](\\x71)\\x00.{0,40}?)",
+				"[\\x40-\\x4F]?\\x80[\\x78-\\x7F]\\x0B\\x00"
+			],
+			"captures": [
+				{
+					"name": "BakePlateRenderer.BakeMap",
+					"type": "offset",
+					"description": "(0x1F8)."
+				},
+				{
+					"name": "BakePlateRenderer.DisableFixedFontResolution",
+					"type": "offset",
+					"description": "byte: draws the text live (0x230)."
+				},
+				{
+					"name": "NamePlateObject.NeedsToBeBaked",
+					"type": "offset",
+					"description": "0x71, literal, since 7.00; doesn't capture before."
+				}
+			]
+		},
+		"NamePlateBakePrepare": {
+			"description": "void BakePlateRenderer.vf3(BakePlateRenderer* this, float* rect, GameFontSet* set, AtkResNode* node): the text node renderer's per-node setup, then for a bake the bake rect and node scale 1. Follows Draw, whose pattern comes first, because a byte-identical twin exists in 7.30..7.31h. Resolves to the empty capture. Holds since 5.55.",
+			"resolve": "capture",
+			"pattern": [
+				"[\\x48\\x4C]\\x8B[\\x81\\x89\\x91\\x99\\xA1\\xA9\\xB1\\xB9](....)",
+				".{0,64}?[\\x40-\\x4F]?\\x80[\\xB8-\\xBB\\xBD-\\xBF](....)\\x00",
+				"(?:[\\x00-\\x7F\\x81-\\xFF]{0,40}?|.{0,32}?[\\x40-\\x4F]?\\x80[\\x78-\\x7F](\\x71)\\x00.{0,40}?)",
+				"[\\x40-\\x4F]?\\x80[\\x78-\\x7F]\\x0B\\x00",
+				".{0,1024}?(?:\\xC3|\\xE9....)\\xCC*()",
+				"(?:[\\x48\\x4C]\\x89[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C]\\x24.|[\\x40\\x41]?[\\x50-\\x57]|\\x48\\x8B\\xC4|[\\x48\\x4C]\\x89[\\x58-\\x7F].){1,12}\\x48(?:\\x83\\xEC.|\\x81\\xEC....)",
+				".{0,16}?\\xE8....[\\x48\\x49]\\x83[\\xB8-\\xBB\\xBD-\\xBF](....)\\x00(?:\\x74.|\\x0F\\x84....)",
+				".{0,8}?\\xE8(....)",
+				".{0,12}?\\xC7[\\x40-\\x47](.)\\x00\\x00\\x80\\x3F\\xC7[\\x40-\\x47](.)\\x00\\x00\\x80\\x3F",
+				".{0,8}?[\\x48\\x4C]\\x8B[\\x80-\\xBF]\\5"
+			],
+			"captures": [
+				{
+					"name": "BakePlateRenderer.BakeMap",
+					"type": "offset",
+					"description": "(0x1F8)."
+				},
+				{
+					"name": "BakePlateRenderer.DisableFixedFontResolution",
+					"type": "offset",
+					"description": "byte: draws the text live (0x230)."
+				},
+				{
+					"name": "NamePlateObject.NeedsToBeBaked",
+					"type": "offset",
+					"description": "0x71, literal, since 7.00; doesn't capture before."
+				},
+				{
+					"name": "BakePlateRenderer.Prepare",
+					"type": "position",
+					"description": "Where vf3 starts (the hook target)."
+				},
+				{
+					"name": "BakePlateRenderer.CurrentBakeData",
+					"type": "offset",
+					"description": "BakeData* (0x228)."
+				},
+				{
+					"name": "GameFontSet.NodeScaleAccessor",
+					"type": "rel32",
+					"description": "lea rax,[rcx+disp32]; ret: its disp32 (0x120) plus the next two captures give GameFontSet.NodeScaleX/Y."
+				},
+				{
+					"name": "NodeScaleAccessor.ScaleX",
+					"type": "offset",
+					"description": "GameFontSet.NodeScaleX, relative to the accessor's result (0x10; 0x130 in all)."
+				},
+				{
+					"name": "NodeScaleAccessor.ScaleY",
+					"type": "offset",
+					"description": "GameFontSet.NodeScaleY, relative to the accessor's result (0x14; 0x134 in all)."
+				}
+			]
+		},
+		"NamePlateDrawBaked": {
+			"description": "void DrawBaked(BakePlateRenderer* this, AtkResNode* node, BakeData* bake): draws a baked region, (Width - 4) x (Height - 4) at the node's transform, point sampled only when the transform's scale is exactly 1. The match starts at the function. Holds since 5.55 (2021.03.26); before 5.5 TextYOffset was at 0xA (the capture shows it).",
+			"resolve": "function",
+			"pattern": [
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x42\\x4A\\x52\\x5A\\x62\\x6A\\x72\\x7A](.)",
+				".{0,8}?\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x42\\x4A\\x52\\x5A\\x62\\x6A\\x72\\x7A](.)",
+				".{0,300}?[\\x40-\\x4F]?\\x0F\\xB7[\\x80-\\xBF](....).{0,48}?\\xE8....",
+				"[\\x40-\\x4F]?\\x0F\\xB7[\\x80-\\xBF](....)",
+				".{0,8}?[\\x40-\\x4F]?\\x0F\\xBF[\\x40-\\x7F](.)",
+				".{0,8}?\\x83[\\xC0-\\xC7]\\x08",
+				".{0,400}?[\\x40-\\x4F]?\\x0F\\xB6[\\x40-\\x7F](.)(?:[\\x40-\\x4F]?\\x88[\\x40-\\x7F].){4}",
+				".{0,200}?[\\x40-\\x4F]?\\x0F\\x2E.{1,6}?(?:\\x7A.|\\x0F\\x8A....)(?:\\x75.|\\x0F\\x85....)[\\x40-\\x4F]?[\\xB8-\\xBF]\\x00\\x00\\x18\\x00"
+			],
+			"captures": [
+				{
+					"name": "AtkResNode.Transform.Row1A",
+					"type": "offset",
+					"description": "float: M12 or M11; the smaller of the two is Transform (0x60 since 7.40, 0x58 before)."
+				},
+				{
+					"name": "AtkResNode.Transform.Row1B",
+					"type": "offset",
+					"description": "float: the other."
+				},
+				{
+					"name": "AtkResNode.Width",
+					"type": "offset",
+					"description": "ushort (0xA0 since 7.40, 0x90 before)."
+				},
+				{
+					"name": "AtkResNode.Height",
+					"type": "offset",
+					"description": "ushort (0xA2 since 7.40, 0x92 before)."
+				},
+				{
+					"name": "BakeData.TextYOffset",
+					"type": "offset",
+					"description": "short (8; 0xA before 5.5)."
+				},
+				{
+					"name": "BakeData.Alpha",
+					"type": "offset",
+					"description": "byte (0xA; 8 before 5.5)."
+				}
+			]
+		},
+		"AtkServerLoadShadersLoop": {
+			"description": "AtkServer.LoadShaders' loop over the 9 passes, taking each ShaderCodeResourceHandle's Kernel shader. Holds since 5.55 (2021.03.26); the layout changed in 6.50 (a third shader set).",
+			"resolve": "none",
+			"pattern": [
+				"[\\x48\\x49]\\x81[\\xC0-\\xC7](....)[\\x40\\x41]?[\\xB8-\\xBF](\\x09\\x00\\x00\\x00)",
+				".{0,16}?[\\x48\\x49]\\x8B[\\x80-\\xBF](....)[\\x48\\x49]\\x8B[\\x88-\\x8F](....)[\\x48\\x49]\\x85\\xC9(?:\\x74.|\\x0F\\x84....)",
+				"\\x48\\x8B\\x01\\xFF\\x50.",
+				".{0,32}?[\\x48\\x49]\\x8B(?:[\\x80-\\xBF](....)|[\\x40-\\x7F](.))[\\x48\\x49]\\x89[\\x08-\\x0F\\x48-\\x4F\\x88-\\x8F]",
+				".{0,32}?[\\x48\\x49]\\x8B[\\x48-\\x4F](.)[\\x48\\x49]\\x85\\xC9"
+			],
+			"captures": [
+				{
+					"name": "AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "Kernel::VertexShader*[9] (0xE8 since 6.50, 0xA0 before)."
+				},
+				{
+					"name": "AtkServer.ShaderCount",
+					"type": "count",
+					"description": "9."
+				},
+				{
+					"name": "AtkServer.VertexShaderFiles-AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "-0xD8: VertexShaderFiles is 0x10."
+				},
+				{
+					"name": "ShaderCodeResourceHandle.KernelShader",
+					"type": "offset",
+					"description": "Kernel::Shader* (0xB0; 0xA8 before 2021.05)."
+				},
+				{
+					"name": "AtkServer.PixelShaderFiles-AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "disp32 form (-0x90 since 6.50: PixelShaderFiles is 0x58)."
+				},
+				{
+					"name": "AtkServer.PixelShaderFiles-AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "disp8 form (-0x48 before 6.50: 0x58)."
+				},
+				{
+					"name": "AtkServer.PixelShaders-AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "0x48: PixelShaders is 0x130 since 6.50 (0xE8 before)."
+				}
+			]
+		},
+		"AtkServerBindFontShaders": {
+			"description": "void AtkServer.BindShaders(AtkServer* this, int pass, bool alternate) (FUN_14063C210 in 7.56h): sets the vertex shader of the pass and its pixel shader (or the alternate one). Called for every UI draw command, so a hook sees the AtkServer. The match is inside the function. Holds since 6.50.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48-\\x4F]\\x8B[\\x84\\x8C\\x94\\x9C\\xA4\\xAC\\xB4\\xBC]([\\xC0-\\xFF])(....).{0,16}?[\\x48-\\x4F]\\x89[\\x40-\\x47\\x80-\\x87]",
+				".{0,24}?[\\x40-\\x4F]?\\x84[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				"[\\x48-\\x4F]\\x8B[\\x84\\x8C\\x94\\x9C\\xA4\\xAC\\xB4\\xBC]\\1(....)(?:[\\x48-\\x4F]\\x89[\\x40-\\x47\\x80-\\x87].{0,16}?)?(?:\\xEB.|\\xE9....|\\xC3)",
+				"[\\x48-\\x4F]\\x8B[\\x84\\x8C\\x94\\x9C\\xA4\\xAC\\xB4\\xBC]\\1(....)"
+			],
+			"captures": [
+				{
+					"name": "BindFontShaders.Sib",
+					"type": "byte",
+					"description": "The SIB byte, shared by the three loads."
+				},
+				{
+					"name": "AtkServer.VertexShaders",
+					"type": "offset",
+					"description": "(0xE8)."
+				},
+				{
+					"name": "AtkServer.AltPixelShaders",
+					"type": "offset",
+					"description": "(0x178)."
+				},
+				{
+					"name": "AtkServer.PixelShaders",
+					"type": "offset",
+					"description": "(0x130)."
+				}
+			]
+		},
+		"KernelSetPixelShader": {
+			"description": "Kernel ImmediateContext.SetPixelShader(ctx, Kernel::PixelShader* ps) (FUN_14022CBA0 in 7.56h): resolves the shader's bindings, then PSSetShader(ps->D3DShader) and ctx->CurrentPixelShader = ps. Holds since 5.55.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x4C]\\x8B[\\x81\\x89\\x91\\x99\\xA1\\xA9\\xB1\\xB9](....)[\\x48\\x4C]\\x8D[\\x81\\x89\\x91\\x99\\xA1\\xA9\\xB1\\xB9]....",
+				"[\\x40-\\x4F]?\\x8B[\\x42\\x4A\\x52\\x5A\\x6A\\x72\\x7A](.)",
+				".{0,400}?[\\x48\\x49]\\x8B[\\x50-\\x53\\x55-\\x57](.).{0,16}?\\x48\\x8B\\x01\\xFF\\x50\\x48",
+				"[\\x4C\\x4D\\x48\\x49]\\x89(?:[\\x80-\\x83\\x85-\\xBF]|[\\x84\\x8C\\x94\\x9C\\xA4\\xAC\\xB4\\xBC]\\x24)\\1"
+			],
+			"captures": [
+				{
+					"name": "ImmediateContext.CurrentPixelShader",
+					"type": "offset",
+					"description": "(0x1B8 since 7.10)."
+				},
+				{
+					"name": "Kernel.Shader.BindingCount",
+					"type": "offset",
+					"description": "(0x40)."
+				},
+				{
+					"name": "Kernel.PixelShader.D3DShader",
+					"type": "offset",
+					"description": "ID3D11PixelShader* (0x60 since 6.50, 0x58 before)."
+				}
+			]
+		},
+		"BuildFont": {
+			"description": "int BuildFont(AtkFontManager* this, ushort index) (FUN_14064ECF0 in 7.56h): binds a font's textures, converts its FDT into the GameFont (header, glyphs, glyph map since 7.40, kerning) and sets its flags. Only its captures are used. Holds since 2020.07 (5.x).",
+			"resolve": "match",
+			"pattern": [
+				"\\x66[\\x3B\\x39][\\x40-\\x7F](.)(?:\\x73.|\\x0F\\x83....)",
+				".{0,40}?[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....)[\\x48-\\x4F]\\x03[\\x40-\\x7F](.)",
+				".{0,8}?[\\x40-\\x4F]?\\xF6[\\x80-\\xBF](....)\\x02",
+				".{0,80}?\\x66[\\x40-\\x4F]?[\\x3B\\x39][\\x80-\\xBF](....)(?:\\x73.|\\x0F\\x83....)",
+				".{0,24}?[\\x48-\\x4F]\\x8B[\\x04\\x0C\\x14\\x1C\\x24\\x2C\\x34\\x3C][\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF]",
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)",
+				"[\\x48-\\x4F]\\x89[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C][\\xC0-\\xFF](.)",
+				".{0,40}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)[\\x48-\\x4F]\\x8B[\\x00-\\x3F]\\xFF[\\x90-\\x97]....",
+				".{0,800}?[\\x40-\\x4F]?\\x0F\\x10[\\x40-\\x7F]\\x04[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)",
+				"\\xF2[\\x40-\\x4F]?\\x0F\\x10[\\x40-\\x7F]\\x14\\xF2[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)",
+				"[\\x40-\\x4F]?\\x8B[\\x40-\\x7F]\\x1C[\\x40-\\x4F]?\\x89[\\x80-\\xBF](....)",
+				".{0,60}?[\\x48-\\x4F]\\x89[\\x80-\\xBF](....)",
+				".{0,400}?[\\x40-\\x4F]?\\x8B[\\x40-\\x7F]\\x04[\\x40-\\x4F]?\\x89[\\x80-\\xBF](....)",
+				".{0,60}?[\\x48-\\x4F]\\x89[\\x80-\\xBF](....)",
+				".{0,60}?[\\x48-\\x4F]\\x8D[\\x40-\\x7F]\\x10",
+				".{0,60}?[\\x40-\\x4F]?\\x8B[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F][\\x48-\\x4F]\\x8D[\\x40-\\x7F]\\x10[\\x40-\\x4F]?\\x89[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]",
+				"[\\x48-\\x4F]\\x8D[\\x40-\\x7F](.)",
+				".{0,200}?[\\x40-\\x4F]?\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,16}?[\\x40-\\x4F]?\\x80[\\xE0-\\xE7]\\xFB",
+				"(?:[\\x40-\\x4F]?\\x80[\\xC8-\\xCF]\\x01)?",
+				"(?:[\\x40-\\x4F]?\\x88[\\x80-\\xBF]\\16)?",
+				"[\\x40-\\x4F]?\\x88[\\x80-\\xBF](....)",
+				".{0,60}?[\\x40-\\x4F]?\\x8B[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]\\x81[\\xF8-\\xFF]\\xFF\\x00\\x00\\x00(?:\\x77.|\\x0F\\x87....)",
+				".{0,24}?[\\x48-\\x4F]\\x83[\\xC0-\\xC7](.)"
+			],
+			"captures": [
+				{
+					"name": "AtkFontManager.FontCount",
+					"type": "offset",
+					"description": "ushort (0x10)."
+				},
+				{
+					"name": "GameFont",
+					"type": "size",
+					"description": "sizeof(GameFont) (0xD0 in the dated builds 2020.07.21..2021.02.10, 0xF0 in 5.55..7.38, 0xF8 since 7.40)."
+				},
+				{
+					"name": "AtkFontManager.Fonts",
+					"type": "offset",
+					"description": "GameFont* (8)."
+				},
+				{
+					"name": "GameFont.Flags",
+					"type": "offset",
+					"description": "byte: bit 1 is ready (0xCA, 0xEA, 0xF2)."
+				},
+				{
+					"name": "GameFont.TextureCount",
+					"type": "offset",
+					"description": "ushort (0xC8, 0xE8, 0xF0)."
+				},
+				{
+					"name": "TextureResourceHandle.Texture",
+					"type": "offset",
+					"description": "Kernel::Texture* (0x110 in the dated builds until 2021.04.29, 0x118 in 5.55..7.18h, 0x128 since 7.20)."
+				},
+				{
+					"name": "GameFont.Textures",
+					"type": "offset",
+					"description": "Kernel::Texture*[MaxTextures] (0x48, 0x58); TextureResourceHandles are at 0 (the regex requires no displacement)."
+				},
+				{
+					"name": "GameFont.FontdataResourceHandle",
+					"type": "offset",
+					"description": "ResourceHandle* of the FDT (0x40, 0x50): MaxTextures = this / 8, as the handle pointers fill 0..this."
+				},
+				{
+					"name": "GameFont.GlyphCount",
+					"type": "offset",
+					"description": "uint: start of the FDT header copy (0x88, 0xA8): KerningCount +4, TextureWidth +0xC, TextureHeight +0xE (FDT layout)."
+				},
+				{
+					"name": "GameFont.Size",
+					"type": "offset",
+					"description": "float: start of the second copy (0x98, 0xB8); LineHeight is +4."
+				},
+				{
+					"name": "GameFont.Ascent",
+					"type": "offset",
+					"description": "int (0xA0, 0xC0)."
+				},
+				{
+					"name": "GameFont.Glyphs",
+					"type": "offset",
+					"description": "GameGlyph* (0xA8, 0xC8)."
+				},
+				{
+					"name": "GameFont.KerningCount",
+					"type": "offset",
+					"description": "uint (0x8C, 0xAC)."
+				},
+				{
+					"name": "GameFont.Kerning",
+					"type": "offset",
+					"description": "GameKerningEntry* (0xB0, 0xD0 until 7.38, 0xD8 since 7.40)."
+				},
+				{
+					"name": "GameKerningEntry",
+					"type": "size",
+					"description": "12: the converted entries' stride."
+				},
+				{
+					"name": "GameFont.Flags",
+					"type": "offset",
+					"description": "The same, read again."
+				},
+				{
+					"name": "GameFont.DirectIndexFirst",
+					"type": "offset",
+					"description": "byte (0xCB, 0xEB, 0xF3)."
+				},
+				{
+					"name": "GameGlyph",
+					"type": "size",
+					"description": "12; Utf8Value is at 0 (the regex requires no displacement)."
+				}
+			]
+		},
+		"GlyphQuad": {
+			"description": "Puts a glyph's quad into the text renderer's vertex buffers (FUN_140654BD0 in 7.56h; AtkFontAnalyzerRenderer): reads the glyph's box and its place in the atlas, and the font's texture width, which goes into every vertex. The match is inside the function (at its start in 5.55..7.56h). Holds since 2020.07.",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB6[\\x40-\\x7F](.)",
+				".{0,40}?[\\x40-\\x4F]?\\x0F\\xB6[\\x40-\\x7F](.)",
+				".{0,40}?[\\x40-\\x4F]?\\x0F\\xBE[\\x40-\\x7F](.)",
+				".{0,40}?[\\x40-\\x4F]?\\x0F\\xBE[\\x40-\\x7F](.)",
+				".{0,400}?[\\x40-\\x4F]?\\x84[\\xC0-\\xFF](?:\\x75.|\\x0F\\x85....)",
+				"[\\x40-\\x4F]?\\x0F\\xB6[\\x40-\\x7F](.)",
+				".{0,8}?[\\x40-\\x4F]?\\x0F\\xB7[\\x80-\\xBF](....)",
+				".{0,40}?[\\x40-\\x4F]?\\x80[\\xE0-\\xE7]\\x03",
+				".{0,40}?[\\x40-\\x4F]?\\xC1[\\xE8-\\xEF]\\x02",
+				".{0,400}?[\\x40-\\x4F]?[\\xB8-\\xBF]\\xFF\\x0F\\x00\\x00",
+				".{0,200}?(?:\\x66[\\x40-\\x4F]?\\x23[\\x40-\\x7F](.).{0,8}?[\\x40-\\x4F]?\\x8B[\\x40-\\x7F]\\7|[\\x40-\\x4F]?\\x8B[\\x40-\\x7F](.).{0,8}?[\\x40-\\x4F]?\\x0F\\xB7[\\x40-\\x7F]\\8)",
+				".{0,80}?[\\x40-\\x4F]?\\xC1[\\xE8-\\xEF]\\x0C"
+			],
+			"captures": [
+				{
+					"name": "GameGlyph.Width",
+					"type": "offset",
+					"description": "byte (8)."
+				},
+				{
+					"name": "GameGlyph.Height",
+					"type": "offset",
+					"description": "byte (9)."
+				},
+				{
+					"name": "GameGlyph.OffsetX",
+					"type": "offset",
+					"description": "sbyte (0xA)."
+				},
+				{
+					"name": "GameGlyph.OffsetY",
+					"type": "offset",
+					"description": "sbyte (0xB)."
+				},
+				{
+					"name": "GameGlyph.TextureAndChannel",
+					"type": "offset",
+					"description": "byte: Packed's top byte (7); the regex checks channel = & 3, texture = >> 2."
+				},
+				{
+					"name": "GameFont.TextureWidth",
+					"type": "offset",
+					"description": "ushort: the texel step of the edge and glare shaders (0x94 in the dated builds until 2021.02.10, 0xB4 since)."
+				},
+				{
+					"name": "GameGlyph.Packed",
+					"type": "offset",
+					"description": "uint: X in bits 0-11, Y in bits 12-23 (4); this or the next captures."
+				},
+				{
+					"name": "GameGlyph.Packed",
+					"type": "offset",
+					"description": "The same, older code."
+				}
+			]
+		},
+		"TextNodeFontSet": {
+			"description": "AtkTextNodeRenderer.Draw (0x1406C4690 in 7.56h): takes the node's font set, AtkStage->AtkFontManager->FontSets + fontType * sizeof(GameFontSet), and has the renderer's vf3 (the per-node setup BakePlateRenderer overrides) prepare it. Holds since 2020.07.",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,8}?[\\x48-\\x4F]?\\xC1[\\xE8-\\xEF]\\x04",
+				".{0,8}?[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....)",
+				"[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,16}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,8}?[\\x48-\\x4F]\\x03[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]",
+				".{0,8}?\\xFF[\\x50-\\x57]\\x18"
+			],
+			"captures": [
+				{
+					"name": "AtkTextNode.AlignmentFontType",
+					"type": "offset",
+					"description": "byte: the font type in the high nibble (0x14C until 6.48, 0x154 in 6.50..7.38, 0x164 since 7.40)."
+				},
+				{
+					"name": "GameFontSet",
+					"type": "size",
+					"description": "sizeof(GameFontSet) (0x270 until 7.25h3, 0x278 since 7.30)."
+				},
+				{
+					"name": "AtkStage.Instance",
+					"type": "rel32",
+					"description": "AtkStage*: the global of the instance."
+				},
+				{
+					"name": "AtkStage.AtkFontManager",
+					"type": "offset",
+					"description": "AtkFontManager* (0x10)."
+				}
+			]
+		},
+		"TextNodeSetUp": {
+			"description": "AtkTextNodeRenderer vf3 (FUN_1406C4910 in 7.56h): sets up a node's font set for a draw: the requested size from the node's font size, the node scale from the lengths of its transform's rows. Holds since 2020.07.",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB6[\\x80-\\xBF](....)",
+				".{0,40}?\\x0F\\x5B[\\xC0-\\xFF]\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)",
+				"[\\x40-\\x4F]?\\x0F\\xB6[\\x80-\\xBF]\\1",
+				".{0,12}?\\x0F\\x5B[\\xC0-\\xFF]\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)",
+				".{0,40}?\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)",
+				".{0,24}?\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x80-\\xBF](....)"
+			],
+			"captures": [
+				{
+					"name": "AtkTextNode.FontSize",
+					"type": "offset",
+					"description": "byte (0x14D until 6.48, 0x155 in 6.50..7.38, 0x165 since 7.40)."
+				},
+				{
+					"name": "GameFontSet.RequestedSizeX",
+					"type": "offset",
+					"description": "float (0x120)."
+				},
+				{
+					"name": "GameFontSet.RequestedSizeY",
+					"type": "offset",
+					"description": "float (0x124)."
+				},
+				{
+					"name": "GameFontSet.NodeScaleX",
+					"type": "offset",
+					"description": "float (0x130)."
+				},
+				{
+					"name": "GameFontSet.NodeScaleY",
+					"type": "offset",
+					"description": "float (0x134)."
+				}
+			]
+		},
+		"InitFontManager": {
+			"description": "int InitFontManager(AtkFontManager* this, ushort fontCount, ...) (FUN_14064DBA0 in 7.56h): allocates the fonts and the font sets (new GameFontSet[6]). The match is inside the function. Holds since 2020.07.",
+			"resolve": "function",
+			"pattern": [
+				"\\x66[\\x40-\\x4F]?\\x89[\\x40-\\x7F](.)",
+				".{0,24}?[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....)",
+				".{0,40}?[\\x48-\\x4F]\\x89[\\x40-\\x7F](.)",
+				".{0,40}?\\xB9(....)\\xE8....",
+				".{0,24}?\\x41?[\\xB8-\\xBF]([\\x01-\\x3F]\\x00\\x00\\x00)",
+				".{0,300}?[\\x48-\\x4F]\\x81[\\xC0-\\xC7](....)",
+				".{0,40}?[\\x48-\\x4F]\\x89[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]"
+			],
+			"captures": [
+				{
+					"name": "AtkFontManager.FontCount",
+					"type": "offset",
+					"description": "ushort (0x10)."
+				},
+				{
+					"name": "GameFont",
+					"type": "size",
+					"description": "sizeof(GameFont)."
+				},
+				{
+					"name": "AtkFontManager.Fonts",
+					"type": "offset",
+					"description": "GameFont* (8)."
+				},
+				{
+					"name": "AtkFontManager.FontSetsAllocation",
+					"type": "size",
+					"description": "8 + FontSetCount * sizeof(GameFontSet) (0xEA8 until 7.25h3, 0xED8 since 7.30)."
+				},
+				{
+					"name": "AtkFontManager.FontSetCount",
+					"type": "count",
+					"description": "The number of font sets (6)."
+				},
+				{
+					"name": "GameFontSet",
+					"type": "size",
+					"description": "sizeof(GameFontSet)."
+				}
+			]
+		},
+		"SetUpFontSets": {
+			"description": "Fills the font sets' slots once the fonts have loaded (FUN_14064C140 in 7.56h): slot {font, size, scale = 1}, the alternate slot 8 apart, each font's XShift, and the set's has-fonts flag. Only its captures are used. Holds since 7.00.",
+			"resolve": "function",
+			"pattern": [
+				"\\x83[\\x78-\\x7F].\\x02(?:\\x75.|\\x0F\\x85....)",
+				".{0,24}?[\\x48-\\x4F]\\x8B[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]",
+				".{0,200}?[\\x40-\\x4F]?\\x8D[\\x40-\\x7F]([\\x04-\\x10])",
+				".{0,60}?[\\x48-\\x4F]\\x81[\\xC0-\\xC7]....",
+				".{0,24}?[\\x48-\\x4F]\\x89[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]",
+				".{0,8}?[\\x40-\\x4F]?\\xC6[\\x80-\\x87](....)[\\x01-\\x08]",
+				".{0,8}?[\\x48-\\x4F]\\x89[\\x80-\\xBF](....)",
+				".{0,8}?\\xC7[\\x40-\\x47](.)....",
+				"\\xC7[\\x40-\\x47](.)\\x00\\x00\\x80\\x3F",
+				".{0,60}?[\\x48-\\x4F]\\x8D[\\x40-\\x7F](.)",
+				".{0,40}?\\x80[\\xA0-\\xA7](....)\\xFD"
+			],
+			"captures": [
+				{
+					"name": "GameFontSet.SlotCount",
+					"type": "count",
+					"description": "Slots per mode (8); the alternate mode has as many."
+				},
+				{
+					"name": "GameFont.XShift",
+					"type": "offset",
+					"description": "sbyte (0xEC until 7.38, 0xF4 since 7.40)."
+				},
+				{
+					"name": "GameFontSet.AlternateSlots",
+					"type": "offset",
+					"description": "The first alternate slot: SlotCount * sizeof(slot) (0x80)."
+				},
+				{
+					"name": "GameFontSet.Slot.Size",
+					"type": "offset",
+					"description": "float (8)."
+				},
+				{
+					"name": "GameFontSet.Slot.Scale",
+					"type": "offset",
+					"description": "float (0xC)."
+				},
+				{
+					"name": "GameFontSet.Slot",
+					"type": "size",
+					"description": "16."
+				},
+				{
+					"name": "GameFontSet.Flags",
+					"type": "offset",
+					"description": "byte: bit 1 has fonts (0x260 until 7.25h3, 0x268 since 7.30)."
+				}
+			]
+		},
+		"GetSlotScale": {
+			"description": "float GetSlotScale(GameFontSet* this, float size) (FUN_140651F00 in 7.56h): the scale of the slot PickFont picks. The match is inside the function. Holds since 2020.07.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48-\\x4F]\\x83\\x3C[\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF]\\x00(?:\\x74.|\\x0F\\x84....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C][\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF](.)",
+				".{0,40}?\\x66[\\x40-\\x4F]?\\x83[\\xF8-\\xFF]\\x08(?:\\x72.|\\x0F\\x82....)",
+				".{0,12}?[\\x48-\\x4F]\\x03[\\xC0-\\xFF]",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C][\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF](.)\\xC3"
+			],
+			"captures": [
+				{
+					"name": "GameFontSet.Slot.Size",
+					"type": "offset",
+					"description": "float (8)."
+				},
+				{
+					"name": "GameFontSet.Slot.Scale",
+					"type": "offset",
+					"description": "float (0xC)."
+				}
+			]
+		},
+		"GlyphMapFind": {
+			"description": "GameGlyph*& std::unordered_map<uint, GameGlyph*>::operator[] as the glyph map's lookup calls it (FUN_1406E97C0 in 7.56h; GetGlyph's GlyphMapFind): FNV-1a over the key's 4 bytes, the bucket's (first, last) pair, the walk back from last, and a 0x20-byte node on a miss. The match is inside the function. Holds since 7.40.",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB6[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F]",
+				".{0,16}?(?:[\\x48\\x49][\\xB8-\\xBF]\\xB3\\x01\\x00\\x00\\x00\\x01\\x00\\x00.{0,4}?[\\x48\\x49][\\xB8-\\xBF]\\x25\\x23\\x22\\x84\\xE4\\x9C\\xF2\\xCB|[\\x48\\x49][\\xB8-\\xBF]\\x25\\x23\\x22\\x84\\xE4\\x9C\\xF2\\xCB.{0,4}?[\\x48\\x49][\\xB8-\\xBF]\\xB3\\x01\\x00\\x00\\x00\\x01\\x00\\x00)",
+				".{0,40}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,60}?[\\x48-\\x4F]\\x0F\\xAF[\\xC0-\\xFF]",
+				".{0,16}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,8}?[\\x48-\\x4F]\\x23[\\x40-\\x7F](.)",
+				"[\\x48-\\x4F]\\x03[\\xC0-\\xFF]",
+				"[\\x48-\\x4F]\\x8B[\\x44\\x4C\\x54\\x5C\\x64\\x6C\\x74\\x7C][\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF]\\x08",
+				"[\\x48-\\x4F]\\x3B[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				"[\\x48-\\x4F]\\x8B[\\x04\\x0C\\x14\\x1C\\x24\\x2C\\x34\\x3C][\\xC0-\\xC4\\xC6-\\xCC\\xCE-\\xD4\\xD6-\\xDC\\xDE-\\xE4\\xE6-\\xEC\\xEE-\\xF4\\xF6-\\xFC\\xFE\\xFF]",
+				".{0,8}?\\x3B[\\x40-\\x7F](.)(?:\\x74.|\\x0F\\x84....)",
+				"[\\x48-\\x4F]\\x3B[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				"[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				"\\x3B[\\x40-\\x7F]\\4",
+				".{0,80}?\\x8D[\\x48-\\x4F](\\x20)\\xE8",
+				".{0,16}?\\x89[\\x40-\\x7F]\\4",
+				".{0,4}?[\\x48-\\x4F]\\xC7[\\x40-\\x47](.)\\x00\\x00\\x00\\x00",
+				".{0,8}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,8}?\\xF3[\\x40-\\x4F]?\\x0F\\x10(?:[\\x40-\\x7F]\\x00|[\\x00-\\x03\\x06-\\x0B\\x0E-\\x13\\x16-\\x1B\\x1E-\\x23\\x26-\\x2B\\x2E-\\x33\\x36-\\x3B\\x3E\\x3F])"
+			],
+			"captures": [
+				{
+					"name": "GlyphMap.Head",
+					"type": "offset",
+					"description": "Node*: the list's sentinel (8)."
+				},
+				{
+					"name": "GlyphMap.Buckets",
+					"type": "offset",
+					"description": "Node**: (first, last) per bucket (0x18)."
+				},
+				{
+					"name": "GlyphMap.Mask",
+					"type": "offset",
+					"description": "ulong: buckets - 1 (0x30)."
+				},
+				{
+					"name": "GlyphMap.Node.Key",
+					"type": "offset",
+					"description": "uint (0x10)."
+				},
+				{
+					"name": "GlyphMap.Node.Prev",
+					"type": "offset",
+					"description": "Node* (8); Next is at 0."
+				},
+				{
+					"name": "GlyphMap.Node",
+					"type": "size",
+					"description": "0x20."
+				},
+				{
+					"name": "GlyphMap.Node.Value",
+					"type": "offset",
+					"description": "GameGlyph* (0x18)."
+				},
+				{
+					"name": "GlyphMap.Count",
+					"type": "offset",
+					"description": "ulong (0x10)."
+				}
+			]
+		},
+		"AtkModuleReloadFontShaders": {
+			"description": "In AtkModule (FUN_1406AD430 in 7.56h): reloads the UI shaders (AtkServer's LoadShaders) and the fonts (41 of them, InitFontManager). Gives AtkModule.AtkServer. Holds since 2020.07.",
+			"resolve": "none",
+			"pattern": [
+				"[\\x48\\x49]\\x8B[\\x88-\\x8B\\x8D-\\x8F](....)[\\x48\\x49]\\x85\\xC9(?:\\x74.|\\x0F\\x84....)\\xE8(....)",
+				".{0,16}?\\xBA([\\x01-\\x7F]\\x00\\x00\\x00).{0,8}?[\\x48\\x49]\\x8D[\\x88-\\x8B\\x8D-\\x8F](....)",
+				".{0,8}?[\\x4C\\x4D]\\x8D[\\x80-\\x83\\x85-\\x87]\\1",
+				".{0,8}?\\xE8(....)"
+			],
+			"captures": [
+				{
+					"name": "AtkModule.AtkServer",
+					"type": "offset",
+					"description": "AtkServer*: the UI renderer holding the font shaders (0x130)."
+				},
+				{
+					"name": "AtkServer.LoadShaders",
+					"type": "rel32",
+					"description": "Loads the 9 VS/PS pairs (FUN_14063A760 in 7.56h)."
+				},
+				{
+					"name": "FontTable.Count",
+					"type": "count",
+					"description": "The fonts it is set up for (31 in the dated builds until 2021.02.10, 41 since)."
+				},
+				{
+					"name": "AtkModule.AtkFontManager",
+					"type": "offset",
+					"description": "AtkFontManager, embedded (0x178 until 6.48, 0x1B8 in 6.50..7.38, 0x1D0 since 7.40)."
+				},
+				{
+					"name": "InitFontManager",
+					"type": "rel32",
+					"description": "InitFontManager, as its signature finds it."
+				}
+			]
+		},
+		"LoadFont": {
+			"description": "Loads a font of the font manager (FUN_14064E510 in 7.56h): checks the table entry's texture count and the font's load state, resets the font and takes the entry's texture count and CJK spacing. Only its captures are used. Holds since 2020.07 (the old one since 2021.03.26).",
+			"resolve": "match",
+			"pattern": [
+				"\\x66[\\x3B\\x39][\\x40-\\x7F](.)(?:\\x73.|\\x0F\\x83....|\\x72.|\\x0F\\x82....)",
+				".{0,40}?[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....)[\\x48-\\x4F]\\x03[\\x40-\\x7F](.)",
+				"[\\x40-\\x4F]?\\xF6[\\x80-\\xBF](....)\\x01",
+				".{0,40}?\\x41?\\x83[\\x38-\\x3F](.)(?:\\x7C.|\\x0F\\x8C....)",
+				".{0,24}?\\x83[\\xB8-\\xBF](....)\\x00(?:\\x74.|\\x0F\\x84....)",
+				".{0,200}?\\x66[\\x40-\\x4F]?\\x89[\\x80-\\xBF](....)",
+				".{0,16}?[\\x40-\\x4F]?\\x88[\\x80-\\xBF](....)"
+			],
+			"captures": [
+				{
+					"name": "AtkFontManager.FontCount",
+					"type": "offset",
+					"description": "ushort (0x10)."
+				},
+				{
+					"name": "GameFont",
+					"type": "size",
+					"description": "sizeof(GameFont) (0xD0 in the dated builds until 2021.02.10, 0xF0 in 5.55..7.38, 0xF8 since 7.40)."
+				},
+				{
+					"name": "AtkFontManager.Fonts",
+					"type": "offset",
+					"description": "GameFont* (8)."
+				},
+				{
+					"name": "GameFont.Flags",
+					"type": "offset",
+					"description": "byte: bit 0 is loaded (0xCA, 0xEA, 0xF2)."
+				},
+				{
+					"name": "GameFont.MaxTextures",
+					"type": "count",
+					"description": "The most textures a font may have (8 in the dated builds until 2021.02.10, 10 since)."
+				},
+				{
+					"name": "GameFont.LoadState",
+					"type": "offset",
+					"description": "int: 0 unloaded, 1 loading, 2 loaded, 3 failed (0xC4 in the dated builds until 2021.02.10, 0xE4 in 5.55..7.38, 0xEC since 7.40)."
+				},
+				{
+					"name": "GameFont.TextureCount",
+					"type": "offset",
+					"description": "ushort (0xC8, 0xE8, 0xF0)."
+				},
+				{
+					"name": "GameFont.CjkSpacing",
+					"type": "offset",
+					"description": "sbyte (0xCD, 0xED, 0xF5)."
+				}
+			]
+		},
+		"CountCollisionNodes": {
+			"description": "int AtkUnitBase.CountCollisionNodes(AtkUnitBase* this, AtkUldManager* uld): counts collision nodes, recursing into component nodes the way the plugin walks nodes. Only its captures are used.",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB7[\\x40-\\x7F](.)",
+				".{0,12}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,60}?(?:\\xE8\\x03\\x00\\x00.{0,60}?\\x66[\\x40-\\x4F]?\\x39[\\x40-\\x7F](.)|\\x66[\\x40-\\x4F]?\\x81[\\x78-\\x7F](.)\\xE8\\x03)(?:\\x72.|\\x0F\\x82....)",
+				"[\\x48-\\x4F]\\x8B[\\x80-\\xBF](....)",
+				"(?:\\xEB.[\\x31\\x33][\\xC0-\\xFF])?",
+				"[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				"(?:[\\x48-\\x4F]\\x83[\\xC0-\\xC7](.)|[\\x48-\\x4F]\\x8D[\\x40-\\x7F](.))",
+				".{0,8}?\\xE8(....)"
+			],
+			"captures": [
+				{
+					"name": "AtkUldManager.NodeListCount",
+					"type": "offset",
+					"description": "ushort (0x42)."
+				},
+				{
+					"name": "AtkUldManager.NodeList",
+					"type": "offset",
+					"description": "AtkResNode** (0x50)."
+				},
+				{
+					"name": "AtkResNode.Type",
+					"type": "offset",
+					"description": "ushort NodeType; 1000 and up are component nodes (0x40)."
+				},
+				{
+					"name": "AtkResNode.Type",
+					"type": "offset",
+					"description": "The same, compared with an immediate."
+				},
+				{
+					"name": "AtkComponentNode.Component",
+					"type": "offset",
+					"description": "AtkComponentBase* (0xC0 since 7.40, 0xB0 since 6.50, 0xA8 before)."
+				},
+				{
+					"name": "AtkComponentBase.UldManager",
+					"type": "offset",
+					"description": "AtkUldManager, embedded (8)."
+				},
+				{
+					"name": "AtkComponentBase.UldManager",
+					"type": "offset",
+					"description": "The same, by lea."
+				},
+				{
+					"name": "CountCollisionNodes",
+					"type": "rel32",
+					"description": "The function itself (it recurses)."
+				}
+			]
+		},
+		"UpdateCollisionNodeList": {
+			"description": "void AtkUnitBase.UpdateCollisionNodeList(AtkUnitBase* this, bool): counts the collision nodes of &this->UldManager (CountCollisionNodes), allocates the list, then walks UldManager.NodeList backwards. Only its captures are used.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x49]\\x8D[\\x50-\\x57](.)",
+				".{0,16}?\\xE8(....)",
+				"\\x89[\\x80-\\xBF](....)\\x85\\xC0(?:\\x74.|\\x0F\\x84....)",
+				".{0,12}?\\xE8....",
+				".{0,8}?\\x8B[\\x80-\\xBF]\\3"
+			],
+			"captures": [
+				{
+					"name": "AtkUnitBase.UldManager",
+					"type": "offset",
+					"description": "AtkUldManager, embedded (0x28)."
+				},
+				{
+					"name": "CountCollisionNodes",
+					"type": "rel32",
+					"description": "CountCollisionNodes, as its signature finds it."
+				},
+				{
+					"name": "AtkUnitBase.CollisionNodeListCount",
+					"type": "offset",
+					"description": "uint (0x1F8 since 7.10, 0x1F0 in 7.0x, 0x1E0 before); not used by the plugin."
+				}
+			]
+		},
+		"SetScale": {
+			"description": "void AtkUnitBase.SetScale(AtkUnitBase* this, float scale, bool): scales the unit and every loaded unit hosted by it, found through AtkStage.Instance()->RaptureAtkUnitManager's AllLoadedUnitsList {u64, AtkUnitBase* Entries[256], ushort Count}. The match starts at the function. Since 7.00 (6.x has no hosted-unit loop).",
+			"resolve": "match",
+			"pattern": [
+				"[\\x48-\\x4F]\\x85\\xC9(?:\\x74.|\\x0F\\x84....)",
+				".{0,60}?[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,30}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,40}?\\x0F\\xB7[\\x80-\\xBF](....)(?:\\xEB.)\\x0F\\xB7[\\x80-\\xBF](....)",
+				".{0,40}?(?:\\x0F[\\xB7\\xBF]|\\x66[\\x40-\\x4F]?[\\x39\\x3B])[\\x80-\\xBF](....)",
+				".{0,40}?(?:\\x00\\x01\\x00\\x00|\\x81[\\xF8-\\xFF]\\x00\\x01)",
+				".{0,30}?[\\x48-\\x4F]\\x8B[\\x84-\\xBC][\\xC0-\\xFF](....)",
+				".{0,40}?\\x66[\\x40-\\x4F]?\\x39[\\x80-\\xBF]\\4"
+			],
+			"captures": [
+				{
+					"name": "AtkStage.Instance",
+					"type": "rel32",
+					"description": "AtkStage*: the global of the instance."
+				},
+				{
+					"name": "AtkStage.RaptureAtkUnitManager",
+					"type": "offset",
+					"description": "RaptureAtkUnitManager*, an AtkUnitManager at offset 0 (0x20)."
+				},
+				{
+					"name": "AtkUnitBase.Id",
+					"type": "offset",
+					"description": "ushort (0x1E4); not used by the plugin."
+				},
+				{
+					"name": "AtkUnitBase.HostId",
+					"type": "offset",
+					"description": "ushort: the unit hosting this one (0x1E8); not used by the plugin."
+				},
+				{
+					"name": "AtkUnitManager.AllLoadedUnitsList.Count",
+					"type": "offset",
+					"description": "ushort (0x7108 = 0x6900 + 0x808)."
+				},
+				{
+					"name": "AtkUnitManager.AllLoadedUnitsList.Entries",
+					"type": "offset",
+					"description": "AtkUnitBase*[256] (0x6908 = 0x6900 + 8)."
+				}
+			]
+		},
+		"GetAddonById": {
+			"description": "AtkUnitBase* AtkUnitManager.GetAddonById(AtkUnitManager* this, ushort id): finds a loaded unit by id in AllLoadedUnitsList {u64, AtkUnitBase* Entries[256], ushort Count}. The match is inside the function (at +1 in 7.56h: the movzx REX prefix is left out).",
+			"resolve": "function",
+			"pattern": [
+				"\\x0F\\xB7[\\xC2\\xCA\\xD2\\xDA\\xE2\\xEA\\xF2\\xFA]",
+				".{0,8}?\\x66\\x85\\xD2(?:\\x74.|\\x0F\\x84....)",
+				".{0,8}?[\\x40-\\x4F]?\\x0F[\\xB7\\xBF][\\x80-\\xBF](....)",
+				".{0,40}?(?:\\x00\\x01\\x00\\x00|\\x81[\\xF8-\\xFF]\\x00\\x01)",
+				".{0,30}?[\\x48-\\x4F]\\x8B[\\x84-\\xBC][\\xC0-\\xFF](....)",
+				".{0,8}?\\x66[\\x40-\\x4F]?\\x39[\\x80-\\xBF](....)",
+				".{0,24}?\\x33\\xC0\\xC3(?:[\\x48-\\x4F]\\x8B[\\xC0-\\xFF]\\xC3|\\xCC)"
+			],
+			"captures": [
+				{
+					"name": "AtkUnitManager.AllLoadedUnitsList.Count",
+					"type": "offset",
+					"description": "ushort (0x7108 = 0x6900 + 0x808)."
+				},
+				{
+					"name": "AtkUnitManager.AllLoadedUnitsList.Entries",
+					"type": "offset",
+					"description": "AtkUnitBase*[256] (0x6908 = 0x6900 + 8)."
+				},
+				{
+					"name": "AtkUnitBase.Id",
+					"type": "offset",
+					"description": "ushort; not used by the plugin."
+				}
+			]
+		},
+		"FreeFontSets": {
+			"description": "In the font manager's release (FUN_14064D780 in 7.56h): if FontSets, resets the 6 font sets (their picked font and slots), then delete[]s the array, whose element size is the GameFontSet's. The match is inside the function.",
+			"resolve": "function",
+			"pattern": [
+				"(?:[\\x48-\\x4F]\\x39[\\x03\\x06\\x07\\x0B\\x0E\\x0F\\x13\\x16\\x17\\x1B\\x1E\\x1F\\x23\\x26\\x27\\x2B\\x2E\\x2F\\x33\\x36\\x37\\x3B\\x3E\\x3F]|[\\x48-\\x4F]\\x39[\\x43\\x46\\x47\\x4B\\x4E\\x4F\\x53\\x56\\x57\\x5B\\x5E\\x5F\\x63\\x66\\x67\\x6B\\x6E\\x6F\\x73\\x76\\x77\\x7B\\x7E\\x7F](.))",
+				"(?:\\x74.|\\x0F\\x84....)",
+				".{0,8}?[\\x40-\\x4F]?[\\xB8-\\xBF](.)\\x00\\x00\\x00",
+				".{0,1500}?[\\x48\\x49]\\x81[\\xC0-\\xC7](....)",
+				"(?:[\\x48\\x49]\\x83[\\xE8-\\xEF]\\x01|[\\x48\\x49]\\xFF[\\xC8-\\xCF])(?:\\x75.|\\x0F\\x85....)",
+				".{0,24}?[\\x48-\\x4F]\\x69[\\x40-\\x7F]\\xF8\\3"
+			],
+			"captures": [
+				{
+					"name": "AtkFontManager.FontSets",
+					"type": "offset",
+					"description": "GameFontSet*: doesn't capture when it is 0 (it is 0)."
+				},
+				{
+					"name": "AtkFontManager.FontSetCount",
+					"type": "count",
+					"description": "The number of font sets (6)."
+				},
+				{
+					"name": "GameFontSet",
+					"type": "size",
+					"description": "sizeof(GameFontSet) (0x278 since 7.30, 0x270 before)."
+				}
+			]
+		},
+		"ResourceHandleDtor": {
+			"description": "ResourceHandle's destructor (FUN_1402FF3A0 in 7.56h): sets the base vtable, takes the lock, returns the file handle, frees the data, then destroys FileName, a std::string {char buf[16] or char* ptr; u64 Length; u64 Capacity} whose characters are in buf while Capacity < 16. The match starts at the vtable store, inside the function.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)[\\x48-\\x4F]\\x8B[\\xC0-\\xFF][\\x48-\\x4F]\\x89[\\x00-\\x3F]",
+				".{0,8}?\\xB8\\x01\\x00\\x00\\x00\\x87[\\x80-\\xBF](....)",
+				".{0,80}?\\xF7[\\x40-\\x7F](.)\\x00\\x00\\x00\\x0C",
+				".{0,200}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)[\\x48-\\x4F]\\x83[\\xF8-\\xFF]\\x10(?:\\x72.|\\x0F\\x82....)",
+				"[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)",
+				".{0,24}?\\xE8....",
+				"(?:[\\x48-\\x4F]\\x89[\\x40-\\x7F](.)[\\x48-\\x4F]\\xC7[\\x40-\\x47]\\4\\x0F\\x00\\x00\\x00|[\\x48-\\x4F]\\xC7[\\x40-\\x47]\\4\\x0F\\x00\\x00\\x00.{0,8}?[\\x48-\\x4F]\\x89[\\x40-\\x7F](.))",
+				".{0,24}?[\\x40-\\x4F]?\\x88[\\x40-\\x7F]\\5"
+			],
+			"captures": [
+				{
+					"name": "ResourceHandle.Vtable",
+					"type": "rel32",
+					"description": "ResourceHandle's own vtable; not used by the plugin."
+				},
+				{
+					"name": "ResourceHandle.Lock",
+					"type": "offset",
+					"description": "(0x98); not used by the plugin."
+				},
+				{
+					"name": "ResourceHandle.FileHandleIndex",
+					"type": "offset",
+					"description": "(0x38); not used by the plugin."
+				},
+				{
+					"name": "ResourceHandle.FileName.Capacity",
+					"type": "offset",
+					"description": "u64 (0x60 = FileName + 0x18)."
+				},
+				{
+					"name": "ResourceHandle.FileName",
+					"type": "offset",
+					"description": "std::string; its buf / ptr (0x48)."
+				},
+				{
+					"name": "ResourceHandle.FileName.Length",
+					"type": "offset",
+					"description": "u64 (0x58 = FileName + 0x10)."
+				},
+				{
+					"name": "ResourceHandle.FileName.Length",
+					"type": "offset",
+					"description": "The same, before 7.00."
+				}
+			]
+		},
+		"TextureCreateViews": {
+			"description": "In Kernel::Texture's resource creation (FUN_140218520 in 7.56h, called by Device.CreateTexture2D unless flags & 0x1800): ID3D11Device::CreateShaderResourceView(this->D3D11Texture2D, &desc, &this->D3D11ShaderResourceView). The match is inside the function.",
+			"resolve": "function",
+			"pattern": [
+				"(?:[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....).{0,24}?(?:\\x4C\\x8D[\\x48-\\x4F](.)[\\x48\\x49]\\x8B[\\x50-\\x57](.)|[\\x48\\x49]\\x8B[\\x50-\\x57](.)\\x4C\\x8D[\\x48-\\x4F](.))",
+				"|(?:\\x4C\\x8D[\\x48-\\x4F](.)[\\x48\\x49]\\x8B[\\x50-\\x57](.)|[\\x48\\x49]\\x8B[\\x50-\\x57](.)\\x4C\\x8D[\\x48-\\x4F](.)).{0,10}?[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....))",
+				".{0,8}?[\\x48-\\x4F]\\x8B[\\x88-\\x8F](....)[\\x48-\\x4F]\\x8B[\\x00-\\x3F]\\xFF[\\x50-\\x57]\\x38"
+			],
+			"captures": [
+				{
+					"name": "Device.Instance",
+					"type": "rel32",
+					"description": "Device*: the global of the instance."
+				},
+				{
+					"name": "Texture.D3D11ShaderResourceView",
+					"type": "offset",
+					"description": "ID3D11ShaderResourceView* (0x70 since 6.30, 0x60 in 6.20..6.28a, 0x58 before)."
+				},
+				{
+					"name": "Texture.D3D11Texture2D",
+					"type": "offset",
+					"description": "ID3D11Texture2D* (0x68 since 6.30, 0x58 in 6.20..6.28a, 0x50 before)."
+				},
+				{
+					"name": "Texture.D3D11Texture2D",
+					"type": "offset",
+					"description": "The same, other order."
+				},
+				{
+					"name": "Texture.D3D11ShaderResourceView",
+					"type": "offset",
+					"description": "The same, other order."
+				},
+				{
+					"name": "Texture.D3D11ShaderResourceView",
+					"type": "offset",
+					"description": "ID3D11ShaderResourceView* (0x70 since 6.30, 0x60 in 6.20..6.28a, 0x58 before)."
+				},
+				{
+					"name": "Texture.D3D11Texture2D",
+					"type": "offset",
+					"description": "ID3D11Texture2D* (0x68 since 6.30, 0x58 in 6.20..6.28a, 0x50 before)."
+				},
+				{
+					"name": "Texture.D3D11Texture2D",
+					"type": "offset",
+					"description": "The same, other order."
+				},
+				{
+					"name": "Texture.D3D11ShaderResourceView",
+					"type": "offset",
+					"description": "The same, other order."
+				},
+				{
+					"name": "Device.Instance",
+					"type": "rel32",
+					"description": "The same, before 6.30."
+				},
+				{
+					"name": "Device.D3D11Forwarder",
+					"type": "offset",
+					"description": "The ID3D11Device (0xE0AA8 in 7.56h); not used by the plugin."
+				}
+			]
+		},
+		"CreateTexture2D": {
+			"description": "Texture* Device.CreateTexture2D(Device* this, int* size, byte mipLevels, uint format, uint flags, uint unk): allocates a Kernel::Texture, fills it, and unless flags & 0x1800 creates its D3D11 texture (DEFAULT usage without initial contents, unless flags ask otherwise) and view. Returns null on failure. Release it with DecRef (vf3, per FFXIVClientStructs; not captured). The match starts at the allocation, inside the function; call the function. Since 7.00 (inlined Texture.Initialize2D).",
+			"resolve": "function",
+			"pattern": [
+				"\\xBA(....)",
+				".{0,30}?\\xFF[\\x50-\\x57]\\x10",
+				".{0,40}?\\xE8(....)",
+				".{0,120}?",
+				"[\\x48-\\x4F]\\x89[\\x40-\\x7F](.)",
+				".{0,4}?[\\x48-\\x4F]\\x8B[\\x00-\\x3F][\\x48-\\x4F]\\x89[\\x40-\\x7F](.)[\\x48-\\x4F]\\x89[\\x40-\\x7F](.)",
+				".{0,16}?\\xC7[\\x40-\\x47](.)\\x01\\x00\\x00\\x00",
+				".{0,8}?[\\x40-\\x4F]?\\x88[\\x40-\\x7F](.)",
+				".{0,8}?[\\x40-\\x4F]?\\x89[\\x40-\\x7F](.)",
+				"[\\x40-\\x4F]?\\x89[\\x40-\\x7F](.)",
+				"\\xC6[\\x40-\\x47](.)\\x01",
+				"[\\x40-\\x4F]?\\xF7[\\xC0-\\xC7]\\x00\\x18\\x00\\x00(?:\\x75.|\\x0F\\x85....)",
+				".{0,8}?\\xE8(....)"
+			],
+			"captures": [
+				{
+					"name": "Texture",
+					"type": "size",
+					"description": "sizeof(Texture) (0xC8)."
+				},
+				{
+					"name": "Texture.Ctor",
+					"type": "rel32",
+					"description": "Texture's constructor."
+				},
+				{
+					"name": "Texture.ActualWidth",
+					"type": "offset",
+					"description": "uint, then ActualHeight (0x38)."
+				},
+				{
+					"name": "Texture.AllocatedWidth",
+					"type": "offset",
+					"description": "uint, then AllocatedHeight (0x40)."
+				},
+				{
+					"name": "Texture.Width3",
+					"type": "offset",
+					"description": "uint, then Height3 (0x48)."
+				},
+				{
+					"name": "Texture.Depth",
+					"type": "offset",
+					"description": "uint (0x50)."
+				},
+				{
+					"name": "Texture.MipLevel",
+					"type": "offset",
+					"description": "byte (0x54)."
+				},
+				{
+					"name": "Texture.TextureFormat",
+					"type": "offset",
+					"description": "uint (0x58): B8G8R8A8_UNORM is 0x1450, B4G4R4A4_UNORM 0x1440."
+				},
+				{
+					"name": "Texture.Flags",
+					"type": "offset",
+					"description": "uint (0x5C)."
+				},
+				{
+					"name": "Texture.ArraySize",
+					"type": "offset",
+					"description": "byte (0x60)."
+				},
+				{
+					"name": "Texture.CreateResources",
+					"type": "rel32",
+					"description": "bool (Texture* this, void* contents): creates the D3D11 texture and views."
+				}
+			]
+		},
+		"FrameworkTick": {
+			"description": "The end of the main loop's iteration (FUN_14005BA70 in 7.56h; XivAlexander's MessageLoop signature calls it): unless Framework.IsFreed, updates the cursor, then Framework.Instance()->Tick() (vf4, what Dalamud's Framework.Update hooks), then Sleep(0). The match is inside the function.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,12}?\\x80[\\x78-\\x7F](.)\\x00(?:\\x75.|\\x0F\\x85....)",
+				".{0,40}?\\xFF[\\x50-\\x57]\\x10",
+				".{0,8}?[\\x48\\x4C]\\x8B[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D]....[\\x48-\\x4F]\\x8B[\\x00-\\x3F]\\xFF[\\x50-\\x57](.)",
+				".{0,8}?\\x33\\xC9.{0,4}?\\xFF\\x15(....)"
+			],
+			"captures": [
+				{
+					"name": "Framework.Instance",
+					"type": "rel32",
+					"description": "Framework*: the global of the instance."
+				},
+				{
+					"name": "Framework.IsFreed",
+					"type": "offset",
+					"description": "byte (0xA)."
+				},
+				{
+					"name": "Framework.Tick.VtableOffset",
+					"type": "offset",
+					"description": "Tick's offset in the vtable (0x20: vf4)."
+				},
+				{
+					"name": "Sleep",
+					"type": "rel32",
+					"description": "The import of kernel32!Sleep."
+				}
+			]
+		},
+		"AtkResNodeSetScale": {
+			"description": "void AtkResNode.SetScaleUnsafe(AtkResNode* this, float x, float y) (FUN_140660F60 in 7.56h; SetScale, which tests this for null, tail-jumps to it): unless the node is already dirty, marks it dirty (DrawFlags | 1) if the scale changes; stores both scales; then clears DrawFlags bit 2 if the scale is 1, 1 and the rotation 0, else sets it. The match starts at the function (a leaf without unwind data). Holds since 2020.07.",
+			"resolve": "match",
+			"pattern": [
+				"[\\x40-\\x4F]?\\x8B[\\x81\\x89\\x91\\x99\\xA9\\xB1\\xB9](....)(?:[\\x40-\\x4F]?\\x8B[\\xC0-\\xFF])?(?:\\xA8\\x01|\\xF6[\\xC0-\\xC7]\\x01)(?:\\x75.|\\x0F\\x85....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x40-\\x7F](.)[\\x40-\\x4F]?\\x0F\\x2E[\\xC0-\\xFF](?:\\x7A.|\\x0F\\x8A....)(?:\\x75.|\\x0F\\x85....)",
+				"\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x40-\\x7F](.)[\\x40-\\x4F]?\\x0F\\x2E[\\xC0-\\xFF](?:\\x7A.|\\x0F\\x8A....)(?:\\x74.|\\x0F\\x84....)",
+				".{0,40}?(?:\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x40-\\x7F]\\2.{0,8}?\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x40-\\x7F]\\3|\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x40-\\x7F]\\3.{0,8}?\\xF3[\\x40-\\x4F]?\\x0F\\x11[\\x40-\\x7F]\\2)",
+				".{0,24}?\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x40-\\x7F](.)",
+				"[\\x40-\\x4F]?\\x0F\\x57[\\xC0-\\xFF][\\x40-\\x4F]?\\x0F\\x2E[\\xC0-\\xFF](?:\\x7A.|\\x0F\\x8A....)(?:\\x75.|\\x0F\\x85....)",
+				"(?:\\x83\\xA1\\1\\xFB|[\\x40-\\x4F]?\\x83[\\xE0-\\xE7]\\xFB[\\x40-\\x4F]?\\x89[\\x81\\x89\\x91\\x99\\xA9\\xB1\\xB9]\\1)"
+			],
+			"captures": [
+				{
+					"name": "AtkResNode.DrawFlags",
+					"type": "offset",
+					"description": "uint: bit 0 dirty, bit 2 scaled or rotated (0xA0 before 7.40, 0xB0 since); not used by the plugin."
+				},
+				{
+					"name": "AtkResNode.ScaleX",
+					"type": "offset",
+					"description": "float (0x4C)."
+				},
+				{
+					"name": "AtkResNode.ScaleY",
+					"type": "offset",
+					"description": "float (0x50)."
+				},
+				{
+					"name": "AtkResNode.Rotation",
+					"type": "offset",
+					"description": "float, radians (0x54); not used by the plugin."
+				}
+			]
+		},
+		"AtkResNodeDispatchEvent": {
+			"description": "bool AtkResNode.DispatchEvent(AtkResNode* this, AtkEventDispatcher.Event* evt) (FUN_14065F510 in 7.56h): if the event bubbles, walks this and its parents (ParentNode) until a node's AtkEventManager has an event of the type and dispatches it there. Resolves to the function containing the match (it starts a few bytes in). Holds since 2020.07; since 7.00 a copy is also inlined elsewhere (FUN_140686xxx in 7.56h), which the null test of this excludes.",
+			"resolve": "function",
+			"pattern": [
+				"\\x48\\x85\\xC9(?:[\\x74\\x75].|\\x0F[\\x84\\x85]....).{0,16}?\\xF6\\x42\\x02\\x01.{0,8}?(?:\\x74.|\\x0F\\x84....)",
+				".{0,16}?[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				".{0,16}?\\x0F\\xB6[\\x40-\\x7F](.)\\x3B[\\xC0-\\xFF](?:\\x74.|\\x0F\\x84....)",
+				"[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:\\x75.|\\x0F\\x85....)",
+				".{0,16}?[\\x48\\x49]\\x8D[\\x48-\\x4F]\\1.{0,8}?\\xE8(....)\\x84\\xC0(?:\\x75.|\\x0F\\x85....)",
+				"[\\x48-\\x4F]\\x8B[\\x40-\\x7F](.)[\\x48-\\x4F]\\x85[\\xC0-\\xFF](?:\\x75.|\\x0F\\x85....)"
+			],
+			"captures": [
+				{
+					"name": "AtkResNode.AtkEventManager",
+					"type": "offset",
+					"description": "AtkEventManager, embedded; its first field is the event list (0x18); not used by the plugin."
+				},
+				{
+					"name": "AtkEvent.Type",
+					"type": "offset",
+					"description": "byte (0x28); not used by the plugin."
+				},
+				{
+					"name": "AtkEvent.NextEvent",
+					"type": "offset",
+					"description": "AtkEvent* (0x20); not used by the plugin."
+				},
+				{
+					"name": "AtkEventManager.DispatchEvent",
+					"type": "rel32",
+					"description": "Not used by the plugin."
+				},
+				{
+					"name": "AtkResNode.ParentNode",
+					"type": "offset",
+					"description": "AtkResNode* (0x20)."
+				}
+			]
+		},
+		"ItalicQuad": {
+			"description": "In the glyph quad emitter (GlyphQuad's caller in AtkFontAnalyzerRenderer vf6): if the state's flags have italic (bit 27), the top vertices are moved right by the renderer's shear (the font's line height * cos 75 degrees). Only its captures are used. Holds since 2020.07.",
+			"resolve": "none",
+			"pattern": [
+				"\\xF7[\\x40-\\x47](.)\\x00\\x00\\x00\\x08",
+				".{0,40}?\\x74.\\xF3[\\x40-\\x4F]?\\x0F\\x10[\\x80-\\xBF](....)"
+			],
+			"captures": [
+				{
+					"name": "FontAnalyzerState.Flags",
+					"type": "offset",
+					"description": "uint: the flags of the text being laid out, a copy of GameFontSet.DrawFlags changed by macros; bit 27 italic (0x38)."
+				},
+				{
+					"name": "AtkFontAnalyzerRenderer.ItalicShear",
+					"type": "offset",
+					"description": "float (0x274; 0x234 in 2020.07..2021.02)."
+				}
+			]
+		},
+		"ItalicMacro": {
+			"description": "In AtkFontAnalyzerBase vf4, the <italic> macro (0x1A): sets the state's italic bit (27) to its argument, and when it goes from set to clear, sets bit 30 (the next glyph moves right by the font's italic correction). Only its captures are used. Holds since 2020.07.",
+			"resolve": "none",
+			"pattern": [
+				"\\x0F\\xBA[\\xF0-\\xF7]\\x1B",
+				".{0,32}?\\x0F\\xBA[\\xE0-\\xE7]\\x1B(?:\\x72.|\\x0F\\x82....)",
+				"\\x0F\\xBA[\\xE8-\\xEF]\\x1E[\\x40-\\x4F]?\\x89[\\x40-\\x7F](.)"
+			],
+			"captures": [
+				{
+					"name": "FontAnalyzerState.Flags",
+					"type": "offset",
+					"description": "(0x38)."
+				}
+			]
+		}
+	}
+}
