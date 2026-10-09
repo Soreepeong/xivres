@@ -29,6 +29,9 @@
     <ClInclude Include="include\xivres\excel.h" />
     <ClInclude Include="include\xivres\excel.type2gen.h" />
     <ClInclude Include="include\xivres\fontdata.h" />
+    <ClInclude Include="include\xivres\game_layout.h" />
+    <ClInclude Include="include\xivres\pe_image.h" />
+    <ClInclude Include="include\xivres\util.byte_regex.h" />
     <ClInclude Include="include\xivres\installation.h" />
     <ClInclude Include="include\xivres\image_change_data.h" />
     <ClInclude Include="include\xivres\path_spec.h" />
@@ -82,6 +85,9 @@
     <ClCompile Include="impl\excel.cpp" />
     <ClCompile Include="impl\excel.type2gen.cpp" />
     <ClCompile Include="impl\fontdata.cpp" />
+    <ClCompile Include="impl\game_layout.cpp" />
+    <ClCompile Include="impl\pe_image.cpp" />
+    <ClCompile Include="impl\util.byte_regex.cpp" />
     <ClCompile Include="impl\installation.cpp" />
     <ClCompile Include="impl\packed_stream.hotswap.cpp" />
     <ClCompile Include="impl\packed_stream.oplocking.cpp" />

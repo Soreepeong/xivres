@@ -6,6 +6,7 @@
 #include <xivres/packed_stream.standard.h>
 #include <xivres/packed_stream.texture.h>
 #include <xivres/path_spec.h>
+#include <xivres/pe_image.h>
 #include <xivres/sqpack.generator.h>
 #include <xivres/sqpack.reader.h>
 #include <xivres/textools.h>
@@ -1050,18 +1051,12 @@ static std::span<char> get_clean_exe_span() {
 
 static std::pair<std::span<const char>, ptrdiff_t> get_clean_text_section() {
 	const auto buf = get_clean_exe_span();
-	const auto& dosHeader = *reinterpret_cast<IMAGE_DOS_HEADER*>(&buf[0]);
-	const auto& ntHeader64 = *reinterpret_cast<IMAGE_NT_HEADERS64*>(&buf[dosHeader.e_lfanew]);
-	const auto sectionHeaders = std::span(IMAGE_FIRST_SECTION(&ntHeader64), ntHeader64.FileHeader.NumberOfSections);
-	for (const auto& sectionHeader : sectionHeaders) {
-		const auto section = std::span(&buf[sectionHeader.PointerToRawData], sectionHeader.SizeOfRawData);
-		if (strncmp(reinterpret_cast<const char*>(sectionHeader.Name), ".text", IMAGE_SIZEOF_SHORT_NAME) != 0)
-			continue;
-
-		return {section, sectionHeader.VirtualAddress - sectionHeader.PointerToRawData};
-	}
-
-	throw std::runtime_error(".text section not found?");
+	const auto image = xivres::pe_image::from_file(std::span(reinterpret_cast<const uint8_t*>(buf.data()), buf.size()));
+	const auto text = image.find_section(".text");
+	if (!text)
+		throw std::runtime_error(".text section not found?");
+	const auto data = image.section_data(*text);
+	return {std::span(reinterpret_cast<const char*>(data.data()), data.size()), static_cast<ptrdiff_t>(text->VirtualAddress) - text->RawAddress};
 }
 
 static void* find_existing_resource_handle_finder() {

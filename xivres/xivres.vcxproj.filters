@@ -80,6 +80,15 @@
     <ClInclude Include="include\xivres\util.span_cast.h">
       <Filter>Headers\util</Filter>
     </ClInclude>
+    <ClInclude Include="include\xivres\game_layout.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\pe_image.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="include\xivres\util.byte_regex.h">
+      <Filter>Headers\util</Filter>
+    </ClInclude>
     <ClInclude Include="include\xivres\installation.h">
       <Filter>Headers</Filter>
     </ClInclude>
@@ -191,6 +200,15 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="impl\common.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\game_layout.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\pe_image.cpp">
+      <Filter>Impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\util.byte_regex.cpp">
       <Filter>Impl</Filter>
     </ClCompile>
     <ClCompile Include="impl\installation.cpp">

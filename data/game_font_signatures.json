@@ -68,6 +68,10 @@
 		"ReferencedClassBase.DecRef.VtableOffset": {
 			"value": 24,
 			"description": "DecRef's offset in the vtable of a Kernel::Texture (vf3, 0x18), as it has always been; no code site pins it down well enough for a signature."
+		},
+		"UIModule.GetRaptureAtkModule.VtableOffset": {
+			"value": 56,
+			"description": "GetRaptureAtkModule's offset in the vtable of UIModule (vf7, 0x38), as it has been since 2.x; it returns the module embedded in UIModule (at 0xD2690 in 7.56h), which moves every patch."
 		}
 	},
 	"signatures": {
@@ -2005,6 +2009,75 @@
 					"name": "FontAnalyzerState.Flags",
 					"type": "offset",
 					"description": "(0x38)."
+				}
+			]
+		},
+		"AtkModuleLoadFonts": {
+			"description": "void AtkModule.LoadFonts(AtkModule* this, bool lobby, bool forceReload) (vf43; FUN_1406A8FC0 in 7.56h): loads the 41 fonts from the lobby or the game's font table (as FontTables does), then remembers which in AtkModule.IsLobby. The font editor's hot reload calls it. Holds since 7.00.",
+			"resolve": "function",
+			"pattern": [
+				"[\\x40-\\x4F]\\x80[\\xF8-\\xFF]\\x01(?:\\x75.|\\x0F\\x85....)",
+				"\\x41?\\x83[\\xB8-\\xBF](....)\\x01",
+				"[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				"[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				"[\\x48-\\x4F]\\x0F\\x45[\\xC0-\\xFF](?:\\xEB.|\\xE9....)",
+				"[\\x48\\x4C]\\x8D[\\x05\\x0D\\x15\\x1D\\x25\\x2D\\x35\\x3D](....)",
+				".{0,400}?\\x41?\\x83[\\xF8-\\xFF]\\x29",
+				".{0,600}?[\\x40-\\x4F]\\x88[\\x80-\\xBF](....)"
+			],
+			"captures": [
+				{
+					"name": "AtkModule.LobbyFontTable",
+					"type": "offset",
+					"description": "int: which lobby table (0x280)."
+				},
+				{
+					"name": "LobbyTableA",
+					"type": "rel32",
+					"description": "As FontTables finds it."
+				},
+				{
+					"name": "LobbyTableB",
+					"type": "rel32",
+					"description": "As FontTables finds it."
+				},
+				{
+					"name": "GameTable",
+					"type": "rel32",
+					"description": "As FontTables finds it."
+				},
+				{
+					"name": "AtkModule.IsLobby",
+					"type": "offset",
+					"description": "bool: the lobby argument of the last LoadFonts (0x8190)."
+				}
+			]
+		},
+		"GetUiModuleCall": {
+			"description": "A call of UIModule* Framework.GetUIModule(Framework* this) on the instance (read from a second global of it, not Framework.Instance's), as the font editor's hot reload has found it since 2022 (in FUN_140892100 in 7.56h). GetUIModule only reads a field that moves every patch.",
+			"resolve": "none",
+			"pattern": [
+				"\\x48\\x8B\\x0D....\\x4C\\x89.\\x24....\\xE8(....)\\x80\\x7B\\x1D\\x01"
+			],
+			"captures": [
+				{
+					"name": "Framework.GetUIModule",
+					"type": "rel32",
+					"description": "Framework.GetUIModule."
+				}
+			]
+		},
+		"GetAddonByNameCall": {
+			"description": "A call of AtkUnitBase* AtkUnitManager.GetAddonByName(AtkUnitManager* this, const char* name, int index) in RaptureAtkUnitManager vf33, as the font editor's hot reload has found it since 2022. GetAddonByName itself has a byte-identical twin (FUN_14067E5D0 in 7.56h), so its own code matches twice.",
+			"resolve": "none",
+			"pattern": [
+				"\\xE8(....)\\x48\\x8B\\xF8\\x41\\xB0\\x01"
+			],
+			"captures": [
+				{
+					"name": "AtkUnitManager.GetAddonByName",
+					"type": "rel32",
+					"description": "AtkUnitManager.GetAddonByName (FUN_14067E520 in 7.56h)."
 				}
 			]
 		}

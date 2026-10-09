@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "utils.h"
 
+#include <xivres/util.byte_regex.h>
+
 std::filesystem::path utils::loaded_module::path() const {
 	std::wstring buf(MAX_PATH, L'\0');
 	for (;;) {
@@ -267,14 +269,14 @@ utils::signature_finder& utils::signature_finder::look_for_hex(std::string_view 
 std::vector<utils::signature_finder::result> utils::signature_finder::find(size_t minCount, size_t maxCount, bool bErrorOnMoreThanMaximum) const {
 	std::vector<result> res;
 
+	namespace byte_regex = xivres::util::byte_regex;
 	for (const auto& rangeSpan : m_ranges) {
+		const auto data = std::span(reinterpret_cast<const uint8_t*>(rangeSpan.data()), rangeSpan.size());
 		for (size_t patternIndex = 0; patternIndex < m_patterns.size(); patternIndex++) {
-			srell::match_results<std::span<const char>::iterator> matches;
-			auto ptr = rangeSpan.begin();
-			for (size_t matchIndex = 0;; ptr = matches[0].first + 1, matchIndex++) {
-				if (!m_patterns[patternIndex].search(ptr, rangeSpan.end(), rangeSpan.begin(), matches, srell::regex_constants::match_flag_type::match_default))
-					break;
-
+			srell::cmatch matches;
+			for (size_t from = 0, matchIndex = 0;
+				byte_regex::search(m_patterns[patternIndex], data, from, matches);
+				from = byte_regex::resume_offset(matches, data, byte_regex::resume::next_byte), matchIndex++) {
 				for (size_t captureIndex = 0; captureIndex < matches.size(); captureIndex++) {
 					const auto& capture = matches[captureIndex];
 					res.emplace_back(
