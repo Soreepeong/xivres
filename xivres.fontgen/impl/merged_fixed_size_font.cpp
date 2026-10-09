@@ -123,6 +123,16 @@ bool xivres::fontgen::merged_fixed_size_font::try_get_glyph_outline(char32_t cod
 	return true;
 }
 
+std::optional<size_t> xivres::fontgen::merged_fixed_size_font::get_font_index(char32_t codepoint) const {
+	if (const auto it = m_info->UsedFontIndices.find(codepoint); it != m_info->UsedFontIndices.end())
+		return it->second;
+	return std::nullopt;
+}
+
+int xivres::fontgen::merged_fixed_size_font::get_font_vertical_adjustment(size_t fontIndex) const {
+	return get_vertical_adjustment(*m_info, *m_fonts.at(fontIndex));
+}
+
 char32_t xivres::fontgen::merged_fixed_size_font::uniqid_to_glyph(const void* pc) const {
 	for (const auto& font : m_fonts) {
 		if (const auto r = font->uniqid_to_glyph(pc))

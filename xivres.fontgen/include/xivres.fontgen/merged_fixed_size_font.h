@@ -85,6 +85,12 @@ namespace xivres::fontgen {
 
 		[[nodiscard]] bool try_get_glyph_outline(char32_t codepoint, glyph_outline& outline) const override;
 
+		// Returns the index of the font that draws the codepoint, in the order the fonts were given in.
+		[[nodiscard]] std::optional<size_t> get_font_index(char32_t codepoint) const;
+
+		// Returns the number of pixels by which the glyphs of a font move down to align with the first font.
+		[[nodiscard]] int get_font_vertical_adjustment(size_t fontIndex) const;
+
 	private:
 		[[nodiscard]] static int get_vertical_adjustment(const info& info, const fixed_size_font& font);
 
