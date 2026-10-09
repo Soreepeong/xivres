@@ -9,6 +9,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+#include <nlohmann/json.hpp>
 
 #include "../include/xivres.fontgen/image_fixed_size_font.h"
 #include "../include/xivres.fontgen/outline_clipping.h"
@@ -135,79 +136,102 @@ namespace {
 		bool DrawsText = false;
 	};
 
-	// Shapes other than the hollow box follow the glyphs of the Lodestone web font (FFXIV_Lodestone_SSF), whose units are
-	// the same as these. The text areas span the capitals of the texts in those glyphs, from the top to the baseline.
-	// characterCount is of the text that is put in the shape, which some shapes are sized by.
-	shape_definition make_shape(glyph_merge_shape shape, size_t characterCount = 1) {
-		shape_definition s;
+	// The built-in shapes (data/glyph_merge_shapes.json, which FontChanger.DalamudPlugin reads too).
+#include "glyph_merge_shapes.json.h"
+
+	const nlohmann::json& get_shape_specs() {
+		static const auto s_shapes = nlohmann::json::parse(GlyphMergeShapesJson).at("shapes");
+		return s_shapes;
+	}
+
+	const char* get_shape_key(glyph_merge_shape shape) {
 		switch (shape) {
-			case glyph_merge_shape::Box:
-				s.Advance = 1000;
-				add_rounded_polygon(s.Path, rect_vertices(71, 71, 929, 926), 110);
-				s.AreaX1 = 165, s.AreaY1 = 159, s.AreaX2 = 835, s.AreaY2 = 850;
-				break;
-
-			case glyph_merge_shape::NumberBox:
-				s.Advance = 1000;
-				if (characterCount <= 1) {
-					add_rounded_polygon(s.Path, rect_vertices(71, 71, 929, 926), 110);
-					s.AreaX1 = 132, s.AreaY1 = 192, s.AreaX2 = 879, s.AreaY2 = 816;
-				} else {
-					add_rounded_polygon(s.Path, rect_vertices(75, 75, 926, 922), 110);
-					s.AreaX1 = 154, s.AreaY1 = 199, s.AreaX2 = 827, s.AreaY2 = 793;
-				}
-				break;
-
-			case glyph_merge_shape::Ime:
-				s.Advance = 1000;
-				add_rounded_polygon(s.Path, rect_vertices(28, 28, 972, 969), 121);
-				s.AreaX1 = 105, s.AreaY1 = 111, s.AreaX2 = 895, s.AreaY2 = 880;
-				break;
-
-			case glyph_merge_shape::HollowBox:
-				s.Advance = 1000;
-				add_rounded_polygon(s.Path, rect_vertices(45, 45, 955, 955), 145);
-				add_rounded_polygon(s.Path, rect_vertices(95, 95, 905, 905, true), 95);
-				s.AreaX1 = 180, s.AreaY1 = 210, s.AreaX2 = 820, s.AreaY2 = 790;
-				s.DrawsText = true;
-				break;
-
-			case glyph_merge_shape::AmPm:
-				s.Advance = 750;
-				add_rounded_polygon(s.Path, rect_vertices(41, 61, 699, 916), 110);
-				s.AreaX1 = 107, s.AreaY1 = 136, s.AreaX2 = 626, s.AreaY2 = 841;
-				break;
-
-			case glyph_merge_shape::Hexagon:
-				s.Advance = 1250;
-				add_rounded_polygon(s.Path, {{287, 0}, {972, 0}, {1257, 499}, {972, 998}, {287, 998}, {1, 499}}, 130);
-				s.AreaX1 = 263, s.AreaY1 = 196, s.AreaX2 = 983, s.AreaY2 = 812;
-				break;
-
-			case glyph_merge_shape::Rhombus:
-				s.Advance = 1000;
-				add_rounded_polygon(s.Path, {{500, -94}, {1094, 499}, {500, 1092}, {-94, 499}}, 236);
-				s.AreaX1 = 185, s.AreaY1 = 178, s.AreaX2 = 815, s.AreaY2 = 822;
-				break;
-
-			case glyph_merge_shape::Bozja:
-				s.Advance = 1750;
-				add_rounded_polygon(s.Path, rect_vertices(168, 50, 1582, 948), 200);
-				s.AreaX1 = 330, s.AreaY1 = 163, s.AreaX2 = 1420, s.AreaY2 = 837;
-				break;
-
-			case glyph_merge_shape::Time:
-				s.Advance = 2000;
-				add_rounded_polygon(s.Path, rect_vertices(63, 31, 1938, 967), 234);
-				s.AreaX1 = 220, s.AreaY1 = 156, s.AreaX2 = 1780, s.AreaY2 = 852;
-				break;
-
-			case glyph_merge_shape::None:
-			case glyph_merge_shape::Custom:
-			case glyph_merge_shape::Glyph:
-				break;
+			case glyph_merge_shape::AmPm: return "amPm";
+			case glyph_merge_shape::Ime: return "ime";
+			case glyph_merge_shape::Box: return "box";
+			case glyph_merge_shape::NumberBox: return "numberBox";
+			case glyph_merge_shape::HollowBox: return "hollowBox";
+			case glyph_merge_shape::Hexagon: return "hexagon";
+			case glyph_merge_shape::Rhombus: return "rhombus";
+			case glyph_merge_shape::Bozja: return "bozja";
+			case glyph_merge_shape::Time: return "time";
+			default: return nullptr;
 		}
+	}
+
+	// Makes a built-in shape, as data/glyph_merge_shapes.json describes it. characterCount is of the text that is put in
+	// the shape, which some shapes are sized by; size is the font's, at which the game's glyphs may say where the shape
+	// goes; and an underlined IME box (a text beginning with "_") has a bar cut out at its lower left, with the text to
+	// the right of it.
+	shape_definition make_shape(glyph_merge_shape shape, size_t characterCount = 1, float size = 0.f, bool underline = false) {
+		shape_definition s;
+		const auto key = get_shape_key(shape);
+		if (!key)
+			return s;
+
+		const auto* spec = &get_shape_specs().at(key);
+		if (characterCount > 1 && spec->contains("more"))
+			spec = &spec->at("more");
+		const auto rect = [](const nlohmann::json& v) { return std::array{v[0].get<float>(), v[1].get<float>(), v[2].get<float>(), v[3].get<float>()}; };
+
+		std::vector<point> vertices;
+		if (spec->contains("rect")) {
+			const auto r = rect(spec->at("rect"));
+			vertices = rect_vertices(r[0], r[1], r[2], r[3]);
+		} else {
+			for (const auto& v : spec->at("polygon"))
+				vertices.push_back({v[0].get<float>(), v[1].get<float>()});
+		}
+		const auto radius = spec->at("radius").get<float>();
+		add_rounded_polygon(s.Path, vertices, radius);
+		s.Advance = spec->at("advance").get<float>();
+		auto area = rect(spec->at("area"));
+
+		// The box of the vertices, which the game's placements are of.
+		std::array nominal{(std::numeric_limits<float>::max)(), (std::numeric_limits<float>::max)(), (std::numeric_limits<float>::lowest)(), (std::numeric_limits<float>::lowest)()};
+		for (const auto& v : vertices)
+			nominal = {(std::min)(nominal[0], v.x), (std::min)(nominal[1], v.y), (std::max)(nominal[2], v.x), (std::max)(nominal[3], v.y)};
+
+		// A hollow shape: the inside is cut out (reversed, so that it is a hole), at least a pixel in, as the game's small
+		// glyphs draw it; the text is drawn on it.
+		if (const auto it = spec->find("ring"); it != spec->end()) {
+			const auto ring = size > 0 ? (std::max)(it->get<float>(), ShapeUnitsPerEm / size) : it->get<float>();
+			add_rounded_polygon(s.Path, rect_vertices(nominal[0] + ring, nominal[1] + ring, nominal[2] - ring, nominal[3] - ring, true), (std::max)(0.f, radius - ring));
+			s.DrawsText = true;
+		}
+
+		if (const auto it = spec->find("underline"); underline && it != spec->end()) {
+			const auto b = rect(it->at("bar"));
+			const auto bar = rect_vertices(b[0], b[1], b[2], b[3], true);
+			s.Path.move_to(bar[0]);
+			for (size_t i = 1; i < bar.size(); i++)
+				s.Path.line_to(bar[i]);
+			s.Path.close();
+			area = rect(it->at("area"));
+		}
+
+		// Stretched from the box of the vertices to the game's, at the sizes of its fonts.
+		const auto& placements = spec->at("game");
+		const auto game = std::ranges::find_if(placements, [size](const nlohmann::json& p) { return std::abs(p[0].get<float>() - size) < 0.01f; });
+		if (game != placements.end()) {
+			const auto g = std::array{(*game)[1].get<float>(), (*game)[2].get<float>(), (*game)[3].get<float>(), (*game)[4].get<float>(), (*game)[5].get<float>()};
+			const auto sx = (g[3] - g[1]) / (nominal[2] - nominal[0]);
+			const auto sy = (g[4] - g[2]) / (nominal[3] - nominal[1]);
+			const auto mapX = [&](float x) { return g[1] + (x - nominal[0]) * sx; };
+			const auto mapY = [&](float y) { return g[2] + (y - nominal[1]) * sy; };
+			for (auto& p : s.Path.Points)
+				p = {mapX(p.x), mapY(p.y)};
+			area = {mapX(area[0]), mapY(area[1]), mapX(area[2]), mapY(area[3])};
+			s.Advance = g[0];
+		}
+
+		s.AreaX1 = area[0], s.AreaY1 = area[1], s.AreaX2 = area[2], s.AreaY2 = area[3];
 		return s;
+	}
+
+	// Whether an IME box is underlined: its text begins with "_", which the bar stands for.
+	bool is_underlined(glyph_merge_shape shape, const std::u32string& text) {
+		return shape == glyph_merge_shape::Ime && text.starts_with(U'_');
 	}
 
 	// Parses SVG path data: M, L, H, V, C, S, Q, T, A, and Z, absolute and relative.
@@ -903,9 +927,11 @@ std::optional<std::string> xivres::fontgen::glyph_merging_fixed_size_font::get_s
 	if (mapping.Shape == glyph_merge_shape::Custom)
 		return mapping.CustomPath.empty() || !mapping.CustomSvg.empty() ? std::nullopt : std::optional(mapping.CustomPath);
 
-	const auto& text = it->second.second < mapping.Texts.size() ? mapping.Texts[it->second.second] : std::u32string();
+	const auto& mappedText = it->second.second < mapping.Texts.size() ? mapping.Texts[it->second.second] : std::u32string();
+	const auto underline = is_underlined(mapping.Shape, mappedText);
+	const auto text = underline ? mappedText.substr(1) : mappedText;
 	const auto characterCount = static_cast<size_t>(std::ranges::count_if(text, [](char32_t c) { return c != U' ' && c != U'\n' && c != U'\r'; }));
-	const auto shape = make_shape(mapping.Shape, characterCount);
+	const auto shape = make_shape(mapping.Shape, characterCount, m_info->BaseFont->font_size(), underline);
 	if (shape.Path.Points.empty())
 		return std::nullopt;
 
@@ -980,14 +1006,17 @@ const xivres::fontgen::fixed_size_font& xivres::fontgen::glyph_merging_fixed_siz
 	return *font;
 }
 
-xivres::fontgen::glyph_merging_fixed_size_font::arrangement xivres::fontgen::glyph_merging_fixed_size_font::arrange(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& text) const {
+xivres::fontgen::glyph_merging_fixed_size_font::arrangement xivres::fontgen::glyph_merging_fixed_size_font::arrange(char32_t codepoint, const glyph_merge_mapping& mapping, const std::u32string& mappedText) const {
 	const auto& params = m_info->Params;
 	const auto size = m_info->BaseFont->font_size();
 	const auto scale = size / ShapeUnitsPerEm;
 	const auto baselineY = static_cast<float>(m_info->BaseFont->ascent());
 
+	// The bar of an underlined IME box stands for the text's leading "_".
+	const auto underline = is_underlined(mapping.Shape, mappedText);
+	const auto text = underline ? mappedText.substr(1) : mappedText;
 	const auto characterCount = static_cast<size_t>(std::ranges::count_if(text, [](char32_t c) { return c != U' ' && c != U'\n' && c != U'\r'; }));
-	auto shape = make_shape(mapping.Shape, characterCount);
+	auto shape = make_shape(mapping.Shape, characterCount, size, underline);
 	std::optional<raster_shape> rasterShape;
 
 	// Text is fitted into the given area, or the middle of the bounds of the shape, given in the coordinates of shapes.

@@ -60,6 +60,9 @@
     <ClCompile Include="impl\glyph_merging_fixed_size_font.cpp" />
     <ClCompile Include="impl\image_fixed_size_font.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="data\glyph_merge_shapes.json" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -175,6 +178,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -196,6 +200,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -217,6 +222,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -238,6 +244,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -247,7 +254,27 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir)generated;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <!--
+    The built-in shapes of glyph merging (data\glyph_merge_shapes.json, which FontChanger.DalamudPlugin reads too),
+    compiled in as a string: a header with the file in a raw string literal.
+  -->
+  <Target Name="GenerateGlyphMergeShapes" BeforeTargets="ClCompile" Inputs="data\glyph_merge_shapes.json" Outputs="$(IntDir)generated\glyph_merge_shapes.json.h">
+    <ReadLinesFromFile File="data\glyph_merge_shapes.json">
+      <Output TaskParameter="Lines" ItemName="GlyphMergeShapesLine" />
+    </ReadLinesFromFile>
+    <MakeDir Directories="$(IntDir)generated" />
+    <WriteLinesToFile
+      File="$(IntDir)generated\glyph_merge_shapes.json.h"
+      Lines="// Generated from data\glyph_merge_shapes.json.;static constexpr char GlyphMergeShapesJson[] = R&quot;json(;@(GlyphMergeShapesLine);)json&quot;%3B"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+  </Target>
 </Project>
