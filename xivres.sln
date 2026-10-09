@@ -13,8 +13,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres", "xivres\xivres.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "example", "xivres.example\xivres.example.vcxproj", "{7E0615C0-F086-4FCB-9DF0-E381CBB684F5}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.fontgen", "xivres.fontgen\xivres.fontgen.vcxproj", "{90E4B098-E528-44EE-B643-56A0EE1A4FFB}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.vorbis", "xivres.vorbis\xivres.vorbis.vcxproj", "{58FAD283-8045-4C8E-9531-5B2B37856F74}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xivres.redirect", "xivres.redirect\xivres.redirect.vcxproj", "{C1FB16A6-F92D-4AE1-953F-FE6DB547045D}"
@@ -38,12 +36,6 @@ Global
 		{7E0615C0-F086-4FCB-9DF0-E381CBB684F5}.Release|x64.Build.0 = Release|x64
 		{7E0615C0-F086-4FCB-9DF0-E381CBB684F5}.ReleaseWithoutAsm|x64.ActiveCfg = Release|x64
 		{7E0615C0-F086-4FCB-9DF0-E381CBB684F5}.ReleaseWithoutAsm|x64.Build.0 = Release|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.Debug|x64.ActiveCfg = Debug|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.Debug|x64.Build.0 = Debug|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.Release|x64.ActiveCfg = Release|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.Release|x64.Build.0 = Release|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.ReleaseWithoutAsm|x64.ActiveCfg = Release|x64
-		{90E4B098-E528-44EE-B643-56A0EE1A4FFB}.ReleaseWithoutAsm|x64.Build.0 = Release|x64
 		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|x64.ActiveCfg = Debug|x64
 		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Debug|x64.Build.0 = Debug|x64
 		{58FAD283-8045-4C8E-9531-5B2B37856F74}.Release|x64.ActiveCfg = Release|x64

@@ -1,5 +1,75 @@
 {
-	"comment": "Signatures of the game's code that font replacement hooks, shared by FontChanger.DalamudPlugin and XivAlexander. Each pattern (its parts concatenated) is a regex over the bytes of the game's .text section that must match exactly once; it must work the same in SRELL (dotall), .NET Regex (Singleline, over Latin-1 text) and Python re (bytes, re.S). A signature resolves (resolve) to the match's start (match), the start of the function containing it, by the unwind data (function), the position of its capture of type position (capture), or to nothing, its captures being all that is used (none). Captures are the regex's groups in order; a name given to several groups, in alternatives, is what the one that matched captured, and a group that didn't match captures nothing. An offset is a little-endian signed displacement (of the group's size, 1 or 4 bytes) of a field, named Structure.Field, or of a field relative to another, named Structure.Field-Structure.Other (the first minus the second); a size, a structure's size; a count, a number of elements; a rel32, a target relative to the end of the group; a position, an empty group's address.",
+	"comment": "Signatures of the game's code that font replacement hooks, shared by FontChanger.DalamudPlugin and XivAlexander. Each pattern (its parts concatenated) is a regex over the bytes of the game's .text section that must match exactly once; it must work the same in SRELL (dotall), .NET Regex (Singleline, over Latin-1 text) and Python re (bytes, re.S). A signature resolves (resolve) to the match's start (match), the start of the function containing it, by the unwind data (function), the position of its capture of type position (capture), or to nothing, its captures being all that is used (none). Captures are the regex's groups in order; a name given to several groups, in alternatives, is what the one that matched captured, and a group that didn't match captures nothing. An offset is a little-endian signed displacement (of the group's size, 1 or 4 bytes) of a field, named Structure.Field, or of a field relative to another, named Structure.Field-Structure.Other (the first minus the second); a size, a structure's size; a count, a number of elements; a rel32, a target relative to the end of the group; a position, an empty group's address. Constants are facts about the game that no signature captures, named as captures are: an int is used where no signature captured the name (one that does must agree), a string or a list of ints as it is.",
+	"constants": {
+		"AtkFontManager.FontSets": {
+			"value": 0,
+			"description": "GameFontSet*: at the start, where the regexes have no displacement to capture."
+		},
+		"GameFont.TextureResourceHandles": {
+			"value": 0,
+			"description": "TextureResourceHandle*[MaxTextures]: at the start, as for FontSets."
+		},
+		"GameFont.TextureHeight-GameFont.TextureWidth": {
+			"value": 2,
+			"description": "ushort: TextureHeight follows TextureWidth (the FDT header's order)."
+		},
+		"GameFont.LineHeight-GameFont.Size": {
+			"value": 4,
+			"description": "int: LineHeight follows Size (BuildFont copies both from the FDT header at once)."
+		},
+		"GameFont.Flags.Ready": {
+			"value": 2,
+			"description": "The bit of GameFont.Flags that BuildFont sets once the font is built; a font without it may have no glyph map."
+		},
+		"FontTableEntry": {
+			"value": 24,
+			"description": "The size of a font table entry {u64 texture count, char* texture name format, char* FDT name} (0x18)."
+		},
+		"FontTableEntry.TextureCount": {
+			"value": 0,
+			"description": "u64: the number of textures of the entry's font."
+		},
+		"FontTable.MaxTextureCount": {
+			"value": 7,
+			"description": "The most textures a font of the global client's tables has; for when the tables aren't found."
+		},
+		"NodeType.Text": {
+			"value": 3,
+			"description": "AtkResNode.Type of a text node."
+		},
+		"NodeType.FirstComponent": {
+			"value": 1000,
+			"description": "AtkResNode.Type of the first component node type; those after are components too."
+		},
+		"AtkTextNode.FontCacheFlags.UseFontCache": {
+			"value": 64,
+			"description": "The bit of AtkTextNode.FontCacheFlags that asks for a font cache (0x40; ToggleFontCache)."
+		},
+		"FontAnalyzerState.Flags.Italic": {
+			"value": 134217728,
+			"description": "The italic bit of FontAnalyzerState.Flags (0x08000000; ItalicQuad, ItalicMacro)."
+		},
+		"GameFontSet.DrawFlags.Italic": {
+			"value": 134217728,
+			"description": "The italic bit of GameFontSet.DrawFlags, which the analyzer state's flags are a copy of (0x08000000)."
+		},
+		"LayOutCharacter.MissingGlyphSubstitutes": {
+			"value": [14909587, 45, 14913664],
+			"description": "The packed UTF-8 values LayOutCharacter takes from a font's glyph map for a character it has no glyph of, in order: U+3013 (0xE38093), '-' (0x2D), U+3400 (0xE39080)."
+		},
+		"AtkServer.EdgePass": {
+			"value": 5,
+			"description": "The pass of the edge outline among the 9 font shader pairs (4 text, 5 edge, 6 glare, 7 highlight, 8 emboss; LoadShaders)."
+		},
+		"AtkServer.EdgePixelShaderFile": {
+			"value": "FontEdgePS.shcd",
+			"description": "The file name of the edge pass's pixel shader (shader/sm5/shcd/FontEdgePS.shcd)."
+		},
+		"ReferencedClassBase.DecRef.VtableOffset": {
+			"value": 24,
+			"description": "DecRef's offset in the vtable of a Kernel::Texture (vf3, 0x18), as it has always been; no code site pins it down well enough for a signature."
+		}
+	},
 	"signatures": {
 		"PickFont": {
 			"description": "GameFont* PickFont(GameFontSet* this, bool useCache): picks the font of a font set for its size. Holds since 5.55; the GameFontSet offsets after 0x200 are 8 less before 7.30.",
@@ -877,8 +947,8 @@
 			]
 		},
 		"BuildFont": {
-			"description": "int BuildFont(AtkFontManager* this, ushort index) (FUN_14064ECF0 in 7.56h): binds a font's textures, converts its FDT into the GameFont (header, glyphs, glyph map since 7.40, kerning) and sets its flags. Only its captures are used. Holds since 2020.07 (5.x).",
-			"resolve": "match",
+			"description": "int BuildFont(AtkFontManager* this, ushort index) (FUN_14064ECF0 in 7.56h): binds a font's textures, converts its FDT into the GameFont (header, glyphs, glyph map since 7.40, kerning) and sets its flags. It builds only a font not ready yet (else returns -2), and is the only place a font is rebuilt in place (a font reload, a switch between the lobby's and the game's fonts); FontChanger.DalamudPlugin hooks it to refresh its copies of the font. Holds since 2020.07 (5.x).",
+			"resolve": "function",
 			"pattern": [
 				"\\x66[\\x3B\\x39][\\x40-\\x7F](.)(?:\\x73.|\\x0F\\x83....)",
 				".{0,40}?[\\x48-\\x4F]\\x69[\\xC0-\\xFF](....)[\\x48-\\x4F]\\x03[\\x40-\\x7F](.)",
@@ -1339,7 +1409,7 @@
 				{
 					"name": "AtkServer.LoadShaders",
 					"type": "rel32",
-					"description": "Loads the 9 VS/PS pairs (FUN_14063A760 in 7.56h)."
+					"description": "bool LoadShaders(AtkServer* this): loads the 9 VS/PS pairs synchronously, and takes their Kernel shaders (FUN_14063A760 in 7.56h); FontChanger.DalamudPlugin hooks it to put its edge shader in place again."
 				},
 				{
 					"name": "FontTable.Count",
