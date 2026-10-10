@@ -299,6 +299,11 @@ void xivres::oplocking_file_stream::hold_until(std::chrono::steady_clock::time_p
 		m_data->schedule_idle_locked();
 }
 
+void xivres::oplocking_file_stream::release() const {
+	const auto lock = std::scoped_lock(m_data->Mtx);
+	m_data->close_locked();
+}
+
 std::streamsize xivres::oplocking_file_stream::size() const {
 	const auto lock = std::scoped_lock(m_data->Mtx);
 	if (!m_data->Known && m_data->open_locked())

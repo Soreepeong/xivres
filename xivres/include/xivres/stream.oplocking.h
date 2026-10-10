@@ -30,6 +30,8 @@ namespace xivres {
 
 		void hold_until(std::chrono::steady_clock::time_point until) const;
 
+		void release() const;
+
 		[[nodiscard]] std::streamsize size() const override;
 		std::streamsize read(std::streamoff offset, void* buf, std::streamsize length) const override;
 
