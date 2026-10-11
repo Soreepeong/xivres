@@ -1,6 +1,8 @@
 #include "../include/xivres/excel.type2gen.h"
 #include "../include/xivres/util.span_cast.h"
 
+#include <numeric>
+
 using namespace xivres::util;
 
 uint32_t xivres::excel::type2gen::calculate_fixed_data_size(const std::vector<exh::column>& columns) {
@@ -45,13 +47,14 @@ uint32_t xivres::excel::type2gen::calculate_fixed_data_size(const std::vector<ex
 	return xivres::align<uint32_t>(size, 4).Alloc;
 }
 
-xivres::excel::type2gen::type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit)
+xivres::excel::type2gen::type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit, uint32_t fixedDataSize)
 	: Name(std::move(name))
 	, Columns(std::move(columns))
 	, ReadStrategy(readStrategy)
 	, DivideUnit(divideUnit)
-	, FixedDataSize(calculate_fixed_data_size(Columns)) {
-
+	, FixedDataSize(fixedDataSize ? fixedDataSize : calculate_fixed_data_size(Columns)) {
+	if (fixedDataSize && fixedDataSize < calculate_fixed_data_size(Columns))
+		throw std::invalid_argument(std::format("Fixed data size {} is smaller than the columns need", fixedDataSize));
 }
 
 void xivres::excel::type2gen::add_language(game_language language) {
@@ -126,6 +129,11 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 
 	pages.back().first.RowCountWithSkip = pages.back().second.back() - pages.back().second.front() + 1;
 
+	// Strings are stored in the order of their columns' offsets, as the game's files do.
+	std::vector<size_t> columnOrder(Columns.size());
+	std::iota(columnOrder.begin(), columnOrder.end(), size_t{});
+	std::ranges::stable_sort(columnOrder, {}, [this](size_t i) { return *Columns[i].Offset; });
+
 	for (const auto& page : pages) {
 		for (const auto language : Languages) {
 			std::map<uint32_t, std::vector<char>> rows;
@@ -153,7 +161,7 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 				if (columns.empty())
 					continue;
 
-				for (size_t i = 0; i < columns.size(); ++i) {
+				for (const auto i : columnOrder) {
 					auto& column = columns[i];
 					const auto& columnDefinition = Columns[i];
 					switch (columnDefinition.Type) {
@@ -214,7 +222,10 @@ std::map<xivres::path_spec, std::vector<char>, xivres::path_spec::FullPathCompar
 						std::ranges::reverse(target);
 					}
 				}
-				row.resize(xivres::align<size_t>(row.size(), 4));
+				if (AlignRowData)
+					row.resize(fixedDataOffset + xivres::align<size_t>(row.size() - fixedDataOffset, 4));
+				else
+					row.resize(xivres::align<size_t>(row.size(), 4));
 
 				auto& rowHeader = *reinterpret_cast<exd::row::header*>(row.data());
 				rowHeader.DataSize = static_cast<uint32_t>(row.size() - sizeof rowHeader);

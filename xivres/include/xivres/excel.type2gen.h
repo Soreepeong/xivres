@@ -19,8 +19,11 @@ namespace xivres::excel {
 		std::set<uint32_t> DivideAtIds;
 		std::vector<game_language> Languages;
 		std::vector<game_language> FillMissingLanguageFrom;
+		// Pad each row's data to 4 bytes, instead of the row with its header; some sheets are stored so.
+		bool AlignRowData = false;
 
-		type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit = SIZE_MAX);
+		// fixedDataSize: 0 to calculate from the columns; otherwise at least that, for sheets padded beyond 4-byte alignment.
+		type2gen(std::string name, std::vector<exh::column> columns, exh::read_strategy readStrategy, size_t divideUnit = SIZE_MAX, uint32_t fixedDataSize = 0);
 
 		void add_language(game_language language);
 
