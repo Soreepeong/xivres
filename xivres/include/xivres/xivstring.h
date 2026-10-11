@@ -273,7 +273,8 @@ namespace xivres {
 		xivexpr_uint32(std::string_view s);
 		xivexpr_uint32(const std::string& s) : xivexpr_uint32(std::string_view(s)) {}
 
-		[[nodiscard]] xivexpr_type type() const override { return static_cast<xivexpr_type>(m_value & 0xFF); }
+		// The first byte of its encoding, 0x01-0xCF or 0xF0-0xFE, which no other expression starts with.
+		[[nodiscard]] xivexpr_type type() const override;
 		xivexpr_uint32(uint32_t value) : m_value(value) {}
 		xivexpr_uint32& operator =(uint32_t r) { m_value = r; m_marker = 0; return *this; }
 		operator uint32_t() const { return m_value; }

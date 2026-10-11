@@ -18,7 +18,9 @@ std::unique_ptr<xivres::xivstring::xivexpr> xivres::xivstring::xivexpr::parse(st
 	++s_expressionDepth;
 	const auto depthGuard = util::on_dtor([] { --s_expressionDepth; });
 
-	const auto marker = static_cast<uint8_t>(s.at(0));
+	if (s.empty())
+		throw std::invalid_argument("Truncated expression");
+	const auto marker = static_cast<uint8_t>(s[0]);
 	if (marker < 0xD0)
 		return std::make_unique<xivexpr_uint32>(s);
 	if (marker < 0xE0)
@@ -30,7 +32,7 @@ std::unique_ptr<xivres::xivstring::xivexpr> xivres::xivstring::xivexpr::parse(st
 	if (marker == 0xEC)
 		return std::make_unique<xivexpr_param>(s);
 	if (marker < 0xF0)
-		throw std::runtime_error("Unsupported expression type");
+		throw std::invalid_argument("Unsupported expression type");
 	if (marker < 0xFF)
 		return std::make_unique<xivexpr_uint32>(s);
 	return std::make_unique<xivexpr_string>(s);
@@ -525,6 +527,19 @@ uint8_t xivres::xivstring::xivexpr_uint32::encoding_marker() const {
 	return (m_value & ~mask) ? 0 : m_marker;
 }
 
+xivres::xivstring::xivexpr_type xivres::xivstring::xivexpr_uint32::type() const {
+	if (const auto marker = encoding_marker())
+		return static_cast<xivexpr_type>(marker);
+	if (m_value < 0xCF)
+		return static_cast<xivexpr_type>(m_value + 1);
+	uint32_t flags = 0;
+	for (auto bit = 0; bit < 4; bit++) {
+		if (m_value & (0xFFu << (8 * bit)))
+			flags |= 1u << bit;
+	}
+	return static_cast<xivexpr_type>(0xF0 + flags - 1);
+}
+
 size_t xivres::xivstring::xivexpr_uint32::size() const {
 	if (const auto marker = encoding_marker())
 		return size_t{1} + std::popcount((marker + 1u) & 0xFu);
@@ -588,6 +603,10 @@ xivres::xivstring::xivexpr_string::xivexpr_string(std::string_view s) {
 		throw std::invalid_argument("String expression length exceeds the remaining bytes");
 	m_value.escaped(std::string(s.substr(1 + length.size(), *length)));
 	m_length = length;
+
+	// Parsed now, so that the nesting depth limit also covers strings nested in strings.
+	for (const auto& payload : m_value.payloads())
+		static_cast<void>(payload.params());
 }
 
 xivres::xivstring::xivexpr_uint32 xivres::xivstring::xivexpr_string::encoding_length() const {
