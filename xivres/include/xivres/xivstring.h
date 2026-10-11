@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <format>
 #include <mutex>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -59,54 +60,66 @@ namespace xivres {
 			XivString = 0xff,  // Followed by length (including length) and data
 		};
 
+		// Names follow Lumina's MacroCode.
 		enum class xivpayload_type : uint8_t {
 			Unset = 0x00,
-			ResetTime = 0x06,
-			Time = 0x07,
+			SetResetTime = 0x06,
+			SetTime = 0x07,
 			If = 0x08,
 			Switch = 0x09,
-			ActorFullName = 0x0a,
-			IfEquals = 0x0c,
-			IfJosa = 0x0d,  // eun/neun, i/ga, or eul/reul
-			IfJosaro = 0x0e,  // ro/euro
-			IfPlayer = 0x0f,  // "You are"/"Someone Else is"
+			PcName = 0x0a,
+			IfPcGender = 0x0b,
+			IfPcName = 0x0c,
+			Josa = 0x0d,  // eun/neun, i/ga, or eul/reul
+			Josaro = 0x0e,  // ro/euro
+			IfSelf = 0x0f,  // "You are"/"Someone Else is"
 			NewLine = 0x10,
-			BitmapFontIcon = 0x12,
-			ColorFill = 0x13,
-			ColorBorder = 0x14,
+			Wait = 0x11,
+			Icon = 0x12,
+			Color = 0x13,
+			EdgeColor = 0x14,
+			ShadowColor = 0x15,
 			SoftHyphen = 0x16,
-			DialoguePageSeparator = 0x17,  // probably
-			Italics = 0x1a,
-			Indent = 0x1d,
+			Key = 0x17,
+			Scale = 0x18,
+			Bold = 0x19,
+			Italic = 0x1a,
+			Edge = 0x1b,
+			Shadow = 0x1c,
+			NonBreakingSpace = 0x1d,
 			Icon2 = 0x1e,
 			Hyphen = 0x1f,
-			Value = 0x20,
-			Format = 0x22,
-			TwoDigitValue = 0x24,  // "{:02}"
-			SheetReference = 0x28,
-			Highlight = 0x29,
-			Link = 0x2b,
+			Num = 0x20,
+			Hex = 0x21,
+			Kilo = 0x22,
+			Byte = 0x23,
+			Sec = 0x24,  // "{:02}"
+			Time = 0x25,
+			Float = 0x26,
+			Link = 0x27,
+			Sheet = 0x28,
+			String = 0x29,
+			Caps = 0x2a,
+			Head = 0x2b,
 			Split = 0x2c,
-			Placeholder = 0x2e,
-			SheetReferenceJa = 0x30,
-			SheetReferenceEn = 0x31,
-			SheetReferenceDe = 0x32,
-			SheetReferenceFr = 0x33,
-			InstanceContent = 0x40,
-			UiColorFill = 0x48,
-			UiColorBorder = 0x49,
-			ZeroPaddedValue = 0x50,
-			OrdinalValue = 0x51,  // "1st", "2nd", "3rd", ...
-
-			// Following values exist in 0a0000
-			X18 = 0x19,
-			X1a = 0x1b, // Used only in QuickChatTransient
-			X1b = 0x1c, // Used only in QuickChatTransient
-			X25 = 0x26, // Used only in Addon; probably some sort of value with preset format (for int)
-			X2c = 0x2d, // Used only in Addon; probably some sort of value with preset format (for string)
-			X2e = 0x2f, // More formatter?
-			X5f = 0x60, // Takes two values
-			X60 = 0x61, // More formatter?
+			HeadAll = 0x2d,
+			Fixed = 0x2e,  // chat links and auto-translate
+			Lower = 0x2f,
+			JaNoun = 0x30,
+			EnNoun = 0x31,
+			DeNoun = 0x32,
+			FrNoun = 0x33,
+			ChNoun = 0x34,
+			LowerHead = 0x40,
+			SheetSub = 0x41,
+			SwitchPlatform = 0x42,
+			ColorType = 0x48,
+			EdgeColorType = 0x49,
+			Ruby = 0x4a,
+			Digit = 0x50,
+			Ordinal = 0x51,  // "1st", "2nd", "3rd", ...
+			Sound = 0x60,
+			LevelPos = 0x61,
 		};
 
 		class xivexpr {
@@ -146,6 +159,7 @@ namespace xivres {
 		public:
 			xivpayload(std::string_view s);
 			xivpayload(xivpayload_type payloadType) : m_type(payloadType) {}
+			xivpayload(xivpayload_type payloadType, std::vector<std::unique_ptr<xivexpr>> expressions);
 			xivpayload(const xivpayload& r);
 			xivpayload(xivpayload&& r) = default;
 			xivpayload& operator=(const xivpayload& r);
@@ -155,10 +169,12 @@ namespace xivres {
 			std::string repr() const;
 
 			size_t size() const { return escape().size(); }
-			void type(xivpayload_type t) { m_type = t; }
+			void type(xivpayload_type t);
 			xivpayload_type type() const { return m_type; }
 			const std::string& escaped() const { return escape(); }
-			const std::vector<std::unique_ptr<xivexpr>>& params() const { return m_expressions; }
+			// As the payload stands in text: StartOfText, escaped(), EndOfText.
+			[[nodiscard]] std::string enclosed() const;
+			const std::vector<std::unique_ptr<xivexpr>>& params() const { return parse(); }
 
 		private:
 			const std::vector<std::unique_ptr<xivexpr>>& parse() const;
@@ -167,6 +183,21 @@ namespace xivres {
 
 		static constexpr auto StartOfText = '\x02';
 		static constexpr auto EndOfText = '\x03';
+
+		struct macro_info {
+			xivpayload_type type;
+			std::span<const uint8_t> payload;  // between the length and EndOfText
+			size_t size;  // from StartOfText to EndOfText, inclusive
+		};
+
+		// Decodes an integer as the game reads a macro's payload length; returns the bytes it takes, or 0 if malformed or not wholly in s.
+		[[nodiscard]] static size_t read_integer(std::span<const uint8_t> s, uint32_t& value);
+
+		// The macro at the start of s, or nullopt if s doesn't start with one that lies wholly inside it.
+		[[nodiscard]] static std::optional<macro_info> read_macro(std::span<const uint8_t> s);
+
+		// Bytes the character at the start of s takes, stepped by its UTF-8 lead byte alone as the game does; 0 if s is empty or ends inside it.
+		[[nodiscard]] static size_t character_length(std::span<const uint8_t> s);
 
 	private:
 		bool m_bUseNewlinePayload = false;
@@ -226,6 +257,11 @@ namespace xivres {
 	class xivstring::xivexpr_uint32 : public xivexpr {
 		uint32_t m_value = 0;
 
+		// The multi-byte marker this was parsed with, so an encoding longer than needed is written back byte for byte; 0 to encode minimally.
+		uint8_t m_marker = 0;
+
+		[[nodiscard]] uint8_t encoding_marker() const;
+
 	public:
 		xivexpr_uint32() = default;
 		xivexpr_uint32(xivexpr_uint32&& r) = default;
@@ -239,7 +275,7 @@ namespace xivres {
 
 		[[nodiscard]] xivexpr_type type() const override { return static_cast<xivexpr_type>(m_value & 0xFF); }
 		xivexpr_uint32(uint32_t value) : m_value(value) {}
-		xivexpr_uint32& operator =(uint32_t r) { m_value = r; return *this; }
+		xivexpr_uint32& operator =(uint32_t r) { m_value = r; m_marker = 0; return *this; }
 		operator uint32_t() const { return m_value; }
 		uint32_t& operator*() { return m_value; }
 		uint32_t operator*() const { return m_value; }
@@ -254,6 +290,11 @@ namespace xivres {
 
 	class xivstring::xivexpr_string : public xivexpr {
 		xivstring m_value;
+
+		// The length as parsed, so its encoding is written back as it was.
+		xivexpr_uint32 m_length;
+
+		[[nodiscard]] xivexpr_uint32 encoding_length() const;
 
 	public:
 		xivexpr_string() = default;
