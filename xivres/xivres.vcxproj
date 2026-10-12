@@ -85,7 +85,6 @@
     <ClCompile Include="impl\excel.cpp" />
     <ClCompile Include="impl\excel.type2gen.cpp" />
     <ClCompile Include="impl\fontdata.cpp" />
-    <ClCompile Include="impl\game_layout.cpp" />
     <ClCompile Include="impl\pe_image.cpp" />
     <ClCompile Include="impl\util.byte_regex.cpp" />
     <ClCompile Include="impl\installation.cpp" />
