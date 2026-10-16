@@ -63,7 +63,6 @@ std::streamsize xivres::texture_unpacker::read(std::streamoff offset, void* buf,
 		if (it2 != it->Subblocks.begin())
 			--it2;
 
-		multithreaded = multithreaded || std::distance(it2, std::ranges::upper_bound(it2, it->Subblocks.end(), static_cast<uint32_t>(offset + length), {}, &subblock_info::RequestOffset)) > 16;
 		multithreaded = multithreaded || (!it->Subblocks.back() && it->Subblocks.size() >= MinBlockCountForMultithreadedDecompression);
 		info.multithreaded(multithreaded);
 
